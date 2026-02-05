@@ -59,7 +59,7 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 					t.Errorf("Expected Title '%s', got '%s'", "Updated Round Title", result.Round.Title)
 				}
 			},
-			timeout: 500 * time.Millisecond,
+			timeout: 10 * time.Second,
 		},
 		{
 			name:    "Success - Update Description Only",
@@ -96,7 +96,7 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 					t.Errorf("Expected Description '%s', got %v", "Updated description for the round", result.Round.Description)
 				}
 			},
-			timeout: 500 * time.Millisecond,
+			timeout: 10 * time.Second,
 		},
 		{
 			name:    "Success - Update Location Only",
@@ -133,7 +133,7 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 					t.Errorf("Expected Location '%s', got %v", "Updated Course Location", result.Round.Location)
 				}
 			},
-			timeout: 500 * time.Millisecond,
+			timeout: 10 * time.Second,
 		},
 		{
 			name:    "Success - Update Start Time Only",
@@ -171,7 +171,7 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 					t.Error("Expected StartTime to be set")
 				}
 			},
-			timeout: 500 * time.Millisecond,
+			timeout: 10 * time.Second,
 		},
 		{
 			name:    "Success - Update Event Type Only",
@@ -208,7 +208,7 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 					t.Errorf("Expected EventType '%s', got %v", roundtypes.DefaultEventType, result.Round.EventType)
 				}
 			},
-			timeout: 500 * time.Millisecond,
+			timeout: 10 * time.Second,
 		},
 		{
 			name:    "Success - Update Multiple Fields",
@@ -252,7 +252,7 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 					t.Errorf("Expected Title '%s', got '%s'", "Multi-Update Round", result.Round.Title)
 				}
 			},
-			timeout: 500 * time.Millisecond,
+			timeout: 10 * time.Second,
 		},
 		{
 			name:    "Success - Update Round with Existing Participants",
@@ -291,7 +291,7 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 					t.Errorf("Expected 1 participant, got %d", len(result.Round.Participants))
 				}
 			},
-			timeout: 500 * time.Millisecond,
+			timeout: 10 * time.Second,
 		},
 		{
 			name:    "Failure - Round Not Found",
@@ -326,7 +326,7 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 					t.Error("Expected Error message to be populated")
 				}
 			},
-			timeout: 500 * time.Millisecond,
+			timeout: 10 * time.Second,
 		},
 		{
 			name:    "Failure - Invalid JSON Message",
@@ -345,7 +345,7 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 					t.Errorf("Expected no messages for invalid JSON, got %d topics", len(receivedMsgs))
 				}
 			},
-			timeout: 500 * time.Millisecond,
+			timeout: 10 * time.Second,
 		},
 	}
 

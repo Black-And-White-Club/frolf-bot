@@ -26,29 +26,62 @@ func NewBuilder() *Builder {
 	return &Builder{}
 }
 
-// ForRole builds permissions based on the user's role, guild, and user ID.
-func (b *Builder) ForRole(role authdomain.Role, guildID, userID string) *Permissions {
-	switch role {
-	case authdomain.RoleViewer:
-		return b.viewerPermissions(guildID)
-	case authdomain.RolePlayer:
-		return b.playerPermissions(guildID, userID)
-	case authdomain.RoleEditor:
-		return b.editorPermissions(guildID, userID)
-	default:
-		return b.viewerPermissions(guildID)
+// unique returns a slice with unique strings.
+func unique(strings []string) []string {
+	keys := make(map[string]bool)
+	list := []string{}
+	for _, entry := range strings {
+		if _, value := keys[entry]; !value {
+			keys[entry] = true
+			list = append(list, entry)
+		}
 	}
+	return list
 }
 
-// viewerPermissions returns read-only permissions for a guild.
-func (b *Builder) viewerPermissions(guildID string) *Permissions {
+// ForRole builds permissions based on the user's claims.
+func (b *Builder) ForRole(claims *authdomain.Claims) *Permissions {
+	clubUUID := claims.ActiveClubUUID.String()
+	userUUID := claims.UserUUID.String()
+	guildID := claims.GuildID
+	userID := claims.UserID
+
+	var perms *Permissions
+	switch claims.Role {
+	case authdomain.RoleViewer:
+		perms = b.viewerPermissions(clubUUID, guildID)
+	case authdomain.RolePlayer, authdomain.Role("User"):
+		perms = b.playerPermissions(clubUUID, userUUID, guildID, userID)
+	case authdomain.RoleEditor, authdomain.Role("Editor"):
+		perms = b.editorPermissions(clubUUID, userUUID, guildID, userID)
+	default:
+		perms = b.viewerPermissions(clubUUID, guildID)
+	}
+
+	// Add base permissions
+	b.ensureBasePermissions(perms)
+
+	// Ensure unique entries
+	perms.Subscribe.Allow = unique(perms.Subscribe.Allow)
+	perms.Subscribe.Deny = unique(perms.Subscribe.Deny)
+	perms.Publish.Allow = unique(perms.Publish.Allow)
+	perms.Publish.Deny = unique(perms.Publish.Deny)
+
+	return perms
+}
+
+// ensureBasePermissions adds standard permissions required by all users (e.g. Inboxes)
+func (b *Builder) ensureBasePermissions(perms *Permissions) {
+	// Allow subscribing to own inbox for request-reply patterns
+	perms.Subscribe.Allow = append(perms.Subscribe.Allow, "_INBOX.>")
+}
+
+// viewerPermissions returns read-only permissions for a club/guild.
+func (b *Builder) viewerPermissions(clubUUID, guildID string) *Permissions {
+	allow := subscribePatterns(clubUUID, guildID, "", "")
 	return &Permissions{
 		Subscribe: PermissionSet{
-			Allow: []string{
-				fmt.Sprintf("round.*.%s", guildID),
-				fmt.Sprintf("leaderboard.*.%s", guildID),
-				fmt.Sprintf("guild.*.%s", guildID),
-			},
+			Allow: allow,
 		},
 		Publish: PermissionSet{
 			Allow: []string{},
@@ -56,47 +89,112 @@ func (b *Builder) viewerPermissions(guildID string) *Permissions {
 	}
 }
 
+// subscribePatterns generates subscribe patterns for round/leaderboard/guild events.
+// Subjects follow pattern: {domain}.{action}[.{sub}...].v1.{id}
+// Examples: round.created.v1.{id}, round.participant.joined.v1.{id}, round.participant.score.updated.v1.{id}
+func subscribePatterns(clubUUID, guildID, userUUID, userID string) []string {
+	patterns := []string{}
+
+	for _, id := range []string{clubUUID, guildID} {
+		if id == "" {
+			continue
+		}
+		// round.*.v1.{id} - matches round.created.v1.{id}, round.updated.v1.{id}, etc. (4 tokens)
+		// round.*.*.v1.{id} - matches round.participant.joined.v1.{id}, round.list.request.v1.{id} (5 tokens)
+		// round.*.*.*.v1.{id} - matches round.participant.score.updated.v1.{id} (6 tokens)
+		patterns = append(patterns,
+			fmt.Sprintf("round.*.v1.%s", id),
+			fmt.Sprintf("round.*.*.v1.%s", id),
+			fmt.Sprintf("round.*.*.*.v1.%s", id),
+			fmt.Sprintf("leaderboard.*.v1.%s", id),
+			fmt.Sprintf("leaderboard.*.*.v1.%s", id),
+			fmt.Sprintf("leaderboard.*.*.*.v1.%s", id),
+			fmt.Sprintf("guild.*.v1.%s", id),
+			fmt.Sprintf("guild.*.*.v1.%s", id),
+		)
+	}
+
+	// User-specific patterns
+	for _, id := range []string{userUUID, userID} {
+		if id == "" {
+			continue
+		}
+		patterns = append(patterns,
+			fmt.Sprintf("score.*.v1.%s", id),
+			fmt.Sprintf("score.*.*.v1.%s", id),
+			fmt.Sprintf("user.*.v1.%s", id),
+			fmt.Sprintf("user.*.*.v1.%s", id),
+		)
+	}
+
+	return patterns
+}
+
+// publishPatterns generates publish patterns for request-reply calls.
+func publishPatterns(clubUUID, guildID string, includeParticipant bool) []string {
+	patterns := []string{}
+
+	for _, id := range []string{clubUUID, guildID} {
+		if id == "" {
+			continue
+		}
+		// Request-reply patterns for fetching data
+		patterns = append(patterns,
+			fmt.Sprintf("round.list.request.v1.%s", id),
+			fmt.Sprintf("leaderboard.snapshot.request.v1.%s", id),
+		)
+		if includeParticipant {
+			// Participant actions
+			patterns = append(patterns,
+				fmt.Sprintf("round.participant.join.v1.%s", id),
+				fmt.Sprintf("round.participant.leave.v1.%s", id),
+			)
+		}
+	}
+
+	// Club info request - scoped to the user's active club
+	if clubUUID != "" {
+		patterns = append(patterns, fmt.Sprintf("club.info.request.v1.%s", clubUUID))
+	}
+
+	return patterns
+}
+
 // playerPermissions returns permissions for players who can participate.
-func (b *Builder) playerPermissions(guildID, userID string) *Permissions {
+func (b *Builder) playerPermissions(clubUUID, userUUID, guildID, userID string) *Permissions {
 	return &Permissions{
 		Subscribe: PermissionSet{
-			Allow: []string{
-				fmt.Sprintf("round.*.%s", guildID),
-				fmt.Sprintf("leaderboard.*.%s", guildID),
-				fmt.Sprintf("guild.*.%s", guildID),
-				fmt.Sprintf("score.*.%s", userID),
-				fmt.Sprintf("user.*.%s", userID),
-			},
+			Allow: subscribePatterns(clubUUID, guildID, userUUID, userID),
 		},
 		Publish: PermissionSet{
-			Allow: []string{
-				fmt.Sprintf("round.participant.join.%s", guildID),
-				fmt.Sprintf("round.participant.leave.%s", guildID),
-			},
+			Allow: publishPatterns(clubUUID, guildID, true),
 		},
 	}
 }
 
 // editorPermissions returns full permissions for editors.
-func (b *Builder) editorPermissions(guildID, userID string) *Permissions {
+func (b *Builder) editorPermissions(clubUUID, userUUID, guildID, userID string) *Permissions {
+	pubAllow := publishPatterns(clubUUID, guildID, true)
+
+	// Editors can also create/update/delete rounds and submit scores
+	for _, id := range []string{clubUUID, guildID} {
+		if id == "" {
+			continue
+		}
+		pubAllow = append(pubAllow,
+			fmt.Sprintf("round.create.v1.%s", id),
+			fmt.Sprintf("round.update.v1.%s", id),
+			fmt.Sprintf("round.delete.v1.%s", id),
+			fmt.Sprintf("score.submit.v1.%s", id),
+		)
+	}
+
 	return &Permissions{
 		Subscribe: PermissionSet{
-			Allow: []string{
-				fmt.Sprintf("round.*.%s", guildID),
-				fmt.Sprintf("leaderboard.*.%s", guildID),
-				fmt.Sprintf("guild.*.%s", guildID),
-				fmt.Sprintf("score.*.%s", guildID),
-				fmt.Sprintf("user.*.%s", userID),
-			},
+			Allow: subscribePatterns(clubUUID, guildID, userUUID, userID),
 		},
 		Publish: PermissionSet{
-			Allow: []string{
-				fmt.Sprintf("round.create.%s", guildID),
-				fmt.Sprintf("round.update.%s", guildID),
-				fmt.Sprintf("round.delete.%s", guildID),
-				fmt.Sprintf("round.participant.*.%s", guildID),
-				fmt.Sprintf("score.submit.%s", guildID),
-			},
+			Allow: pubAllow,
 		},
 	}
 }

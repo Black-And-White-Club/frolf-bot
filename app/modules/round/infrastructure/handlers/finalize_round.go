@@ -77,8 +77,8 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(
 		},
 	}
 
-	// Add guild-scoped version for PWA permission scoping
-	results = addGuildScopedResult(results, roundevents.RoundFinalizedV1, payload.GuildID)
+	// Add both legacy GuildID and internal ClubUUID scoped versions for PWA/NATS transition
+	results = h.addParallelIdentityResults(ctx, results, roundevents.RoundFinalizedV1, payload.GuildID)
 
 	return results, nil
 }
@@ -101,7 +101,48 @@ func (h *RoundHandlers) HandleRoundFinalized(
 		return nil, err
 	}
 
-	return mapOperationResult(result,
+	// Map result to ensure correct event payload structure
+	mappedResult := result.Map(
+		func(r *roundtypes.Round) any {
+			scores := make([]sharedtypes.ScoreInfo, len(r.Participants))
+			for i, p := range r.Participants {
+				score := sharedtypes.Score(0)
+				if p.Score != nil {
+					score = *p.Score
+				}
+				scores[i] = sharedtypes.ScoreInfo{
+					UserID:    p.UserID,
+					Score:     score,
+					TagNumber: p.TagNumber,
+					TeamID:    p.TeamID,
+				}
+			}
+
+			// Determine round mode based on participants or teams if available
+			mode := sharedtypes.RoundModeSingles
+			if len(r.Teams) > 0 {
+				mode = sharedtypes.RoundModeDoubles
+			}
+
+			return &sharedevents.ProcessRoundScoresRequestedPayloadV1{
+				GuildID:      r.GuildID,
+				RoundID:      r.ID,
+				Scores:       scores,
+				Overwrite:    true,
+				RoundMode:    mode,
+				Participants: r.Participants,
+			}
+		},
+		func(err error) any {
+			return &roundevents.RoundFinalizationErrorPayloadV1{
+				GuildID: payload.GuildID,
+				RoundID: payload.RoundID,
+				Error:   err.Error(),
+			}
+		},
+	)
+
+	return mapOperationResult(mappedResult,
 		sharedevents.ProcessRoundScoresRequestedV1,
 		roundevents.RoundFinalizationErrorV1,
 	), nil

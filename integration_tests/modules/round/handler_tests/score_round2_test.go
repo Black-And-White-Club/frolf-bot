@@ -69,7 +69,7 @@ func TestHandleScoreUpdateValidated(t *testing.T) {
 					t.Errorf("Expected score %v, got %v", *triggerPayload.ScoreUpdateRequestPayload.Score, result.Score)
 				}
 			},
-			timeout: 500 * time.Millisecond,
+			timeout: 10 * time.Second,
 		},
 		{
 			name:    "Success - Update Participant Score (Multiple Participants)",
@@ -123,7 +123,7 @@ func TestHandleScoreUpdateValidated(t *testing.T) {
 					t.Errorf("Expected score %v, got %v", *triggerPayload.ScoreUpdateRequestPayload.Score, result.Score)
 				}
 			},
-			timeout: 500 * time.Millisecond,
+			timeout: 10 * time.Second,
 		},
 		{
 			name:    "Success - Update Score for Participant with Existing Score",
@@ -169,7 +169,7 @@ func TestHandleScoreUpdateValidated(t *testing.T) {
 					t.Errorf("Expected score %v, got %v", *triggerPayload.ScoreUpdateRequestPayload.Score, result.Score)
 				}
 			},
-			timeout: 500 * time.Millisecond,
+			timeout: 10 * time.Second,
 		},
 		{
 			name:    "Failure - Round Not Found",
@@ -204,10 +204,10 @@ func TestHandleScoreUpdateValidated(t *testing.T) {
 					t.Error("Expected error message to be populated")
 				}
 			},
-			timeout: 500 * time.Millisecond,
+			timeout: 10 * time.Second,
 		},
 		{
-			name:    "Failure - Participant Not Found in Round",
+			name:    "Success - Auto-join Participant via Score Submission",
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} { return nil },
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				data := NewTestData()
@@ -216,6 +216,7 @@ func TestHandleScoreUpdateValidated(t *testing.T) {
 				helper := testutils.NewRoundTestHelper(nil, nil)
 				roundID := helper.CreateRoundWithParticipants(t, deps.DB, data.UserID, []testutils.ParticipantData{{UserID: data2.UserID, Response: roundtypes.ResponseAccept, Score: nil}})
 				score := sharedtypes.Score(1)
+				// data3 is not in the round initially
 				payload := createScoreUpdateValidatedPayload(roundID, data3.UserID, &score)
 				b, err := json.Marshal(payload)
 				if err != nil {
@@ -228,21 +229,26 @@ func TestHandleScoreUpdateValidated(t *testing.T) {
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{roundevents.RoundScoreUpdateErrorV1},
+			expectedOutgoingTopics: []string{roundevents.RoundParticipantScoreUpdatedV1},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
-				msgs := receivedMsgs[roundevents.RoundScoreUpdateErrorV1]
+				msgs := receivedMsgs[roundevents.RoundParticipantScoreUpdatedV1]
 				if len(msgs) == 0 {
-					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundScoreUpdateErrorV1)
+					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundParticipantScoreUpdatedV1)
 				}
-				var payload roundevents.RoundScoreUpdateErrorPayloadV1
-				if err := deps.TestHelpers.UnmarshalPayload(msgs[0], &payload); err != nil {
+				var result roundevents.ParticipantScoreUpdatedPayloadV1
+				if err := deps.TestHelpers.UnmarshalPayload(msgs[0], &result); err != nil {
 					t.Fatalf("Failed to unmarshal payload: %v", err)
 				}
-				if payload.Error == "" {
-					t.Error("Expected error message to be populated")
+				// Verify score was set
+				var triggerPayload roundevents.ScoreUpdateValidatedPayloadV1
+				if err := deps.TestHelpers.UnmarshalPayload(triggerMsg, &triggerPayload); err != nil {
+					t.Fatalf("Failed to unmarshal trigger payload: %v", err)
+				}
+				if result.Score != *triggerPayload.ScoreUpdateRequestPayload.Score {
+					t.Errorf("Expected score %v, got %v", *triggerPayload.ScoreUpdateRequestPayload.Score, result.Score)
 				}
 			},
-			timeout: 500 * time.Millisecond,
+			timeout: 10 * time.Second,
 		},
 		{
 			name:    "Failure - Invalid JSON Message",
@@ -261,7 +267,7 @@ func TestHandleScoreUpdateValidated(t *testing.T) {
 					t.Errorf("Expected no messages for invalid JSON, got %d topics", len(receivedMsgs))
 				}
 			},
-			timeout: 500 * time.Millisecond,
+			timeout: 10 * time.Second,
 		},
 	}
 

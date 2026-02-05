@@ -1,6 +1,8 @@
 package authhandlers
 
 import (
+	"net/http"
+
 	"github.com/nats-io/nats.go"
 )
 
@@ -11,4 +13,9 @@ type Handlers interface {
 
 	// HandleNATSAuthCallout handles NATS auth callout messages.
 	HandleNATSAuthCallout(msg *nats.Msg)
+
+	// HTTP Handlers
+	HandleHTTPLogin(w http.ResponseWriter, r *http.Request)
+	HandleHTTPTicket(w http.ResponseWriter, r *http.Request)
+	HandleHTTPLogout(w http.ResponseWriter, r *http.Request)
 }

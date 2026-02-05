@@ -198,9 +198,18 @@ func TestRoundService_UpdateParticipantScore(t *testing.T) {
 		{
 			name: "successful update",
 			setup: func(f *FakeRepo) {
-				f.UpdateParticipantScoreFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID, u sharedtypes.DiscordID, s sharedtypes.Score) error {
-					return nil
+				f.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{
+						ID:           r,
+						GuildID:      g,
+						Participants: []roundtypes.Participant{{UserID: testParticipant}},
+					}, nil
 				}
+				// Updated to mock UpdateParticipant instead of UpdateParticipantScore
+				f.UpdateParticipantFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID, p roundtypes.Participant) ([]roundtypes.Participant, error) {
+					return []roundtypes.Participant{{UserID: testParticipant, Score: &testScore}}, nil
+				}
+				// GetParticipants is still called to return the full list
 				f.GetParticipantsFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID) ([]roundtypes.Participant, error) {
 					return []roundtypes.Participant{
 						{UserID: testParticipant, Score: &testScore},
@@ -225,10 +234,26 @@ func TestRoundService_UpdateParticipantScore(t *testing.T) {
 			expectedError: nil,
 		},
 		{
-			name: "error updating score",
+			name: "successful auto-join",
 			setup: func(f *FakeRepo) {
-				f.UpdateParticipantScoreFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID, u sharedtypes.DiscordID, s sharedtypes.Score) error {
-					return errors.New("database error")
+				f.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{
+						ID:           r,
+						GuildID:      g,
+						Participants: []roundtypes.Participant{}, // Empty participants
+					}, nil
+				}
+				f.UpdateParticipantFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID, p roundtypes.Participant) ([]roundtypes.Participant, error) {
+					// Verify auto-join behavior
+					if p.Response != roundtypes.ResponseAccept {
+						return nil, errors.New("expected ResponseAccept for auto-join")
+					}
+					return []roundtypes.Participant{p}, nil
+				}
+				f.GetParticipantsFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID) ([]roundtypes.Participant, error) {
+					return []roundtypes.Participant{
+						{UserID: testParticipant, Score: &testScore, Response: roundtypes.ResponseAccept},
+					}, nil
 				}
 			},
 			payload: &roundtypes.ScoreUpdateRequest{
@@ -238,18 +263,25 @@ func TestRoundService_UpdateParticipantScore(t *testing.T) {
 				Score:   &testScore,
 			},
 			expectedResult: results.OperationResult[*roundtypes.ScoreUpdateResult, error]{
-				Failure: ptr(errors.New("Failed to update score in database: database error")),
+				Success: ptr(&roundtypes.ScoreUpdateResult{
+					RoundID: testScoreRoundID,
+					GuildID: guildID,
+					UpdatedParticipants: []roundtypes.Participant{
+						{UserID: testParticipant, Score: &testScore, Response: roundtypes.ResponseAccept},
+					},
+				}),
 			},
 			expectedError: nil,
 		},
 		{
-			name: "error getting participants after update",
+			name: "error updating score",
 			setup: func(f *FakeRepo) {
-				f.UpdateParticipantScoreFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID, u sharedtypes.DiscordID, s sharedtypes.Score) error {
-					return nil
+				f.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{Participants: []roundtypes.Participant{{UserID: testParticipant}}}, nil
 				}
-				f.GetParticipantsFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID) ([]roundtypes.Participant, error) {
-					return nil, errors.New("participants fetch error")
+				// Updated to mock UpdateParticipant
+				f.UpdateParticipantFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID, p roundtypes.Participant) ([]roundtypes.Participant, error) {
+					return nil, errors.New("database error")
 				}
 			},
 			payload: &roundtypes.ScoreUpdateRequest{
@@ -259,7 +291,7 @@ func TestRoundService_UpdateParticipantScore(t *testing.T) {
 				Score:   &testScore,
 			},
 			expectedResult: results.OperationResult[*roundtypes.ScoreUpdateResult, error]{
-				Failure: ptr(errors.New("Failed to retrieve updated participants list after score update: participants fetch error")),
+				Failure: ptr(errors.New("failed to update score in database: database error")),
 			},
 			expectedError: nil,
 		},

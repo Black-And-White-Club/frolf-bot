@@ -106,7 +106,7 @@ func verifyUserCanBeResolvedByName(t *testing.T, db bun.IDB, guildID sharedtypes
 	if identity == nil || identity.User == nil {
 		t.Fatalf("expected to find user by name %q, but not found", normalizedName)
 	}
-	if identity.User.UserID != expectedUserID {
-		t.Fatalf("expected user ID %s, got %s", expectedUserID, identity.User.UserID)
+	if identity.User.GetUserID() != expectedUserID {
+		t.Fatalf("expected user ID %s, got %s", expectedUserID, identity.User.GetUserID())
 	}
 }

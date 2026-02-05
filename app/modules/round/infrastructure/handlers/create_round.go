@@ -108,8 +108,8 @@ func (h *RoundHandlers) HandleRoundEntityCreated(
 		roundevents.RoundCreationFailedV1,
 	)
 
-	// Add guild-scoped version for PWA permission scoping
-	handlerResults = addGuildScopedResult(handlerResults, roundevents.RoundCreatedV1, payload.GuildID)
+	// Add both legacy GuildID and internal ClubUUID scoped versions for PWA/NATS transition
+	handlerResults = h.addParallelIdentityResults(ctx, handlerResults, roundevents.RoundCreatedV1, payload.GuildID)
 
 	return handlerResults, nil
 }

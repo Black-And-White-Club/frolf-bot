@@ -22,7 +22,7 @@ func TestUserLookupAdapter_FindByNormalizedUDiscUsername(t *testing.T) {
 					return nil, errors.New("unexpected arguments")
 				}
 				return &userdb.UserWithMembership{
-					User: &userdb.User{UserID: testUserID},
+					User: &userdb.User{UserID: &testUserID},
 					Role: sharedtypes.UserRoleUser,
 				}, nil
 			},
@@ -84,7 +84,7 @@ func TestUserLookupAdapter_FindByNormalizedUDiscDisplayName(t *testing.T) {
 					return nil, errors.New("unexpected arguments")
 				}
 				return &userdb.UserWithMembership{
-					User: &userdb.User{UserID: testUserID},
+					User: &userdb.User{UserID: &testUserID},
 					Role: sharedtypes.UserRoleUser,
 				}, nil
 			},

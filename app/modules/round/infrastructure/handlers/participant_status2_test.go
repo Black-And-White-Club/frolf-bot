@@ -104,6 +104,7 @@ func TestRoundHandlers_HandleParticipantDeclined_Basic(t *testing.T) {
 	testRoundID := sharedtypes.RoundID(uuid.New())
 	testGuildID := sharedtypes.GuildID("guild-123")
 	testUserID := sharedtypes.DiscordID("12345678901234567")
+	testClubUUID := uuid.New()
 
 	testPayload := &roundevents.ParticipantDeclinedPayloadV1{
 		GuildID: testGuildID,
@@ -115,7 +116,7 @@ func TestRoundHandlers_HandleParticipantDeclined_Basic(t *testing.T) {
 
 	tests := []struct {
 		name            string
-		fakeSetup       func(*FakeService)
+		fakeSetup       func(*FakeService, *FakeUserService)
 		payload         *roundevents.ParticipantDeclinedPayloadV1
 		wantErr         bool
 		wantResultLen   int
@@ -124,7 +125,7 @@ func TestRoundHandlers_HandleParticipantDeclined_Basic(t *testing.T) {
 	}{
 		{
 			name: "Successfully handle ParticipantDeclined",
-			fakeSetup: func(fakeService *FakeService) {
+			fakeSetup: func(fakeService *FakeService, u *FakeUserService) {
 				fakeService.UpdateParticipantStatusFunc = func(ctx context.Context, req *roundtypes.JoinRoundRequest) (results.OperationResult[*roundtypes.Round, error], error) {
 					return results.SuccessResult[*roundtypes.Round, error](&roundtypes.Round{
 						GuildID:        testGuildID,
@@ -135,15 +136,18 @@ func TestRoundHandlers_HandleParticipantDeclined_Basic(t *testing.T) {
 						},
 					}), nil
 				}
+				u.GetClubUUIDByDiscordGuildIDFunc = func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) {
+					return testClubUUID, nil
+				}
 			},
 			payload:         testPayload,
 			wantErr:         false,
-			wantResultLen:   2, // Now returns original + guild-scoped event
+			wantResultLen:   3, // Original + Guild Scoped + Club Scoped
 			wantResultTopic: roundevents.RoundParticipantJoinedV1,
 		},
 		{
 			name: "Handle UpdateParticipantStatus error",
-			fakeSetup: func(fakeService *FakeService) {
+			fakeSetup: func(fakeService *FakeService, u *FakeUserService) {
 				fakeService.UpdateParticipantStatusFunc = func(ctx context.Context, req *roundtypes.JoinRoundRequest) (results.OperationResult[*roundtypes.Round, error], error) {
 					return results.OperationResult[*roundtypes.Round, error]{}, errors.New("service error")
 				}
@@ -157,13 +161,14 @@ func TestRoundHandlers_HandleParticipantDeclined_Basic(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fakeService := NewFakeService()
+			fakeUserService := NewFakeUserService()
 			if tt.fakeSetup != nil {
-				tt.fakeSetup(fakeService)
+				tt.fakeSetup(fakeService, fakeUserService)
 			}
 
 			h := &RoundHandlers{
 				service:     fakeService,
-				userService: NewFakeUserService(),
+				userService: fakeUserService,
 				logger:      logger,
 			}
 

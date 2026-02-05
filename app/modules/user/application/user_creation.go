@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
@@ -20,7 +22,7 @@ func MapDBUserToUserData(dbUser *userdb.User, tag *sharedtypes.TagNumber, return
 	return &CreateUserResponse{
 		UserData: usertypes.UserData{
 			ID:     dbUser.ID,
-			UserID: dbUser.UserID,
+			UserID: dbUser.GetUserID(),
 			Role:   sharedtypes.UserRoleUser,
 		},
 		TagNumber:       tag,
@@ -101,12 +103,37 @@ func (s *UserService) executeCreateUser(
 			return UserResult{}, fmt.Errorf("failed to create guild membership: %w", err)
 		}
 
+		// New Club Membership for existing user
+		clubUUID, err := s.repo.GetClubUUIDByDiscordGuildID(ctx, db, guildID)
+		if err != nil {
+			s.logger.WarnContext(ctx, "Failed to resolve Club UUID for membership creation (existing user)",
+				attr.String("guild_id", string(guildID)),
+				attr.Error(err))
+		} else {
+			extID := string(userID)
+			emptyName := ""
+			membership := &userdb.ClubMembership{
+				ClubUUID:    clubUUID,
+				UserUUID:    user.UUID,
+				Role:        "player",
+				JoinedAt:    time.Now(),
+				ExternalID:  &extID,
+				DisplayName: &emptyName,
+			}
+			if err := s.repo.UpsertClubMembership(ctx, db, membership); err != nil {
+				s.logger.ErrorContext(ctx, "Failed to create club membership (existing user)",
+					attr.String("user_uuid", user.UUID.String()),
+					attr.String("club_uuid", clubUUID.String()),
+					attr.Error(err))
+			}
+		}
+
 		return results.SuccessResult[*CreateUserResponse, error](MapDBUserToUserData(user, tag, true)), nil
 	}
 
 	// 3. New user flow
 	newUser := &userdb.User{
-		UserID:        userID,
+		UserID:        &userID,
 		UDiscUsername: normalizeStringPointer(udiscUsername),
 		UDiscName:     normalizeStringPointer(udiscName),
 	}
@@ -115,12 +142,41 @@ func (s *UserService) executeCreateUser(
 		return UserResult{}, fmt.Errorf("failed to create user: %w", err)
 	}
 
+	// Legacy Guild Membership
 	if err := s.repo.CreateGuildMembership(ctx, db, &userdb.GuildMembership{
 		UserID:  userID,
 		GuildID: guildID,
 		Role:    sharedtypes.UserRoleUser,
 	}); err != nil {
 		return UserResult{}, fmt.Errorf("failed to create guild membership: %w", err)
+	}
+
+	// New Club Membership
+	// Try to resolve Club UUID from Guild ID. If it fails (e.g. race condition), log and continue.
+	// The system should eventually converge or require a manual sync/setup.
+	clubUUID, err := s.repo.GetClubUUIDByDiscordGuildID(ctx, db, guildID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "Failed to resolve Club UUID for membership creation",
+			attr.String("guild_id", string(guildID)),
+			attr.Error(err))
+	} else {
+		extID := string(userID)
+		emptyName := ""
+		membership := &userdb.ClubMembership{
+			ClubUUID:    clubUUID,
+			UserUUID:    newUser.UUID,
+			Role:        "player", // Default role
+			JoinedAt:    newUser.CreatedAt,
+			ExternalID:  &extID,
+			DisplayName: &emptyName, // Will be backfilled/updated later
+		}
+		if err := s.repo.UpsertClubMembership(ctx, db, membership); err != nil {
+			s.logger.ErrorContext(ctx, "Failed to create club membership",
+				attr.String("user_uuid", newUser.UUID.String()),
+				attr.String("club_uuid", clubUUID.String()),
+				attr.Error(err))
+			// Don't fail the whole request, as legacy auth still works
+		}
 	}
 
 	return results.SuccessResult[*CreateUserResponse, error](MapDBUserToUserData(newUser, tag, false)), nil

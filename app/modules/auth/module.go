@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
@@ -14,9 +15,12 @@ import (
 	authjwt "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/jwt"
 	authnats "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/nats"
 	authrouter "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/router"
+	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/Black-And-White-Club/frolf-bot/config"
+	"github.com/go-chi/chi/v5"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nkeys"
+	"github.com/uptrace/bun"
 )
 
 // Module represents the unified auth module.
@@ -38,6 +42,9 @@ func NewModule(
 	nc *nats.Conn,
 	eventBus eventbus.EventBus,
 	helper utils.Helpers,
+	userRepo userdb.Repository,
+	httpRouter chi.Router,
+	db *bun.DB,
 ) (*Module, error) {
 	logger := obs.Provider.Logger
 	tracer := obs.Registry.Tracer
@@ -45,16 +52,19 @@ func NewModule(
 	logger.InfoContext(ctx, "Initializing auth module")
 
 	// Create JWT provider
-	jwtProvider := authjwt.NewProvider(cfg.JWT.Secret)
+	jwtProvider := authjwt.NewProvider(cfg.JWT.Secret, cfg.JWT.Issuer, cfg.JWT.Audience)
 
 	// Create NATS JWT builder if auth callout is enabled
 	var userJWTBuilder authnats.UserJWTBuilder
 	if cfg.AuthCallout.Enabled {
-		signingKey, err := nkeys.FromSeed([]byte(cfg.AuthCallout.SigningNKey))
+		// For centralized auth callout, sign with the account key directly
+		// The issuer key must match auth_callout.issuer in NATS config
+		// See: https://docs.nats.io/running-a-nats-service/configuration/securing_nats/auth_callout
+		accountKey, err := nkeys.FromSeed([]byte(cfg.AuthCallout.IssuerNKey))
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse signing key: %w", err)
+			return nil, fmt.Errorf("failed to parse account key: %w", err)
 		}
-		userJWTBuilder = authnats.NewUserJWTBuilder(signingKey, cfg.AuthCallout.IssuerNKey)
+		userJWTBuilder = authnats.NewUserJWTBuilder(accountKey, cfg.AuthCallout.IssuerNKey)
 	}
 
 	// Create service config
@@ -67,16 +77,44 @@ func NewModule(
 	service := authservice.NewService(
 		jwtProvider,
 		userJWTBuilder,
+		userRepo,
+		eventBus,
 		serviceConfig,
 		logger,
 		tracer,
+		db,
 	)
 
+	// Use secure cookies unless in development or using localhost
+	secureCookies := cfg.Observability.Environment != "development"
+	if strings.Contains(cfg.PWA.BaseURL, "localhost") || strings.HasPrefix(cfg.PWA.BaseURL, "http://") {
+		secureCookies = false
+	}
+
 	// Create handlers
-	handlers := authhandlers.NewAuthHandlers(service, eventBus, helper, logger, tracer)
+	handlers := authhandlers.NewAuthHandlers(service, eventBus, helper, logger, tracer, secureCookies)
 
 	// Create router
 	router := authrouter.NewRouter(handlers, nc)
+
+	// Register HTTP routes
+	if httpRouter != nil {
+		limiter := authhandlers.NewIPRateLimiter(5, 10)
+		httpRouter.Route("/api/auth", func(r chi.Router) {
+			r.Use(authhandlers.CORSMiddleware(cfg.HTTP.AllowedOrigins))
+			r.Use(authhandlers.RateLimitMiddleware(limiter))
+
+			// Public routes
+			r.Get("/callback", handlers.HandleHTTPLogin)
+
+			// Protected routes
+			r.Group(func(r chi.Router) {
+				r.Use(authhandlers.AuthMiddleware)
+				r.Get("/ticket", handlers.HandleHTTPTicket)
+				r.Post("/logout", handlers.HandleHTTPLogout)
+			})
+		})
+	}
 
 	module := &Module{
 		config:        cfg,

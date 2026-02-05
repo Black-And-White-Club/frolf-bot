@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -19,8 +20,12 @@ type Config struct {
 	PWA           PWAConfig           `yaml:"pwa"`
 	AuthCallout   AuthCalloutConfig   `yaml:"auth_callout"`
 	Observability ObservabilityConfig `yaml:"observability"`
-	// Discord     DiscordConfig      `yaml:"discord"`
-	// ... other configuration fields ...
+	HTTP          HTTPConfig          `yaml:"http"`
+}
+
+type HTTPConfig struct {
+	Port           string   `yaml:"port" env:"HTTP_PORT"`
+	AllowedOrigins []string `yaml:"allowed_origins" env:"CORS_ALLOWED_ORIGINS"`
 }
 
 // PostgresConfig holds Postgres configuration.
@@ -37,6 +42,8 @@ type NATSConfig struct {
 type JWTConfig struct {
 	Secret     string        `yaml:"secret" env:"JWT_SECRET"`
 	DefaultTTL time.Duration `yaml:"default_ttl" env:"JWT_DEFAULT_TTL"`
+	Issuer     string        `yaml:"issuer" env:"JWT_ISSUER"`
+	Audience   string        `yaml:"audience" env:"JWT_AUDIENCE"`
 }
 
 // PWAConfig holds PWA configuration.
@@ -127,6 +134,9 @@ func LoadConfig(filename string) (*Config, error) {
 	if v := os.Getenv("OTLP_LOGS_ENABLED"); v != "" {
 		cfg.Observability.OTLPLogsEnabled = v == "true"
 	}
+	if v := os.Getenv("HTTP_PORT"); v != "" {
+		cfg.HTTP.Port = v
+	}
 	if v := os.Getenv("JWT_SECRET"); v != "" {
 		cfg.JWT.Secret = v
 	}
@@ -137,6 +147,9 @@ func LoadConfig(filename string) (*Config, error) {
 	}
 	if v := os.Getenv("PWA_BASE_URL"); v != "" {
 		cfg.PWA.BaseURL = v
+	}
+	if cfg.PWA.BaseURL == "" {
+		cfg.PWA.BaseURL = "https://pwa.frolf-bot.com"
 	}
 	if v := os.Getenv("AUTH_CALLOUT_ENABLED"); v != "" {
 		cfg.AuthCallout.Enabled = v == "true"
@@ -149,6 +162,11 @@ func LoadConfig(filename string) (*Config, error) {
 	}
 	if v := os.Getenv("AUTH_CALLOUT_SIGNING_NKEY"); v != "" {
 		cfg.AuthCallout.SigningNKey = v
+	}
+	if v := os.Getenv("CORS_ALLOWED_ORIGINS"); v != "" {
+		cfg.HTTP.AllowedOrigins = strings.Split(v, ",")
+	} else if len(cfg.HTTP.AllowedOrigins) == 0 && cfg.PWA.BaseURL != "" {
+		cfg.HTTP.AllowedOrigins = []string{cfg.PWA.BaseURL}
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -237,6 +255,11 @@ func loadConfigFromEnv() (*Config, error) {
 	}
 	cfg.AuthCallout.IssuerNKey = os.Getenv("AUTH_CALLOUT_ISSUER_NKEY")
 	cfg.AuthCallout.SigningNKey = os.Getenv("AUTH_CALLOUT_SIGNING_NKEY")
+
+	cfg.HTTP.Port = os.Getenv("HTTP_PORT")
+	if v := os.Getenv("CORS_ALLOWED_ORIGINS"); v != "" {
+		cfg.HTTP.AllowedOrigins = strings.Split(v, ",")
+	}
 
 	if err := cfg.Validate(); err != nil {
 		return nil, err

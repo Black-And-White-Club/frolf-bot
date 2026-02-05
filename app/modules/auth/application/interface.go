@@ -16,12 +16,33 @@ type Service interface {
 
 	// HandleNATSAuthRequest processes a NATS auth callout request.
 	HandleNATSAuthRequest(ctx context.Context, req *NATSAuthRequest) (*NATSAuthResponse, error)
+
+	// LoginUser validates a one-time token and creates a long-lived session (refresh token).
+	LoginUser(ctx context.Context, oneTimeToken string) (*LoginResponse, error)
+
+	// GetTicket validates a refresh token and mints a short-lived NATS ticket.
+	GetTicket(ctx context.Context, refreshToken string) (*TicketResponse, error)
+
+	// LogoutUser revokes a refresh token.
+	LogoutUser(ctx context.Context, refreshToken string) error
+}
+
+type LoginResponse struct {
+	RefreshToken string
+	UserUUID     string
+}
+
+type TicketResponse struct {
+	NATSToken    string
+	RefreshToken string
 }
 
 // NATSAuthRequest represents a NATS auth callout request.
 type NATSAuthRequest struct {
-	ConnectOpts ConnectOptions `json:"connect_opts"`
-	ClientInfo  ClientInfo     `json:"client_info"`
+	UserNkey        string         `json:"user_nkey"`
+	ServerPublicKey string         `json:"server_public_key"` // The server's public key (aud for response)
+	ConnectOpts     ConnectOptions `json:"connect_opts"`
+	ClientInfo      ClientInfo     `json:"client_info"`
 }
 
 // ConnectOptions contains the connection options from the auth request.
@@ -39,8 +60,9 @@ type ClientInfo struct {
 
 // NATSAuthResponse represents the response to a NATS auth callout.
 type NATSAuthResponse struct {
-	Jwt   string `json:"jwt,omitempty"`
-	Error string `json:"error,omitempty"`
+	Jwt            string `json:"jwt,omitempty"`             // The user JWT (for logging)
+	Error          string `json:"error,omitempty"`           // Error message if auth failed
+	SignedResponse string `json:"signed_response,omitempty"` // The signed auth response JWT to send to NATS
 }
 
 // MagicLinkResponse represents the response for magic link generation

@@ -16,6 +16,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	// Import for migrator creation
+	clubmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/club/infrastructure/repositories/migrations"
 	guildmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories/migrations"
 	leaderboardmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories/migrations"
 	roundmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/migrations"
@@ -46,6 +47,7 @@ func main() {
 		"score":       migrate.NewMigrator(db, scoremigrations.Migrations, migrate.WithTableName("bun_migrations_score")),
 		"round":       migrate.NewMigrator(db, roundmigrations.Migrations, migrate.WithTableName("bun_migrations_round")),
 		"guild":       migrate.NewMigrator(db, guildmigrations.Migrations, migrate.WithTableName("bun_migrations_guild")),
+		"club":        migrate.NewMigrator(db, clubmigrations.Migrations, migrate.WithTableName("bun_migrations_club")),
 	}
 
 	cliApp := &cli.App{

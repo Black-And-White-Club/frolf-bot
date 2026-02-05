@@ -63,7 +63,7 @@ func TestImportDoublesCreatesTeams(t *testing.T) {
 	for _, u := range users {
 		uid := sharedtypes.DiscordID(u.id)
 		user := &userdb.User{
-			UserID:        uid,
+			UserID:        &uid,
 			UDiscUsername: ptrString(u.username),
 			UDiscName:     ptrString(u.name),
 		}
@@ -153,13 +153,15 @@ func TestImportSinglesCreatesPlayers(t *testing.T) {
 
 	urepo := userdb.NewRepository(deps.DB)
 	ctx := context.Background()
+	uid1 := sharedtypes.DiscordID("111111111111111111")
 	user1 := &userdb.User{
-		UserID:        sharedtypes.DiscordID("111111111111111111"),
+		UserID:        &uid1,
 		UDiscUsername: ptrString("jace"),
 		UDiscName:     ptrString("Jace"),
 	}
+	uid2 := sharedtypes.DiscordID("222222222222222222")
 	user2 := &userdb.User{
-		UserID:        sharedtypes.DiscordID("222222222222222222"),
+		UserID:        &uid2,
 		UDiscUsername: ptrString("sam"),
 		UDiscName:     ptrString("Sam"),
 	}
@@ -169,16 +171,16 @@ func TestImportSinglesCreatesPlayers(t *testing.T) {
 	if err := urepo.SaveGlobalUser(ctx, deps.DB, user2); err != nil {
 		t.Fatalf("failed to save global user2: %v", err)
 	}
-	if err := urepo.CreateGuildMembership(ctx, deps.DB, &userdb.GuildMembership{UserID: user1.UserID, GuildID: "test-guild", Role: "User"}); err != nil {
+	if err := urepo.CreateGuildMembership(ctx, deps.DB, &userdb.GuildMembership{UserID: user1.GetUserID(), GuildID: "test-guild", Role: "User"}); err != nil {
 		t.Fatalf("failed to create guild membership for user1: %v", err)
 	}
-	if err := urepo.CreateGuildMembership(ctx, deps.DB, &userdb.GuildMembership{UserID: user2.UserID, GuildID: "test-guild", Role: "User"}); err != nil {
+	if err := urepo.CreateGuildMembership(ctx, deps.DB, &userdb.GuildMembership{UserID: user2.GetUserID(), GuildID: "test-guild", Role: "User"}); err != nil {
 		t.Fatalf("failed to create guild membership for user2: %v", err)
 	}
 
 	participants := []roundtypes.Participant{
-		{UserID: user1.UserID, Response: roundtypes.ResponseAccept},
-		{UserID: user2.UserID, Response: roundtypes.ResponseAccept},
+		{UserID: user1.GetUserID(), Response: roundtypes.ResponseAccept},
+		{UserID: user2.GetUserID(), Response: roundtypes.ResponseAccept},
 	}
 	if _, err := deps.DB.NewUpdate().Model(&rounddb.Round{}).Set("participants = ?", participants).Where("id = ?", roundData.ID).Exec(context.Background()); err != nil {
 		t.Fatalf("failed to update round participants: %v", err)

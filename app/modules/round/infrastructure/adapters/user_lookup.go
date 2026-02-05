@@ -35,7 +35,7 @@ func (a *UserLookupAdapter) FindByNormalizedUDiscUsername(ctx context.Context, d
 		return nil, err
 	}
 
-	return &roundservice.UserIdentity{UserID: user.User.UserID}, nil
+	return &roundservice.UserIdentity{UserID: user.User.GetUserID()}, nil
 }
 
 func (a *UserLookupAdapter) FindByNormalizedUDiscDisplayName(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, normalizedDisplayName string) (*roundservice.UserIdentity, error) {
@@ -50,7 +50,7 @@ func (a *UserLookupAdapter) FindByNormalizedUDiscDisplayName(ctx context.Context
 		return nil, err
 	}
 
-	return &roundservice.UserIdentity{UserID: user.User.UserID}, nil
+	return &roundservice.UserIdentity{UserID: user.User.GetUserID()}, nil
 }
 
 func (a *UserLookupAdapter) FindByPartialUDiscName(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, partialName string) ([]*roundservice.UserIdentity, error) {
@@ -66,7 +66,7 @@ func (a *UserLookupAdapter) FindByPartialUDiscName(ctx context.Context, db bun.I
 	identities := make([]*roundservice.UserIdentity, 0, len(users))
 	for _, u := range users {
 		identities = append(identities, &roundservice.UserIdentity{
-			UserID: u.User.UserID,
+			UserID: u.User.GetUserID(),
 		})
 	}
 

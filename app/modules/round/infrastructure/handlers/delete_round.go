@@ -31,7 +31,31 @@ func (h *RoundHandlers) HandleRoundDeleteRequest(
 		return nil, err
 	}
 
-	return mapOperationResult(result,
+	mapped := result.Map(
+		func(_ *roundtypes.Round) any {
+			return &roundevents.RoundDeleteValidatedPayloadV1{
+				GuildID: payload.GuildID,
+				RoundDeleteRequestPayload: roundevents.RoundDeleteRequestPayloadV1{
+					GuildID:              payload.GuildID,
+					RoundID:              payload.RoundID,
+					RequestingUserUserID: payload.RequestingUserUserID,
+				},
+			}
+		},
+		func(err error) any {
+			return &roundevents.RoundDeleteErrorPayloadV1{
+				GuildID: payload.GuildID,
+				RoundDeleteRequest: &roundevents.RoundDeleteRequestPayloadV1{
+					GuildID:              payload.GuildID,
+					RoundID:              payload.RoundID,
+					RequestingUserUserID: payload.RequestingUserUserID,
+				},
+				Error: err.Error(),
+			}
+		},
+	)
+
+	return mapOperationResult(mapped,
 		roundevents.RoundDeleteValidatedV1,
 		roundevents.RoundDeleteErrorV1,
 	), nil
@@ -75,7 +99,28 @@ func (h *RoundHandlers) HandleRoundDeleteAuthorized(
 		return nil, err
 	}
 
-	results := mapOperationResult(result,
+	// Map to ensure correct event payload structure
+	mappedResult := result.Map(
+		func(_ bool) any {
+			return &roundevents.RoundDeletedPayloadV1{
+				GuildID:        payload.GuildID,
+				RoundID:        payload.RoundID,
+				EventMessageID: discordMessageID,
+			}
+		},
+		func(err error) any {
+			return &roundevents.RoundDeleteErrorPayloadV1{
+				GuildID: payload.GuildID,
+				RoundDeleteRequest: &roundevents.RoundDeleteRequestPayloadV1{
+					GuildID: payload.GuildID,
+					RoundID: payload.RoundID,
+				},
+				Error: err.Error(),
+			}
+		},
+	)
+
+	results := mapOperationResult(mappedResult,
 		roundevents.RoundDeletedV1,
 		roundevents.RoundDeleteErrorV1,
 	)
@@ -88,8 +133,8 @@ func (h *RoundHandlers) HandleRoundDeleteAuthorized(
 		}
 	}
 
-	// Add guild-scoped version for PWA permission scoping
-	results = addGuildScopedResult(results, roundevents.RoundDeletedV1, payload.GuildID)
+	// Add both legacy GuildID and internal ClubUUID scoped versions for PWA/NATS transition
+	results = h.addParallelIdentityResults(ctx, results, roundevents.RoundDeletedV1, payload.GuildID)
 
 	return results, nil
 }

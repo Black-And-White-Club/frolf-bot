@@ -138,6 +138,7 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 	testLocation := roundtypes.Location("Test Location")
 	testStartTime := sharedtypes.StartTime(time.Now())
 	testUserID := sharedtypes.DiscordID("12345678901234567")
+	testClubUUID := uuid.New()
 
 	testRound := roundtypes.Round{
 		ID:          testRoundID,
@@ -158,7 +159,7 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 
 	tests := []struct {
 		name            string
-		fakeSetup       func(*FakeService)
+		fakeSetup       func(*FakeService, *FakeUserService)
 		payload         *roundevents.RoundEntityCreatedPayloadV1
 		wantErr         bool
 		wantResultLen   int
@@ -167,7 +168,7 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 	}{
 		{
 			name: "Successfully handle RoundEntityCreated",
-			fakeSetup: func(fake *FakeService) {
+			fakeSetup: func(fake *FakeService, u *FakeUserService) {
 				fake.StoreRoundFunc = func(ctx context.Context, round *roundtypes.Round, guildID sharedtypes.GuildID) (roundservice.CreateRoundResult, error) {
 					return results.SuccessResult[*roundtypes.CreateRoundResult, error](&roundtypes.CreateRoundResult{
 						Round: &roundtypes.Round{
@@ -181,30 +182,36 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 						ChannelID: "test-channel-id",
 					}), nil
 				}
+				u.GetClubUUIDByDiscordGuildIDFunc = func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) {
+					return testClubUUID, nil
+				}
 			},
 			payload:         testPayload,
 			wantErr:         false,
-			wantResultLen:   2, // Now returns original + guild-scoped event
+			wantResultLen:   3, // Original + Guild Scoped + Club Scoped
 			wantResultTopic: roundevents.RoundCreatedV1,
 		},
 		{
 			name: "Successfully handle RoundEntityCreated verify channel ID",
-			fakeSetup: func(fake *FakeService) {
+			fakeSetup: func(fake *FakeService, u *FakeUserService) {
 				fake.StoreRoundFunc = func(ctx context.Context, round *roundtypes.Round, guildID sharedtypes.GuildID) (roundservice.CreateRoundResult, error) {
 					return results.SuccessResult[*roundtypes.CreateRoundResult, error](&roundtypes.CreateRoundResult{
 						Round:     &roundtypes.Round{ID: testRoundID},
 						ChannelID: "test-channel-id", // Should be ignored in favor of payload
 					}), nil
 				}
+				u.GetClubUUIDByDiscordGuildIDFunc = func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) {
+					return testClubUUID, nil
+				}
 			},
 			payload:         testPayload, // has DiscordChannelID: "test-channel-id"
 			wantErr:         false,
-			wantResultLen:   2,
+			wantResultLen:   3,
 			wantResultTopic: roundevents.RoundCreatedV1,
 		},
 		{
 			name: "Service failure returns creation failed",
-			fakeSetup: func(fake *FakeService) {
+			fakeSetup: func(fake *FakeService, u *FakeUserService) {
 				fake.StoreRoundFunc = func(ctx context.Context, round *roundtypes.Round, guildID sharedtypes.GuildID) (roundservice.CreateRoundResult, error) {
 					return results.FailureResult[*roundtypes.CreateRoundResult, error](errors.New("creation failed")), nil
 				}
@@ -216,7 +223,7 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 		},
 		{
 			name: "Service error returns error",
-			fakeSetup: func(fake *FakeService) {
+			fakeSetup: func(fake *FakeService, u *FakeUserService) {
 				fake.StoreRoundFunc = func(ctx context.Context, round *roundtypes.Round, guildID sharedtypes.GuildID) (roundservice.CreateRoundResult, error) {
 					return roundservice.CreateRoundResult{}, errors.New("database error")
 				}
@@ -227,7 +234,7 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 		},
 		{
 			name: "Unknown result returns empty results",
-			fakeSetup: func(fake *FakeService) {
+			fakeSetup: func(fake *FakeService, u *FakeUserService) {
 				fake.StoreRoundFunc = func(ctx context.Context, round *roundtypes.Round, guildID sharedtypes.GuildID) (roundservice.CreateRoundResult, error) {
 					return roundservice.CreateRoundResult{}, nil
 				}
@@ -241,13 +248,14 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fakeService := NewFakeService()
+			fakeUserService := NewFakeUserService()
 			if tt.fakeSetup != nil {
-				tt.fakeSetup(fakeService)
+				tt.fakeSetup(fakeService, fakeUserService)
 			}
 
 			h := &RoundHandlers{
 				service:     fakeService,
-				userService: NewFakeUserService(),
+				userService: fakeUserService,
 			}
 
 			ctx := context.Background()

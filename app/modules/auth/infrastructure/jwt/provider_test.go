@@ -2,77 +2,119 @@ package authjwt
 
 import (
 	"errors"
+	"os"
 	"testing"
 	"time"
 
 	authdomain "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/domain"
+	"github.com/google/uuid"
 )
 
 func TestProvider_GenerateAndValidateToken(t *testing.T) {
-	secret := "test-secret"
-	p := NewProvider(secret)
-	userID := "user-123"
-	guildID := "guild-456"
-	role := authdomain.RolePlayer
-	ttl := 1 * time.Hour
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		secret = "test-secret-at-least-32-chars-long!!"
+	}
+	issuer := "frolf-bot"
+	audience := "frolf-pwa"
+	p := NewProvider(secret, issuer, audience)
 
-	t.Run("success", func(t *testing.T) {
-		token, err := p.GenerateToken(userID, guildID, role, ttl)
-		if err != nil {
-			t.Fatalf("failed to generate token: %v", err)
-		}
+	userUUID := uuid.New()
+	clubUUID := uuid.New()
 
-		if token == "" {
-			t.Fatal("generated token is empty")
-		}
+	claims := &authdomain.Claims{
+		UserID:           "user-123",
+		UserUUID:         userUUID,
+		ActiveClubUUID:   clubUUID,
+		GuildID:          "guild-456",
+		Role:             authdomain.RolePlayer,
+		RefreshTokenHash: "fake-hash",
+	}
 
-		claims, err := p.ValidateToken(token)
-		if err != nil {
-			t.Fatalf("failed to validate token: %v", err)
-		}
+	tests := []struct {
+		name        string
+		setupClaims *authdomain.Claims
+		ttl         time.Duration
+		provider    Provider
+		expectedErr error
+		verify      func(t *testing.T, validated *authdomain.Claims)
+	}{
+		{
+			name:        "success",
+			setupClaims: claims,
+			ttl:         1 * time.Hour,
+			provider:    p,
+			verify: func(t *testing.T, validated *authdomain.Claims) {
+				if validated.UserID != claims.UserID {
+					t.Errorf("expected userID %s, got %s", claims.UserID, validated.UserID)
+				}
+				if validated.UserUUID != claims.UserUUID {
+					t.Errorf("expected userUUID %v, got %v", claims.UserUUID, validated.UserUUID)
+				}
+				if validated.ActiveClubUUID != claims.ActiveClubUUID {
+					t.Errorf("expected ActiveClubUUID %v, got %v", claims.ActiveClubUUID, validated.ActiveClubUUID)
+				}
+				if validated.RefreshTokenHash != claims.RefreshTokenHash {
+					t.Errorf("expected RefreshTokenHash %s, got %s", claims.RefreshTokenHash, validated.RefreshTokenHash)
+				}
+			},
+		},
+		{
+			name:        "expired token",
+			setupClaims: claims,
+			ttl:         -1 * time.Hour,
+			provider:    p,
+			expectedErr: ErrExpiredToken,
+		},
+		{
+			name:        "invalid signature",
+			setupClaims: claims,
+			ttl:         1 * time.Hour,
+			provider:    NewProvider("wrong-secret", issuer, audience),
+			expectedErr: ErrInvalidSignature,
+		},
+		{
+			name:        "malformed token",
+			setupClaims: nil, // Special case for manual token
+			expectedErr: ErrInvalidToken,
+		},
+	}
 
-		if claims.UserID != userID {
-			t.Errorf("expected userID %s, got %s", userID, claims.UserID)
-		}
-		if claims.GuildID != guildID {
-			t.Errorf("expected guildID %s, got %s", guildID, claims.GuildID)
-		}
-		if claims.Role != role {
-			t.Errorf("expected role %s, got %s", role, claims.Role)
-		}
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var token string
+			var err error
 
-	t.Run("expired token", func(t *testing.T) {
-		// Generate token with negative TTL to expire it immediately
-		token, err := p.GenerateToken(userID, guildID, role, -1*time.Hour)
-		if err != nil {
-			t.Fatalf("failed to generate token: %v", err)
-		}
+			if tt.setupClaims != nil {
+				token, err = p.GenerateToken(tt.setupClaims, tt.ttl)
+				if err != nil {
+					t.Fatalf("failed to generate token: %v", err)
+				}
+			} else if tt.name == "malformed token" {
+				token = "not.a.jwt"
+			}
 
-		_, err = p.ValidateToken(token)
-		if !errors.Is(err, ErrExpiredToken) {
-			t.Errorf("expected ErrExpiredToken, got %v", err)
-		}
-	})
+			validateTarget := p
+			if tt.provider != nil {
+				validateTarget = tt.provider
+			}
 
-	t.Run("invalid signature", func(t *testing.T) {
-		token, err := p.GenerateToken(userID, guildID, role, ttl)
-		if err != nil {
-			t.Fatalf("failed to generate token: %v", err)
-		}
+			validatedClaims, err := validateTarget.ValidateToken(token)
 
-		// Use a different provider with a different secret to validate
-		p2 := NewProvider("wrong-secret")
-		_, err = p2.ValidateToken(token)
-		if !errors.Is(err, ErrInvalidSignature) {
-			t.Errorf("expected ErrInvalidSignature, got %v", err)
-		}
-	})
+			if tt.expectedErr != nil {
+				if !errors.Is(err, tt.expectedErr) {
+					t.Errorf("expected error %v, got %v", tt.expectedErr, err)
+				}
+				return
+			}
 
-	t.Run("malformed token", func(t *testing.T) {
-		_, err := p.ValidateToken("not.a.jwt.token")
-		if !errors.Is(err, ErrInvalidToken) {
-			t.Errorf("expected ErrInvalidToken, got %v", err)
-		}
-	})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if tt.verify != nil {
+				tt.verify(t, validatedClaims)
+			}
+		})
+	}
 }

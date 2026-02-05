@@ -19,6 +19,7 @@ func (h *UserHandlers) HandleUserProfileUpdated(
 
 	err := h.service.UpdateUserProfile(ctx,
 		payload.UserID,
+		payload.GuildID,
 		payload.DisplayName,
 		payload.AvatarHash,
 	)

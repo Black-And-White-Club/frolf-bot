@@ -16,7 +16,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func TestHandleGuildSetup(t *testing.T) {
+func TestHandleGuildConfigCreation(t *testing.T) {
 	tests := []struct {
 		name                   string
 		setupFn                func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{}
@@ -27,13 +27,13 @@ func TestHandleGuildSetup(t *testing.T) {
 		timeout                time.Duration
 	}{
 		{
-			name: "Success - Guild Setup creates config",
+			name: "Success - Guild Config Creation creates config",
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
 				return nil
 			},
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				guildID := sharedtypes.GuildID("823456789012345678")
-				payload := guildtypes.GuildConfig{
+				payload := guildevents.GuildConfigCreationRequestedPayloadV1{
 					GuildID:              guildID,
 					SignupChannelID:      "834567890123456789",
 					EventChannelID:       "845678901234567890",
@@ -49,7 +49,7 @@ func TestHandleGuildSetup(t *testing.T) {
 				msg := message.NewMessage(uuid.New().String(), payloadBytes)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, guildevents.GuildSetupRequestedV1, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, guildevents.GuildConfigCreationRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
@@ -108,7 +108,7 @@ func TestHandleGuildSetup(t *testing.T) {
 			timeout:            5 * time.Second,
 		},
 		{
-			name: "Failure - Guild Setup with existing config",
+			name: "Failure - Guild Config Creation with existing config",
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
 				guildID := sharedtypes.GuildID("923456789012345678")
 				existingConfig := &guildtypes.GuildConfig{
@@ -127,7 +127,7 @@ func TestHandleGuildSetup(t *testing.T) {
 			},
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				guildID := sharedtypes.GuildID("923456789012345678")
-				payload := guildtypes.GuildConfig{
+				payload := guildevents.GuildConfigCreationRequestedPayloadV1{
 					GuildID:              guildID,
 					SignupChannelID:      "944567890123456789",
 					EventChannelID:       "955678901234567890",
@@ -143,7 +143,7 @@ func TestHandleGuildSetup(t *testing.T) {
 				msg := message.NewMessage(uuid.New().String(), payloadBytes)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, guildevents.GuildSetupRequestedV1, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, guildevents.GuildConfigCreationRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg

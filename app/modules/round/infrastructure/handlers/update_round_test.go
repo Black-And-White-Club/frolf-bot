@@ -131,6 +131,7 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 	testGuildID := sharedtypes.GuildID("guild-123")
 	testTitle := roundtypes.Title("Updated Round")
 	testStartTime := sharedtypes.StartTime(time.Now().Add(24 * time.Hour))
+	testClubUUID := uuid.New()
 
 	testPayloadNoReschedule := &roundevents.RoundUpdateValidatedPayloadV1{
 		GuildID: testGuildID,
@@ -155,7 +156,7 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 
 	tests := []struct {
 		name            string
-		fakeSetup       func(*FakeService)
+		fakeSetup       func(*FakeService, *FakeUserService)
 		payload         *roundevents.RoundUpdateValidatedPayloadV1
 		wantErr         bool
 		wantResultLen   int
@@ -164,7 +165,7 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 	}{
 		{
 			name: "Successfully handle without rescheduling",
-			fakeSetup: func(fake *FakeService) {
+			fakeSetup: func(fake *FakeService, u *FakeUserService) {
 				fake.UpdateRoundEntityFunc = func(ctx context.Context, req *roundtypes.UpdateRoundRequest) (roundservice.UpdateRoundResult, error) {
 					return results.SuccessResult[*roundtypes.UpdateRoundResult, error](&roundtypes.UpdateRoundResult{
 						Round: &roundtypes.Round{
@@ -174,15 +175,18 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 						},
 					}), nil
 				}
+				u.GetClubUUIDByDiscordGuildIDFunc = func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) {
+					return testClubUUID, nil
+				}
 			},
 			payload:         testPayloadNoReschedule,
 			wantErr:         false,
-			wantResultLen:   2, // Now returns original + guild-scoped event
+			wantResultLen:   3, // Original + Guild Scoped + Club Scoped
 			wantResultTopic: roundevents.RoundUpdatedV1,
 		},
 		{
 			name: "Successfully handle with rescheduling",
-			fakeSetup: func(fake *FakeService) {
+			fakeSetup: func(fake *FakeService, u *FakeUserService) {
 				fake.UpdateRoundEntityFunc = func(ctx context.Context, req *roundtypes.UpdateRoundRequest) (roundservice.UpdateRoundResult, error) {
 					return results.SuccessResult[*roundtypes.UpdateRoundResult, error](&roundtypes.UpdateRoundResult{
 						Round: &roundtypes.Round{
@@ -193,15 +197,18 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 						},
 					}), nil
 				}
+				u.GetClubUUIDByDiscordGuildIDFunc = func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) {
+					return testClubUUID, nil
+				}
 			},
 			payload:         testPayloadWithReschedule,
 			wantErr:         false,
-			wantResultLen:   3, // Now returns original + guild-scoped + reschedule event
+			wantResultLen:   4, // Original + Guild Scoped + Club Scoped + Reschedule
 			wantResultTopic: roundevents.RoundUpdatedV1,
 		},
 		{
 			name: "Service failure returns update error",
-			fakeSetup: func(fake *FakeService) {
+			fakeSetup: func(fake *FakeService, u *FakeUserService) {
 				fake.UpdateRoundEntityFunc = func(ctx context.Context, req *roundtypes.UpdateRoundRequest) (roundservice.UpdateRoundResult, error) {
 					return results.FailureResult[*roundtypes.UpdateRoundResult, error](errors.New("update failed")), nil
 				}
@@ -213,7 +220,7 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 		},
 		{
 			name: "Service error returns error",
-			fakeSetup: func(fake *FakeService) {
+			fakeSetup: func(fake *FakeService, u *FakeUserService) {
 				fake.UpdateRoundEntityFunc = func(ctx context.Context, req *roundtypes.UpdateRoundRequest) (roundservice.UpdateRoundResult, error) {
 					return roundservice.UpdateRoundResult{}, fmt.Errorf("database error")
 				}
@@ -224,7 +231,7 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 		},
 		{
 			name: "Unknown result returns error",
-			fakeSetup: func(fake *FakeService) {
+			fakeSetup: func(fake *FakeService, u *FakeUserService) {
 				fake.UpdateRoundEntityFunc = func(ctx context.Context, req *roundtypes.UpdateRoundRequest) (roundservice.UpdateRoundResult, error) {
 					return roundservice.UpdateRoundResult{}, nil
 				}
@@ -238,13 +245,14 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fakeService := NewFakeService()
+			fakeUserService := NewFakeUserService()
 			if tt.fakeSetup != nil {
-				tt.fakeSetup(fakeService)
+				tt.fakeSetup(fakeService, fakeUserService)
 			}
 
 			h := &RoundHandlers{
 				service:     fakeService,
-				userService: NewFakeUserService(),
+				userService: fakeUserService,
 				logger:      logger,
 			}
 
@@ -263,9 +271,9 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 			if tt.wantResultLen > 0 && results[0].Topic != tt.wantResultTopic {
 				t.Errorf("HandleRoundUpdateValidated() result topic = %v, want %v", results[0].Topic, tt.wantResultTopic)
 			}
-			// With guild-scoped events: [0] = original, [1] = guild-scoped, [2] = reschedule (if present)
-			if tt.wantResultLen == 3 && results[2].Topic != roundevents.RoundScheduleUpdatedV1 {
-				t.Errorf("HandleRoundUpdateValidated() third result topic = %v, want %v", results[2].Topic, roundevents.RoundScheduleUpdatedV1)
+			// With guild-scoped events: [0] = original, [1] = guild-scoped, [2] = club-scoped, [3] = reschedule (if present)
+			if tt.wantResultLen == 4 && results[3].Topic != roundevents.RoundScheduleUpdatedV1 {
+				t.Errorf("HandleRoundUpdateValidated() fourth result topic = %v, want %v", results[3].Topic, roundevents.RoundScheduleUpdatedV1)
 			}
 		})
 	}

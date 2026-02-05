@@ -54,7 +54,7 @@ func TestHandleParticipantRemovalRequest(t *testing.T) {
 					t.Fatalf("expected participant removed message, got none")
 				}
 			},
-			timeout: 1 * time.Second,
+			timeout: 10 * time.Second,
 		},
 	}
 

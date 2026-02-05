@@ -20,7 +20,7 @@ func MapDBUserWithMembershipToDomain(dbUser *userdb.UserWithMembership) *UserWit
 	return &UserWithMembership{
 		UserData: usertypes.UserData{
 			ID:     dbUser.User.ID,
-			UserID: dbUser.User.UserID,
+			UserID: dbUser.User.GetUserID(),
 			Role:   dbUser.Role,
 		},
 		DisplayName:   dbUser.User.GetDisplayName(),

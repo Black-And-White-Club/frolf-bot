@@ -73,7 +73,7 @@ func TestUserService_CreateUser(t *testing.T) {
 			guildID: testGuildID,
 			setupFake: func(f *FakeUserRepository) {
 				f.GetUserGlobalFunc = func(ctx context.Context, db bun.IDB, id sharedtypes.DiscordID) (*userdb.User, error) {
-					return &userdb.User{UserID: testUserID}, nil
+					return &userdb.User{UserID: &testUserID}, nil
 				}
 				f.GetGuildMembershipFunc = func(ctx context.Context, db bun.IDB, uID sharedtypes.DiscordID, gID sharedtypes.GuildID) (*userdb.GuildMembership, error) {
 					return nil, userdb.ErrNotFound
@@ -101,7 +101,7 @@ func TestUserService_CreateUser(t *testing.T) {
 			guildID: testGuildID,
 			setupFake: func(f *FakeUserRepository) {
 				f.GetUserGlobalFunc = func(ctx context.Context, db bun.IDB, id sharedtypes.DiscordID) (*userdb.User, error) {
-					return &userdb.User{UserID: testUserID}, nil
+					return &userdb.User{UserID: &testUserID}, nil
 				}
 				f.GetGuildMembershipFunc = func(ctx context.Context, db bun.IDB, uID sharedtypes.DiscordID, gID sharedtypes.GuildID) (*userdb.GuildMembership, error) {
 					return &userdb.GuildMembership{UserID: uID, GuildID: gID}, nil

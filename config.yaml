@@ -1,8 +1,8 @@
 postgres:
-  dsn: "postgres://local:local@my-postgresql.postgres:5432/frolf_bot?sslmode=disable"
+  dsn: "postgres://user:password@localhost:5432/frolf_bot?sslmode=disable"
 
 nats:
-  url: "nats://my-nats.nats:4222"
+  url: "nats://localhost:4222"
 
 observability:
   loki_url: "http://loki.observability:3100"
@@ -12,3 +12,11 @@ observability:
   tempo_insecure: true
   tempo_sample_rate: 0.1
   environment: "local"
+
+auth_callout:
+  enabled: true
+  subject: "$SYS.REQ.USER.AUTH"
+  # Account seed (SAA...) - used to sign user JWTs in centralized auth callout
+  # In production, override via AUTH_CALLOUT_ISSUER_NKEY env var
+  issuer_nkey: ""
+  signing_nkey: ""  # Unused in centralized mode

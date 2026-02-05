@@ -25,6 +25,7 @@ func TestRoundHandlers_HandleGetRoundRequest(t *testing.T) {
 
 	testPayload := &roundevents.GetRoundRequestPayloadV1{
 		GuildID: testGuildID,
+		// ClubUUID: testClubUUID, // Not yet in shared library struct
 		RoundID: testRoundID,
 	}
 

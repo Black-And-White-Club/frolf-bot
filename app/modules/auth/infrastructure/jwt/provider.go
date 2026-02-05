@@ -13,34 +13,49 @@ import (
 // pwaClaims represents the JWT claims structure.
 type pwaClaims struct {
 	jwt.RegisteredClaims
-	Guild string `json:"guild"`
-	Role  string `json:"role"`
+	UserUUID         string                `json:"user_uuid,omitempty"`
+	ActiveClubUUID   string                `json:"active_club_uuid,omitempty"`
+	Clubs            []authdomain.ClubRole `json:"clubs,omitempty"`
+	RefreshTokenHash string                `json:"rt_hash,omitempty"`
+	Guild            string                `json:"guild,omitempty"` // Legacy Discord Guild ID
+	Role             string                `json:"role,omitempty"`  // Legacy Role
 }
 
 // provider implements the Provider interface.
 type provider struct {
-	secret []byte
+	secret   []byte
+	issuer   string
+	audience string
 }
 
 // NewProvider creates a new JWT provider.
-func NewProvider(secret string) Provider {
+func NewProvider(secret, issuer, audience string) Provider {
 	return &provider{
-		secret: []byte(secret),
+		secret:   []byte(secret),
+		issuer:   issuer,
+		audience: audience,
 	}
 }
 
-// GenerateToken creates a signed JWT token for the given user, guild, and role.
-func (p *provider) GenerateToken(userID, guildID string, role authdomain.Role, ttl time.Duration) (string, error) {
+// GenerateToken creates a signed JWT token from the given claims.
+func (p *provider) GenerateToken(domainClaims *authdomain.Claims, ttl time.Duration) (string, error) {
 	now := time.Now()
 	claims := &pwaClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        uuid.New().String(),
-			Subject:   userID,
+			Subject:   domainClaims.UserID,
+			Issuer:    p.issuer,
+			Audience:  jwt.ClaimStrings{p.audience},
 			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
 			IssuedAt:  jwt.NewNumericDate(now),
+			NotBefore: jwt.NewNumericDate(now),
 		},
-		Guild: guildID,
-		Role:  string(role),
+		UserUUID:         domainClaims.UserUUID.String(),
+		ActiveClubUUID:   domainClaims.ActiveClubUUID.String(),
+		Clubs:            domainClaims.Clubs,
+		RefreshTokenHash: domainClaims.RefreshTokenHash,
+		Guild:            domainClaims.GuildID,
+		Role:             string(domainClaims.Role),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -54,12 +69,23 @@ func (p *provider) GenerateToken(userID, guildID string, role authdomain.Role, t
 
 // ValidateToken validates a JWT token and returns the domain claims if valid.
 func (p *provider) ValidateToken(tokenString string) (*authdomain.Claims, error) {
+	// Build validation options dynamically
+	opts := []jwt.ParserOption{
+		jwt.WithLeeway(5 * time.Second),
+	}
+	if p.issuer != "" {
+		opts = append(opts, jwt.WithIssuer(p.issuer))
+	}
+	if p.audience != "" {
+		opts = append(opts, jwt.WithAudience(p.audience))
+	}
+
 	token, err := jwt.ParseWithClaims(tokenString, &pwaClaims{}, func(token *jwt.Token) (any, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, ErrInvalidSignature
 		}
 		return p.secret, nil
-	})
+	}, opts...)
 
 	if err != nil {
 		if errors.Is(err, jwt.ErrTokenExpired) {
@@ -68,7 +94,7 @@ func (p *provider) ValidateToken(tokenString string) (*authdomain.Claims, error)
 		if errors.Is(err, jwt.ErrTokenSignatureInvalid) {
 			return nil, ErrInvalidSignature
 		}
-		return nil, ErrInvalidToken
+		return nil, fmt.Errorf("%w: %v", ErrInvalidToken, err)
 	}
 
 	claims, ok := token.Claims.(*pwaClaims)
@@ -78,9 +104,18 @@ func (p *provider) ValidateToken(tokenString string) (*authdomain.Claims, error)
 
 	// Convert to domain claims
 	domainClaims := &authdomain.Claims{
-		UserID:  claims.Subject,
-		GuildID: claims.Guild,
-		Role:    authdomain.Role(claims.Role),
+		UserID:           claims.Subject,
+		RefreshTokenHash: claims.RefreshTokenHash,
+		GuildID:          claims.Guild,
+		Role:             authdomain.Role(claims.Role),
+		Clubs:            claims.Clubs,
+	}
+
+	if claims.UserUUID != "" {
+		domainClaims.UserUUID, _ = uuid.Parse(claims.UserUUID)
+	}
+	if claims.ActiveClubUUID != "" {
+		domainClaims.ActiveClubUUID, _ = uuid.Parse(claims.ActiveClubUUID)
 	}
 
 	if claims.ExpiresAt != nil {

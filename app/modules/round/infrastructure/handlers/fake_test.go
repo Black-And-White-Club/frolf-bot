@@ -13,6 +13,7 @@ import (
 	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
 	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/google/uuid"
 )
 
 // ------------------------
@@ -390,7 +391,9 @@ var _ utils.Helpers = (*FakeHelpers)(nil)
 
 // FakeUserService implements userservice.Service for handler testing.
 type FakeUserService struct {
-	LookupProfilesFunc func(ctx context.Context, userIDs []sharedtypes.DiscordID) (results.OperationResult[map[sharedtypes.DiscordID]*usertypes.UserProfile, error], error)
+	LookupProfilesFunc              func(ctx context.Context, userIDs []sharedtypes.DiscordID) (results.OperationResult[map[sharedtypes.DiscordID]*usertypes.UserProfile, error], error)
+	GetUUIDByDiscordIDFunc          func(ctx context.Context, discordID sharedtypes.DiscordID) (uuid.UUID, error)
+	GetClubUUIDByDiscordGuildIDFunc func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error)
 }
 
 func NewFakeUserService() *FakeUserService {
@@ -430,8 +433,22 @@ func (f *FakeUserService) UpdateUDiscIdentity(ctx context.Context, userID shared
 func (f *FakeUserService) MatchParsedScorecard(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, playerNames []string) (userservice.MatchResultResult, error) {
 	return userservice.MatchResultResult{}, nil
 }
-func (f *FakeUserService) UpdateUserProfile(ctx context.Context, userID sharedtypes.DiscordID, displayName, avatarHash string) error {
+func (f *FakeUserService) UpdateUserProfile(ctx context.Context, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, displayName, avatarHash string) error {
 	return nil
+}
+
+func (f *FakeUserService) GetUUIDByDiscordID(ctx context.Context, discordID sharedtypes.DiscordID) (uuid.UUID, error) {
+	if f.GetUUIDByDiscordIDFunc != nil {
+		return f.GetUUIDByDiscordIDFunc(ctx, discordID)
+	}
+	return uuid.New(), nil
+}
+
+func (f *FakeUserService) GetClubUUIDByDiscordGuildID(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) {
+	if f.GetClubUUIDByDiscordGuildIDFunc != nil {
+		return f.GetClubUUIDByDiscordGuildIDFunc(ctx, guildID)
+	}
+	return uuid.New(), nil
 }
 
 // FakeHelpers implements utils.Helpers for testing

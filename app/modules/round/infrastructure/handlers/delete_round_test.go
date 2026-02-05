@@ -190,6 +190,7 @@ func TestRoundHandlers_HandleRoundDeleteValidated(t *testing.T) {
 func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 	testRoundID := sharedtypes.RoundID(uuid.New())
 	testGuildID := sharedtypes.GuildID("guild-123")
+	testClubUUID := uuid.New()
 
 	testPayload := &roundevents.RoundDeleteAuthorizedPayloadV1{
 		GuildID: testGuildID,
@@ -200,7 +201,7 @@ func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 
 	tests := []struct {
 		name             string
-		fakeSetup        func(*FakeService)
+		fakeSetup        func(*FakeService, *FakeUserService)
 		payload          *roundevents.RoundDeleteAuthorizedPayloadV1
 		ctx              context.Context
 		wantErr          bool
@@ -212,28 +213,34 @@ func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 	}{
 		{
 			name: "Successfully delete round",
-			fakeSetup: func(fake *FakeService) {
+			fakeSetup: func(fake *FakeService, u *FakeUserService) {
 				fake.DeleteRoundFunc = func(ctx context.Context, req *roundtypes.DeleteRoundInput) (results.OperationResult[bool, error], error) {
 					return results.SuccessResult[bool, error](true), nil
+				}
+				u.GetClubUUIDByDiscordGuildIDFunc = func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) {
+					return testClubUUID, nil
 				}
 			},
 			payload:         testPayload,
 			ctx:             context.Background(),
 			wantErr:         false,
-			wantResultLen:   2, // Now returns original + guild-scoped event
+			wantResultLen:   3, // Original + Guild Scoped + Club Scoped
 			wantResultTopic: roundevents.RoundDeletedV1,
 		},
 		{
 			name: "Successfully delete round with discord message ID in metadata",
-			fakeSetup: func(fake *FakeService) {
+			fakeSetup: func(fake *FakeService, u *FakeUserService) {
 				fake.DeleteRoundFunc = func(ctx context.Context, req *roundtypes.DeleteRoundInput) (results.OperationResult[bool, error], error) {
 					return results.SuccessResult[bool, error](true), nil
+				}
+				u.GetClubUUIDByDiscordGuildIDFunc = func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) {
+					return testClubUUID, nil
 				}
 			},
 			payload:         testPayload,
 			ctx:             context.WithValue(context.Background(), "discord_message_id", "msg-123"),
 			wantErr:         false,
-			wantResultLen:   2, // Now returns original + guild-scoped event
+			wantResultLen:   3, // Original + Guild Scoped + Club Scoped
 			wantResultTopic: roundevents.RoundDeletedV1,
 			checkMetadata:   true,
 			expectedMetadata: map[string]string{
@@ -242,7 +249,7 @@ func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 		},
 		{
 			name: "Service failure returns delete error",
-			fakeSetup: func(fake *FakeService) {
+			fakeSetup: func(fake *FakeService, u *FakeUserService) {
 				fake.DeleteRoundFunc = func(ctx context.Context, req *roundtypes.DeleteRoundInput) (results.OperationResult[bool, error], error) {
 					return results.FailureResult[bool, error](errors.New("round not found")), nil
 				}
@@ -255,7 +262,7 @@ func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 		},
 		{
 			name: "Service error returns error",
-			fakeSetup: func(fake *FakeService) {
+			fakeSetup: func(fake *FakeService, u *FakeUserService) {
 				fake.DeleteRoundFunc = func(ctx context.Context, req *roundtypes.DeleteRoundInput) (results.OperationResult[bool, error], error) {
 					return results.OperationResult[bool, error]{}, errors.New("database error")
 				}
@@ -267,7 +274,7 @@ func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 		},
 		{
 			name: "Unknown result returns empty results",
-			fakeSetup: func(fake *FakeService) {
+			fakeSetup: func(fake *FakeService, u *FakeUserService) {
 				fake.DeleteRoundFunc = func(ctx context.Context, req *roundtypes.DeleteRoundInput) (results.OperationResult[bool, error], error) {
 					return results.OperationResult[bool, error]{}, nil
 				}
@@ -282,13 +289,14 @@ func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fakeService := NewFakeService()
+			fakeUserService := NewFakeUserService()
 			if tt.fakeSetup != nil {
-				tt.fakeSetup(fakeService)
+				tt.fakeSetup(fakeService, fakeUserService)
 			}
 
 			h := &RoundHandlers{
 				service:     fakeService,
-				userService: NewFakeUserService(),
+				userService: fakeUserService,
 				logger:      logger,
 				helpers:     utils.NewHelper(logger),
 			}
@@ -308,13 +316,9 @@ func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 				t.Errorf("HandleRoundDeleteAuthorized() result topic = %v, want %v", results[0].Topic, tt.wantResultTopic)
 			}
 			if tt.checkMetadata && tt.wantResultLen > 0 {
-				for key, expectedValue := range tt.expectedMetadata {
-					actualValue, exists := results[0].Metadata[key]
-					if !exists {
-						t.Errorf("HandleRoundDeleteAuthorized() metadata key %s missing", key)
-					}
-					if actualValue != expectedValue {
-						t.Errorf("HandleRoundDeleteAuthorized() metadata[%s] = %v, want %v", key, actualValue, expectedValue)
+				for k, v := range tt.expectedMetadata {
+					if results[0].Metadata[k] != v {
+						t.Errorf("HandleRoundDeleteAuthorized() metadata mismatch, key %s: got %s, want %s", k, results[0].Metadata[k], v)
 					}
 				}
 			}

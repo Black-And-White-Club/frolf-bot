@@ -11,11 +11,12 @@ import (
 
 // AuthHandlers implements the Handlers interface for auth events.
 type AuthHandlers struct {
-	service  authservice.Service
-	eventBus eventbus.EventBus
-	helper   utils.Helpers
-	logger   *slog.Logger
-	tracer   trace.Tracer
+	service       authservice.Service
+	eventBus      eventbus.EventBus
+	helper        utils.Helpers
+	logger        *slog.Logger
+	tracer        trace.Tracer
+	secureCookies bool
 }
 
 // NewAuthHandlers creates a new AuthHandlers instance.
@@ -25,12 +26,14 @@ func NewAuthHandlers(
 	helper utils.Helpers,
 	logger *slog.Logger,
 	tracer trace.Tracer,
+	secureCookies bool,
 ) Handlers {
 	return &AuthHandlers{
-		service:  service,
-		eventBus: eventBus,
-		helper:   helper,
-		logger:   logger,
-		tracer:   tracer,
+		service:       service,
+		eventBus:      eventBus,
+		helper:        helper,
+		logger:        logger,
+		tracer:        tracer,
+		secureCookies: secureCookies,
 	}
 }

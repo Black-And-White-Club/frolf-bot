@@ -60,6 +60,18 @@ func (h *LeaderboardHandlers) HandleBatchTagAssignmentRequested(
 	// Propagate correlation_id if present to allow Discord to update the interaction
 	if val := ctx.Value("correlation_id"); val != nil {
 		if correlationID, ok := val.(string); ok && correlationID != "" {
+			// Sanitize
+			if len(correlationID) > 64 {
+				correlationID = correlationID[:64]
+			}
+			sanitizedID := ""
+			for _, r := range correlationID {
+				if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+					sanitizedID += string(r)
+				}
+			}
+			correlationID = sanitizedID
+
 			for i := range results {
 				if results[i].Metadata == nil {
 					results[i].Metadata = make(map[string]string)

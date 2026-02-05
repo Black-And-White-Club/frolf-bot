@@ -27,6 +27,7 @@ import (
 	"github.com/uptrace/bun/migrate"
 
 	// Import for migrator creation
+	clubmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/club/infrastructure/repositories/migrations"
 	guildmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories/migrations"
 	leaderboardmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories/migrations"
 	roundmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/migrations"
@@ -41,8 +42,15 @@ func startHealthServer() {
 		w.Write([]byte("ok"))
 	})
 	go func() {
-		log.Println("Starting health server on :8080")
-		if err := http.ListenAndServe(":8080", nil); err != nil {
+		port := os.Getenv("HEALTH_PORT")
+		if port == "" {
+			port = ":8080"
+		}
+		if !strings.HasPrefix(port, ":") {
+			port = ":" + port
+		}
+		log.Printf("Starting health server on %s", port)
+		if err := http.ListenAndServe(port, nil); err != nil {
 			log.Fatalf("Health server failed: %v", err)
 		}
 	}()
@@ -285,10 +293,31 @@ func runMigrations() {
 		"leaderboard": migrate.NewMigrator(db, leaderboardmigrations.Migrations),
 		"score":       migrate.NewMigrator(db, scoremigrations.Migrations),
 		"round":       migrate.NewMigrator(db, roundmigrations.Migrations),
+		"club":        migrate.NewMigrator(db, clubmigrations.Migrations),
+	}
+
+	// Define migration order to satisfy dependencies:
+	// 1. guild (adds UUIDs needed by user/club)
+	// 2. user (setup_club_memberships depends on guild_configs.uuid)
+	// 3. club (create_clubs_table depends on guild_configs.uuid)
+	// 4. others
+	migrationOrder := []string{"guild", "user", "club", "round", "score", "leaderboard"}
+
+	// Validate that all migrators are included in the order list
+	orderSet := make(map[string]struct{}, len(migrationOrder))
+	for _, name := range migrationOrder {
+		orderSet[name] = struct{}{}
+	}
+	for name := range migrators {
+		if _, ok := orderSet[name]; !ok {
+			fmt.Printf("FATAL: migrator %q is not included in migrationOrder - add it to prevent silent skipping\n", name)
+			os.Exit(1)
+		}
 	}
 
 	// Initialize and run migrations for each module
-	for moduleName, migrator := range migrators {
+	for _, moduleName := range migrationOrder {
+		migrator := migrators[moduleName]
 		fmt.Printf("Initializing migrations for %s module...\n", moduleName)
 		if err := migrator.Init(context.Background()); err != nil {
 			fmt.Printf("Failed to initialize %s migrations: %v\n", moduleName, err)

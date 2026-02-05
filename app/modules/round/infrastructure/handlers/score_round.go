@@ -18,16 +18,11 @@ func (h *RoundHandlers) HandleScoreUpdateRequest(
 	ctx context.Context,
 	payload *roundevents.ScoreUpdateRequestPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	var score sharedtypes.Score
-	if payload.Score != nil {
-		score = *payload.Score
-	}
-
 	result, err := h.service.ValidateScoreUpdateRequest(ctx, &roundtypes.ScoreUpdateRequest{
 		GuildID: payload.GuildID,
 		RoundID: payload.RoundID,
 		UserID:  payload.UserID,
-		Score:   &score,
+		Score:   payload.Score,
 	})
 	if err != nil {
 		return nil, err
@@ -37,6 +32,7 @@ func (h *RoundHandlers) HandleScoreUpdateRequest(
 	mappedResult := result.Map(
 		func(req *roundtypes.ScoreUpdateRequest) any {
 			return &roundevents.ScoreUpdateValidatedPayloadV1{
+				GuildID: req.GuildID, // Set top-level GuildID
 				ScoreUpdateRequestPayload: roundevents.ScoreUpdateRequestPayloadV1{
 					GuildID: req.GuildID,
 					RoundID: req.RoundID,
@@ -74,13 +70,13 @@ func (h *RoundHandlers) HandleScoreUpdateValidated(
 		GuildID: payload.GuildID,
 		RoundID: payload.ScoreUpdateRequestPayload.RoundID,
 		UserID:  payload.ScoreUpdateRequestPayload.UserID,
-		Score:   &score,
+		Score:   payload.ScoreUpdateRequestPayload.Score,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	return mapOperationResult(result.Map(
+	results := mapOperationResult(result.Map(
 		func(s *roundtypes.ScoreUpdateResult) any {
 			return &roundevents.ParticipantScoreUpdatedPayloadV1{
 				GuildID:        s.GuildID,
@@ -106,7 +102,12 @@ func (h *RoundHandlers) HandleScoreUpdateValidated(
 	),
 		roundevents.RoundParticipantScoreUpdatedV1,
 		roundevents.RoundScoreUpdateErrorV1,
-	), nil
+	)
+
+	// Add both legacy GuildID and internal ClubUUID scoped versions for PWA/NATS transition
+	results = h.addParallelIdentityResults(ctx, results, roundevents.RoundParticipantScoreUpdatedV1, payload.GuildID)
+
+	return results, nil
 }
 
 // HandleScoreBulkUpdateRequest handles bulk score overrides for a round.
@@ -144,8 +145,31 @@ func (h *RoundHandlers) HandleScoreBulkUpdateRequest(
 		return nil, err
 	}
 
+	// Map result to ensure correct event payload structure
+	mappedResult := opResult.Map(
+		func(s *roundtypes.BulkScoreUpdateResult) any {
+			return &roundevents.RoundScoresBulkUpdatedPayloadV1{
+				GuildID:        s.GuildID,
+				RoundID:        s.RoundID,
+				EventMessageID: payload.MessageID,
+				ChannelID:      payload.ChannelID,
+				Participants:   nil, // Service doesn't return updated participants for bulk yet
+			}
+		},
+		func(err error) any {
+			return &roundevents.RoundScoreUpdateErrorPayloadV1{
+				GuildID: payload.GuildID,
+				ScoreUpdateRequest: &roundevents.ScoreUpdateRequestPayloadV1{
+					GuildID: payload.GuildID,
+					RoundID: payload.RoundID,
+				},
+				Error: err.Error(),
+			}
+		},
+	)
+
 	resultsOut := mapOperationResult(
-		opResult,
+		mappedResult,
 		roundevents.RoundScoresBulkUpdatedV1,
 		roundevents.RoundScoreUpdateErrorV1,
 	)

@@ -58,3 +58,4 @@ gha-creds-*.json
 .claude/
 *commands/
 .github/workflows/gemini-*.yml
+feature-silent-refresh.md

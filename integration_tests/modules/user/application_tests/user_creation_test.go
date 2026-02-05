@@ -56,8 +56,8 @@ func TestCreateUser(t *testing.T) {
 					t.Errorf("Success payload UserID mismatch: expected %q, got %q", userID, successPayload.UserID)
 				}
 
-				if retrievedUser.User.UserID != userID {
-					t.Errorf("Retrieved user UserID mismatch: expected %q, got %q", userID, retrievedUser.User.UserID)
+				if retrievedUser.User.GetUserID() != userID {
+					t.Errorf("Retrieved user UserID mismatch: expected %q, got %q", userID, retrievedUser.User.GetUserID())
 				}
 
 				expectedRole := sharedtypes.UserRoleEnum("User")
@@ -153,8 +153,8 @@ func TestCreateUser(t *testing.T) {
 					t.Errorf("Success payload UserID mismatch: expected %q, got %q", userID, successPayload.UserID)
 				}
 
-				if retrievedUser.User.UserID != userID {
-					t.Errorf("Retrieved user UserID mismatch: expected %q, got %q", userID, retrievedUser.User.UserID)
+				if retrievedUser.User.GetUserID() != userID {
+					t.Errorf("Retrieved user UserID mismatch: expected %q, got %q", userID, retrievedUser.User.GetUserID())
 				}
 			},
 			expectedSuccess: true,
