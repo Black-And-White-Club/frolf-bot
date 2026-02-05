@@ -296,8 +296,16 @@ func runMigrations() {
 		"club":        migrate.NewMigrator(db, clubmigrations.Migrations),
 	}
 
+	// Define migration order to satisfy dependencies:
+	// 1. guild (adds UUIDs needed by user/club)
+	// 2. user (setup_club_memberships depends on guild_configs.uuid)
+	// 3. club (create_clubs_table depends on guild_configs.uuid)
+	// 4. others
+	migrationOrder := []string{"guild", "user", "club", "round", "score", "leaderboard"}
+
 	// Initialize and run migrations for each module
-	for moduleName, migrator := range migrators {
+	for _, moduleName := range migrationOrder {
+		migrator := migrators[moduleName]
 		fmt.Printf("Initializing migrations for %s module...\n", moduleName)
 		if err := migrator.Init(context.Background()); err != nil {
 			fmt.Printf("Failed to initialize %s migrations: %v\n", moduleName, err)

@@ -20,6 +20,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nkeys"
+	"github.com/uptrace/bun"
 )
 
 // Module represents the unified auth module.
@@ -43,6 +44,7 @@ func NewModule(
 	helper utils.Helpers,
 	userRepo userdb.Repository,
 	httpRouter chi.Router,
+	db *bun.DB,
 ) (*Module, error) {
 	logger := obs.Provider.Logger
 	tracer := obs.Registry.Tracer
@@ -80,6 +82,7 @@ func NewModule(
 		serviceConfig,
 		logger,
 		tracer,
+		db,
 	)
 
 	// Use secure cookies unless in development or using localhost

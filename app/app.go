@@ -175,7 +175,7 @@ func (app *App) initializeModules(ctx context.Context, routerRunCtx context.Cont
 
 	// Initialize auth module (handles magic links and auth callout)
 	fmt.Println("DEBUG: Initializing auth module...")
-	if app.AuthModule, err = auth.NewModule(ctx, app.Config, app.Observability, app.EventBus.GetNATSConnection(), app.EventBus, app.Helpers, app.DB.UserDB, app.HTTPRouter); err != nil {
+	if app.AuthModule, err = auth.NewModule(ctx, app.Config, app.Observability, app.EventBus.GetNATSConnection(), app.EventBus, app.Helpers, app.DB.UserDB, app.HTTPRouter, app.DB.GetDB()); err != nil {
 		app.Observability.Provider.Logger.Error("Failed to initialize auth module", attr.Error(err))
 		return fmt.Errorf("failed to initialize auth module: %w", err)
 	}

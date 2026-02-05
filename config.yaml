@@ -18,5 +18,5 @@ auth_callout:
   subject: "$SYS.REQ.USER.AUTH"
   # Account seed (SAA...) - used to sign user JWTs in centralized auth callout
   # In production, override via AUTH_CALLOUT_ISSUER_NKEY env var
-  issuer_nkey: "SAAGJPNZJANL5PAL4MUA7R6UPNTDCSKVPT6GAFYZPVTOCOQYIB3K4FSEAI"
+  issuer_nkey: ""
   signing_nkey: ""  # Unused in centralized mode

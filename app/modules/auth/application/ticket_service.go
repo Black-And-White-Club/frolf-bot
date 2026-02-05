@@ -17,6 +17,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/google/uuid"
+	"github.com/uptrace/bun"
 )
 
 // TicketService handles ticket vending and session management.
@@ -248,10 +249,19 @@ func (s *service) GetTicket(ctx context.Context, rawToken string) (*TicketRespon
 		Revoked:     false,
 	}
 
-	if err := s.repo.SaveRefreshToken(ctx, nil, newRefreshToken); err != nil {
-		return nil, fmt.Errorf("failed to save rotated token: %w", err)
+	err = s.runInTx(ctx, func(ctx context.Context, tx bun.IDB) error {
+		if err := s.repo.SaveRefreshToken(ctx, tx, newRefreshToken); err != nil {
+			return fmt.Errorf("failed to save rotated token: %w", err)
+		}
+		if err := s.repo.RevokeRefreshToken(ctx, tx, hashedToken); err != nil {
+			return fmt.Errorf("failed to revoke old token: %w", err)
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
 	}
-	_ = s.repo.RevokeRefreshToken(ctx, nil, hashedToken)
 
 	return &TicketResponse{
 		NATSToken:    natsToken,

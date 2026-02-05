@@ -53,12 +53,10 @@ func (h *AuthHandlers) HandleNATSAuthCallout(msg *nats.Msg) {
 	ctx, span := h.tracer.Start(context.Background(), "AuthHandlers.HandleNATSAuthCallout")
 	defer span.End()
 
-	h.logger.DebugContext(ctx, "Received auth callout request",
-		attr.String("subject", msg.Subject),
-		attr.Int("data_length", len(msg.Data)),
-		attr.String("raw_token", string(msg.Data)), // Log the raw token for debugging
-	)
-
+	       h.logger.DebugContext(ctx, "Received auth callout request",
+	                attr.String("subject", msg.Subject),
+	                attr.Int("data_length", len(msg.Data)),
+	        )
 	// The auth callout message is a JWT - decode it
 	claims, err := h.decodeAuthRequestJWT(string(msg.Data))
 	if err != nil {

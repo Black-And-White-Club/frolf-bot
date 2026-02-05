@@ -15,6 +15,7 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/permissions"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/google/uuid"
+	"github.com/uptrace/bun"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -34,6 +35,7 @@ type service struct {
 	config            Config
 	logger            *slog.Logger
 	tracer            trace.Tracer
+	db                bun.IDB
 }
 
 // NewService creates a new auth service.
@@ -45,6 +47,7 @@ func NewService(
 	config Config,
 	logger *slog.Logger,
 	tracer trace.Tracer,
+	db bun.IDB,
 ) Service {
 	return &service{
 		repo:              repo,
@@ -55,7 +58,19 @@ func NewService(
 		config:            config,
 		logger:            logger,
 		tracer:            tracer,
+		db:                db,
 	}
+}
+
+// runInTx ensures the operation runs within a database transaction.
+func (s *service) runInTx(ctx context.Context, fn func(ctx context.Context, db bun.IDB) error) error {
+	if s.db == nil {
+		return fn(ctx, nil) // Should theoretically fail if fn requires Tx, but allows testing with nil DB if mocks don't use it
+	}
+
+	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		return fn(ctx, tx)
+	})
 }
 
 const (

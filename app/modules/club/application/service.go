@@ -117,19 +117,29 @@ func (s *ClubService) upsertClubFromDiscordLogic(ctx context.Context, db bun.IDB
 		}
 		club = existing
 	} else {
-		club = &clubdb.Club{
-			UUID:           uuid.New(),
-			Name:           name,
-			IconURL:        iconURL,
-			DiscordGuildID: &guildID,
-		}
-		if err := s.repo.Upsert(ctx, db, club); err != nil {
-			return results.OperationResult[*clubtypes.ClubInfo, error]{}, fmt.Errorf("failed to create club: %w", err)
-		}
-	}
-
-	return results.SuccessResult[*clubtypes.ClubInfo, error](&clubtypes.ClubInfo{
-		UUID:    club.UUID.String(),
+		               club = &clubdb.Club{
+		                        UUID:           uuid.New(),
+		                        Name:           name,
+		                        IconURL:        iconURL,
+		                        DiscordGuildID: &guildID,
+		                }
+		                if err := s.repo.Upsert(ctx, db, club); err != nil {
+		                        // Retry once in case of race condition on discord_guild_id
+		                        existing, retryErr := s.repo.GetByDiscordGuildID(ctx, db, guildID)
+		                        if retryErr == nil && existing != nil {
+		                                existing.Name = name
+		                                existing.IconURL = iconURL
+		                                if updateErr := s.repo.Upsert(ctx, db, existing); updateErr != nil {
+		                                        return results.OperationResult[*clubtypes.ClubInfo, error]{}, fmt.Errorf("failed to update club on retry: %w", updateErr)
+		                                }
+		                                club = existing
+		                        } else {
+		                                return results.OperationResult[*clubtypes.ClubInfo, error]{}, fmt.Errorf("failed to create club: %w", err)
+		                        }
+		                }
+		        }
+		
+		        return results.SuccessResult[*clubtypes.ClubInfo, error](&clubtypes.ClubInfo{		UUID:    club.UUID.String(),
 		Name:    club.Name,
 		IconURL: club.IconURL,
 	}), nil
