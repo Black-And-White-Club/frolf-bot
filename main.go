@@ -27,6 +27,7 @@ import (
 	"github.com/uptrace/bun/migrate"
 
 	// Import for migrator creation
+	clubmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/club/infrastructure/repositories/migrations"
 	guildmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories/migrations"
 	leaderboardmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories/migrations"
 	roundmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/migrations"
@@ -292,6 +293,7 @@ func runMigrations() {
 		"leaderboard": migrate.NewMigrator(db, leaderboardmigrations.Migrations),
 		"score":       migrate.NewMigrator(db, scoremigrations.Migrations),
 		"round":       migrate.NewMigrator(db, roundmigrations.Migrations),
+		"club":        migrate.NewMigrator(db, clubmigrations.Migrations),
 	}
 
 	// Initialize and run migrations for each module

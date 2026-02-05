@@ -69,12 +69,23 @@ func (p *provider) GenerateToken(domainClaims *authdomain.Claims, ttl time.Durat
 
 // ValidateToken validates a JWT token and returns the domain claims if valid.
 func (p *provider) ValidateToken(tokenString string) (*authdomain.Claims, error) {
+	// Build validation options dynamically
+	opts := []jwt.ParserOption{
+		jwt.WithLeeway(5 * time.Second),
+	}
+	if p.issuer != "" {
+		opts = append(opts, jwt.WithIssuer(p.issuer))
+	}
+	if p.audience != "" {
+		opts = append(opts, jwt.WithAudience(p.audience))
+	}
+
 	token, err := jwt.ParseWithClaims(tokenString, &pwaClaims{}, func(token *jwt.Token) (any, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, ErrInvalidSignature
 		}
 		return p.secret, nil
-	}, jwt.WithIssuer(p.issuer), jwt.WithAudience(p.audience), jwt.WithLeeway(5*time.Second))
+	}, opts...)
 
 	if err != nil {
 		if errors.Is(err, jwt.ErrTokenExpired) {
@@ -83,7 +94,7 @@ func (p *provider) ValidateToken(tokenString string) (*authdomain.Claims, error)
 		if errors.Is(err, jwt.ErrTokenSignatureInvalid) {
 			return nil, ErrInvalidSignature
 		}
-		return nil, ErrInvalidToken
+		return nil, fmt.Errorf("%w: %v", ErrInvalidToken, err)
 	}
 
 	claims, ok := token.Claims.(*pwaClaims)

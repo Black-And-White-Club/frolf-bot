@@ -7,6 +7,7 @@ import (
 	"log"
 	"time"
 
+	clubdb "github.com/Black-And-White-Club/frolf-bot/app/modules/club/infrastructure/repositories"
 	guilddb "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
@@ -25,6 +26,7 @@ type DBService struct {
 	ScoreDB       scoredb.Repository
 	LeaderboardDB leaderboarddb.Repository
 	GuildDB       guilddb.Repository
+	ClubDB        clubdb.Repository
 	db            *bun.DB
 }
 
@@ -75,6 +77,7 @@ func newDBServiceWithDB(db *bun.DB) (*DBService, error) {
 		ScoreDB:       scoredb.NewRepository(db),
 		LeaderboardDB: leaderboarddb.NewRepository(db),
 		GuildDB:       guilddb.NewRepository(db),
+		ClubDB:        clubdb.NewClubRepository(),
 		db:            db,
 	}
 

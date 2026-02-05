@@ -57,9 +57,9 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 			wantErr:       false,
 			wantResultLen: 4,
 			wantTopics: []string{
-				leaderboardevents.LeaderboardUpdatedV1,                                     // 0: Global
-				sharedevents.SyncRoundsTagRequestV1,                                        // 1: Sync
-				fmt.Sprintf("%s.%s", leaderboardevents.LeaderboardUpdatedV1, "test-guild"), // 2: Scoped
+				leaderboardevents.LeaderboardUpdatedV1,                                              // 0: Global
+				sharedevents.SyncRoundsTagRequestV1,                                                 // 1: Sync
+				fmt.Sprintf("%s.%s", leaderboardevents.LeaderboardUpdatedV1, "test-guild"),          // 2: Scoped
 				fmt.Sprintf("%s.%s", leaderboardevents.LeaderboardUpdatedV1, testClubUUID.String()), // 3: Scoped Club
 			},
 		},

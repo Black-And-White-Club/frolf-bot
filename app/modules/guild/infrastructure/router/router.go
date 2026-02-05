@@ -107,7 +107,6 @@ func (r *GuildRouter) registerHandlers(handlers guildhandlers.Handlers) {
 	registerHandler(deps, guildevents.GuildConfigRetrievalRequestedV1, handlers.HandleRetrieveGuildConfig)
 	registerHandler(deps, guildevents.GuildConfigUpdateRequestedV1, handlers.HandleUpdateGuildConfig)
 	registerHandler(deps, guildevents.GuildConfigDeletionRequestedV1, handlers.HandleDeleteGuildConfig)
-	registerHandler(deps, guildevents.GuildSetupRequestedV1, handlers.HandleGuildSetup)
 }
 
 // registerHandler is a generic function for type-safe Watermill handler registration.

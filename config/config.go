@@ -134,6 +134,12 @@ func LoadConfig(filename string) (*Config, error) {
 	if v := os.Getenv("OTLP_LOGS_ENABLED"); v != "" {
 		cfg.Observability.OTLPLogsEnabled = v == "true"
 	}
+	if v := os.Getenv("HTTP_PORT"); v != "" {
+		cfg.HTTP.Port = v
+	}
+	if v := os.Getenv("CORS_ALLOWED_ORIGINS"); v != "" {
+		cfg.HTTP.AllowedOrigins = strings.Split(v, ",")
+	}
 	if v := os.Getenv("JWT_SECRET"); v != "" {
 		cfg.JWT.Secret = v
 	}
@@ -144,6 +150,9 @@ func LoadConfig(filename string) (*Config, error) {
 	}
 	if v := os.Getenv("PWA_BASE_URL"); v != "" {
 		cfg.PWA.BaseURL = v
+	}
+	if cfg.PWA.BaseURL == "" {
+		cfg.PWA.BaseURL = "https://pwa.frolf-bot.com"
 	}
 	if v := os.Getenv("AUTH_CALLOUT_ENABLED"); v != "" {
 		cfg.AuthCallout.Enabled = v == "true"
@@ -250,10 +259,9 @@ func loadConfigFromEnv() (*Config, error) {
 	cfg.AuthCallout.IssuerNKey = os.Getenv("AUTH_CALLOUT_ISSUER_NKEY")
 	cfg.AuthCallout.SigningNKey = os.Getenv("AUTH_CALLOUT_SIGNING_NKEY")
 
+	cfg.HTTP.Port = os.Getenv("HTTP_PORT")
 	if v := os.Getenv("CORS_ALLOWED_ORIGINS"); v != "" {
 		cfg.HTTP.AllowedOrigins = strings.Split(v, ",")
-	} else if cfg.PWA.BaseURL != "" {
-		cfg.HTTP.AllowedOrigins = []string{cfg.PWA.BaseURL}
 	}
 
 	if err := cfg.Validate(); err != nil {

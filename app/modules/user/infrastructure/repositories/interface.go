@@ -18,9 +18,11 @@ type Repository interface {
 	// ... (existing methods remain, but we add UUID resolution)
 	GetUUIDByDiscordID(ctx context.Context, db bun.IDB, discordID sharedtypes.DiscordID) (uuid.UUID, error)
 	GetClubUUIDByDiscordGuildID(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (uuid.UUID, error)
+	GetDiscordGuildIDByClubUUID(ctx context.Context, db bun.IDB, clubUUID uuid.UUID) (sharedtypes.GuildID, error)
 
 	// Global user operations
 	GetUserGlobal(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID) (*User, error)
+	GetUserByUUID(ctx context.Context, db bun.IDB, uuid uuid.UUID) (*User, error)
 	GetByUserIDs(ctx context.Context, db bun.IDB, userIDs []sharedtypes.DiscordID) ([]*User, error)
 	SaveGlobalUser(ctx context.Context, db bun.IDB, user *User) error
 	UpdateGlobalUser(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, updates *UserUpdateFields) error

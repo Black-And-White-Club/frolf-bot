@@ -73,6 +73,23 @@ func (r *Impl) GetClubUUIDByDiscordGuildID(ctx context.Context, db bun.IDB, guil
 	return gc.UUID, nil
 }
 
+func (r *Impl) GetDiscordGuildIDByClubUUID(ctx context.Context, db bun.IDB, clubUUID uuid.UUID) (sharedtypes.GuildID, error) {
+	if db == nil {
+		db = r.db
+	}
+	var gc struct {
+		GuildID sharedtypes.GuildID `bun:"guild_id"`
+	}
+	err := db.NewSelect().Table("guild_configs").Column("guild_id").Where("uuid = ?", clubUUID).Scan(ctx, &gc)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", ErrNotFound
+		}
+		return "", err
+	}
+	return gc.GuildID, nil
+}
+
 // --- GLOBAL USER METHODS ---
 
 // GetUserGlobal retrieves a global user by Discord ID.
@@ -327,6 +344,7 @@ func (r *Impl) UpsertClubMembership(ctx context.Context, db bun.IDB, membership 
 		Set("display_name = EXCLUDED.display_name").
 		Set("avatar_url = EXCLUDED.avatar_url").
 		Set("role = EXCLUDED.role").
+		Set("synced_at = EXCLUDED.synced_at").
 		Set("updated_at = EXCLUDED.updated_at").
 		Exec(ctx)
 	if err != nil {

@@ -5,12 +5,17 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"time"
 
+	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	authdomain "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/domain"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
+	"github.com/ThreeDotsLabs/watermill"
+	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/google/uuid"
 )
 
@@ -137,32 +142,99 @@ func (s *service) GetTicket(ctx context.Context, rawToken string) (*TicketRespon
 	var activeRole authdomain.Role = authdomain.RolePlayer
 	var clubs []authdomain.ClubRole
 
+	if len(memberships) == 0 {
+		// Backfill Check: If user has no club memberships, check for legacy guild memberships
+		// and create corresponding club memberships if possible.
+		user, err := s.repo.GetUserByUUID(ctx, nil, token.UserUUID)
+		if err == nil && user != nil && user.UserID != nil {
+			legacyMemberships, err := s.repo.GetUserMemberships(ctx, nil, *user.UserID)
+			if err == nil && len(legacyMemberships) > 0 {
+				s.logger.InfoContext(ctx, "Backfilling club memberships for user", attr.String("user_uuid", token.UserUUID.String()))
+				for _, lm := range legacyMemberships {
+					clubUUID, err := s.repo.GetClubUUIDByDiscordGuildID(ctx, nil, lm.GuildID)
+					if err == nil {
+						extID := string(lm.UserID)
+						emptyName := ""
+						cm := &userdb.ClubMembership{
+							ClubUUID:    clubUUID,
+							UserUUID:    token.UserUUID,
+							Role:        lm.Role,
+							JoinedAt:    lm.JoinedAt,
+							ExternalID:  &extID,
+							DisplayName: &emptyName,
+						}
+						if err := s.repo.UpsertClubMembership(ctx, nil, cm); err != nil {
+							s.logger.WarnContext(ctx, "Failed to backfill club membership", attr.Error(err))
+						}
+					}
+				}
+				// Re-fetch memberships after backfill
+				memberships, _ = s.repo.GetClubMembershipsByUserUUID(ctx, nil, token.UserUUID)
+			}
+		}
+	}
+
 	if len(memberships) > 0 {
 		activeClubUUID = memberships[0].ClubUUID
 		activeRole = authdomain.Role(memberships[0].Role)
+
+		// Get global user for fallback display name
+		var globalDisplayName string
+		user, err := s.repo.GetUserByUUID(ctx, nil, token.UserUUID)
+		if err == nil && user != nil && user.DisplayName != nil {
+			globalDisplayName = *user.DisplayName
+		}
+
 		for _, m := range memberships {
+			// Request async profile sync if:
+			// 1. display_name is NULL (never synced), OR
+			// 2. synced_at is NULL or older than ProfileSyncStaleness (stale data)
+			needsSync := m.DisplayName == nil ||
+				m.SyncedAt == nil ||
+				time.Since(*m.SyncedAt) > ProfileSyncStaleness
+
+			if needsSync && m.ExternalID != nil {
+				s.requestProfileSync(ctx, *m.ExternalID, m.ClubUUID)
+			}
+
 			clubs = append(clubs, authdomain.ClubRole{
-				ClubUUID: m.ClubUUID,
-				Role:     authdomain.Role(m.Role),
+				ClubUUID:    m.ClubUUID,
+				Role:        authdomain.Role(m.Role),
+				DisplayName: resolveDisplayName(m.DisplayName, globalDisplayName),
 			})
+		}
+	}
+
+	// Resolve Discord Guild ID from active club
+	// This is critical for NATS permissions if the frontend subscribes using Guild ID
+	var guildID string
+	if activeClubUUID != uuid.Nil {
+		if gid, err := s.repo.GetDiscordGuildIDByClubUUID(ctx, nil, activeClubUUID); err == nil {
+			guildID = string(gid)
+		} else {
+			s.logger.WarnContext(ctx, "Failed to resolve Discord Guild ID for club",
+				attr.String("club_uuid", activeClubUUID.String()),
+				attr.Error(err),
+			)
+			// Fallback to club UUID string if resolution fails, though this may not match frontend expectations
+			guildID = activeClubUUID.String()
 		}
 	}
 
 	// 4. Mint NATS Ticket with the hash of the NEW rotated refresh token
 	claims := &authdomain.Claims{
+		UserID:           token.UserUUID.String(), // Use UUID as ID for now since we are decoupling
 		UserUUID:         token.UserUUID,
+		GuildID:          guildID,
 		ActiveClubUUID:   activeClubUUID,
 		Role:             activeRole,
 		Clubs:            clubs,
 		RefreshTokenHash: newHashed,
 	}
 
-	perms := s.permissionBuilder.ForRole(claims)
-	if s.userJWTBuilder == nil {
-		s.logger.ErrorContext(ctx, "NATS JWT builder not configured (AuthCallout.Enabled likely false)")
-		return nil, ErrGenerateUserJWT
-	}
-	natsToken, err := s.userJWTBuilder.BuildUserJWT(claims, perms)
+	// 4. Mint standard HMAC JWT as a "ticket"
+	// This ticket will be exchanged for a NATS User JWT via Auth Callout
+	natsToken, err := s.jwtProvider.GenerateToken(claims, DefaultTokenTTL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate ticket: %w", err)
 	}
@@ -204,4 +276,62 @@ func (s *service) LogoutUser(ctx context.Context, rawToken string) error {
 	}
 
 	return nil
+}
+
+// resolveDisplayName returns the club display name if present, otherwise fallback.
+func resolveDisplayName(clubDisplayName *string, fallback string) string {
+	if clubDisplayName != nil && *clubDisplayName != "" {
+		return *clubDisplayName
+	}
+	return fallback
+}
+
+// requestProfileSync publishes an async request to sync a user's profile from Discord.
+// This is fire-and-forget - failures are logged but don't block the ticket response.
+func (s *service) requestProfileSync(ctx context.Context, discordUserID string, clubUUID uuid.UUID) {
+	if s.eventBus == nil {
+		return
+	}
+
+	// Resolve guild ID from club UUID
+	guildID, err := s.repo.GetDiscordGuildIDByClubUUID(ctx, nil, clubUUID)
+	if err != nil {
+		s.logger.DebugContext(ctx, "Cannot request profile sync: failed to resolve guild ID",
+			attr.String("club_uuid", clubUUID.String()),
+			attr.Error(err),
+		)
+		return
+	}
+
+	payload := &userevents.UserProfileSyncRequestPayloadV1{
+		UserID:  sharedtypes.DiscordID(discordUserID),
+		GuildID: guildID,
+	}
+
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		s.logger.WarnContext(ctx, "Failed to marshal profile sync request",
+			attr.Error(err),
+		)
+		return
+	}
+
+	msg := message.NewMessage(watermill.NewUUID(), payloadBytes)
+	msg.Metadata.Set("topic", userevents.UserProfileSyncRequestTopicV1)
+	msg.Metadata.Set("user_id", discordUserID)
+	msg.Metadata.Set("guild_id", string(guildID))
+
+	if err := s.eventBus.Publish(userevents.UserProfileSyncRequestTopicV1, msg); err != nil {
+		s.logger.WarnContext(ctx, "Failed to publish profile sync request",
+			attr.Error(err),
+			attr.String("user_id", discordUserID),
+			attr.String("guild_id", string(guildID)),
+		)
+		return
+	}
+
+	s.logger.InfoContext(ctx, "Published profile sync request",
+		attr.String("user_id", discordUserID),
+		attr.String("guild_id", string(guildID)),
+	)
 }

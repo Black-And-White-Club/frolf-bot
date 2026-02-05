@@ -18,6 +18,7 @@ import (
 	tracingfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/auth"
+	"github.com/Black-And-White-Club/frolf-bot/app/modules/club"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/guild"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/round"
@@ -41,6 +42,7 @@ type App struct {
 	RoundModule       *round.Module
 	ScoreModule       *score.Module
 	GuildModule       *guild.Module
+	ClubModule        *club.Module
 	AuthModule        *auth.Module
 	DB                *bundb.DBService
 	EventBus          eventbus.EventBus
@@ -163,6 +165,13 @@ func (app *App) initializeModules(ctx context.Context, routerRunCtx context.Cont
 		return fmt.Errorf("failed to initialize score module: %w", err)
 	}
 	fmt.Println("DEBUG: Score module initialized successfully")
+
+	fmt.Println("DEBUG: Initializing club module...")
+	if app.ClubModule, err = club.NewClubModule(ctx, app.Observability, app.EventBus, app.Router, app.Helpers, routerRunCtx, app.DB.GetDB()); err != nil {
+		app.Observability.Provider.Logger.Error("Failed to initialize club module", attr.Error(err))
+		return fmt.Errorf("failed to initialize club module: %w", err)
+	}
+	fmt.Println("DEBUG: Club module initialized successfully")
 
 	// Initialize auth module (handles magic links and auth callout)
 	fmt.Println("DEBUG: Initializing auth module...")
@@ -323,6 +332,9 @@ func (app *App) Close() error {
 	}
 	if app.ScoreModule != nil {
 		app.ScoreModule.Close()
+	}
+	if app.ClubModule != nil {
+		app.ClubModule.Close()
 	}
 	if app.AuthModule != nil {
 		app.AuthModule.Close()

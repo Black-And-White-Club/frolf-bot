@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	authdomain "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/domain"
@@ -29,6 +30,7 @@ type service struct {
 	jwtProvider       authjwt.Provider
 	userJWTBuilder    authnats.UserJWTBuilder
 	permissionBuilder *permissions.Builder
+	eventBus          eventbus.EventBus
 	config            Config
 	logger            *slog.Logger
 	tracer            trace.Tracer
@@ -39,6 +41,7 @@ func NewService(
 	jwtProvider authjwt.Provider,
 	userJWTBuilder authnats.UserJWTBuilder,
 	repo userdb.Repository,
+	eventBus eventbus.EventBus,
 	config Config,
 	logger *slog.Logger,
 	tracer trace.Tracer,
@@ -48,6 +51,7 @@ func NewService(
 		jwtProvider:       jwtProvider,
 		userJWTBuilder:    userJWTBuilder,
 		permissionBuilder: permissions.NewBuilder(),
+		eventBus:          eventBus,
 		config:            config,
 		logger:            logger,
 		tracer:            tracer,
@@ -55,8 +59,9 @@ func NewService(
 }
 
 const (
-	DefaultTokenTTL    = 24 * time.Hour
-	RefreshTokenExpiry = 30 * 24 * time.Hour
+	DefaultTokenTTL      = 24 * time.Hour
+	RefreshTokenExpiry   = 30 * 24 * time.Hour
+	ProfileSyncStaleness = 24 * time.Hour // Re-sync display name from Discord if older than this
 )
 
 // GenerateMagicLink generates a magic link URL for the given user and guild.
@@ -197,9 +202,7 @@ func (s *service) HandleNATSAuthRequest(ctx context.Context, req *NATSAuthReques
 	tokenString := req.ConnectOpts.Password
 	if tokenString == "" {
 		s.logger.WarnContext(ctx, "Auth request missing password/token")
-		return &NATSAuthResponse{
-			Error: ErrMissingToken.Error(),
-		}, nil
+		return s.buildAuthErrorResponse(req.ServerPublicKey, req.UserNkey, ErrMissingToken.Error())
 	}
 
 	claims, err := s.jwtProvider.ValidateToken(tokenString)
@@ -208,9 +211,7 @@ func (s *service) HandleNATSAuthRequest(ctx context.Context, req *NATSAuthReques
 			attr.Error(err),
 			attr.String("client_host", req.ClientInfo.Host),
 		)
-		return &NATSAuthResponse{
-			Error: fmt.Sprintf("invalid token: %v", err),
-		}, nil
+		return s.buildAuthErrorResponse(req.ServerPublicKey, req.UserNkey, fmt.Sprintf("invalid token: %v", err))
 	}
 
 	// Stateful Session Validation:
@@ -223,9 +224,7 @@ func (s *service) HandleNATSAuthRequest(ctx context.Context, req *NATSAuthReques
 				attr.String("rt_hash", claims.RefreshTokenHash),
 				attr.String("user_uuid", claims.UserUUID.String()),
 			)
-			return &NATSAuthResponse{
-				Error: ErrSessionMismatch.Error(),
-			}, nil
+			return s.buildAuthErrorResponse(req.ServerPublicKey, req.UserNkey, ErrSessionMismatch.Error())
 		}
 
 		if token.Revoked {
@@ -233,9 +232,7 @@ func (s *service) HandleNATSAuthRequest(ctx context.Context, req *NATSAuthReques
 				attr.String("rt_hash", claims.RefreshTokenHash),
 				attr.String("user_uuid", claims.UserUUID.String()),
 			)
-			return &NATSAuthResponse{
-				Error: ErrRevokedSession.Error(),
-			}, nil
+			return s.buildAuthErrorResponse(req.ServerPublicKey, req.UserNkey, ErrRevokedSession.Error())
 		}
 
 		if time.Now().After(token.ExpiresAt) {
@@ -243,9 +240,7 @@ func (s *service) HandleNATSAuthRequest(ctx context.Context, req *NATSAuthReques
 				attr.String("rt_hash", claims.RefreshTokenHash),
 				attr.String("user_uuid", claims.UserUUID.String()),
 			)
-			return &NATSAuthResponse{
-				Error: ErrExpiredToken.Error(),
-			}, nil
+			return s.buildAuthErrorResponse(req.ServerPublicKey, req.UserNkey, ErrExpiredToken.Error())
 		}
 	}
 
@@ -258,26 +253,59 @@ func (s *service) HandleNATSAuthRequest(ctx context.Context, req *NATSAuthReques
 	// Build permissions based on claims
 	perms := s.permissionBuilder.ForRole(claims)
 
+	s.logger.InfoContext(ctx, "Generated permissions for user",
+		attr.Any("permissions", perms),
+		attr.String("user_id", claims.UserID),
+		attr.String("role", string(claims.Role)),
+	)
+
 	// Generate NATS user JWT with permissions
 	if s.userJWTBuilder == nil {
 		s.logger.ErrorContext(ctx, "NATS JWT builder not configured")
-		return &NATSAuthResponse{
-			Error: ErrGenerateUserJWT.Error(),
-		}, nil
+		return s.buildAuthErrorResponse(req.ServerPublicKey, req.UserNkey, ErrGenerateUserJWT.Error())
 	}
 
-	userJWT, err := s.userJWTBuilder.BuildUserJWT(claims, perms)
+	userJWT, err := s.userJWTBuilder.BuildUserJWT(req.UserNkey, claims, perms)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "Failed to generate user JWT",
 			attr.Error(err),
 			attr.String("user_id", claims.UserID),
 		)
-		return &NATSAuthResponse{
-			Error: ErrGenerateUserJWT.Error(),
-		}, nil
+		return s.buildAuthErrorResponse(req.ServerPublicKey, req.UserNkey, ErrGenerateUserJWT.Error())
+	}
+
+	// Build signed authorization response JWT
+	signedResponse, err := s.userJWTBuilder.BuildAuthResponse(req.ServerPublicKey, req.UserNkey, userJWT, "")
+	if err != nil {
+		s.logger.ErrorContext(ctx, "Failed to build auth response JWT",
+			attr.Error(err),
+		)
+		return s.buildAuthErrorResponse(req.ServerPublicKey, req.UserNkey, "internal error")
 	}
 
 	return &NATSAuthResponse{
-		Jwt: userJWT,
+		Jwt:            userJWT,
+		SignedResponse: signedResponse,
+	}, nil
+}
+
+// buildAuthErrorResponse creates a signed error response for auth callout.
+func (s *service) buildAuthErrorResponse(serverPubKey string, clientNKey string, errMsg string) (*NATSAuthResponse, error) {
+	if s.userJWTBuilder == nil {
+		// Fallback if builder not available
+		return &NATSAuthResponse{Error: errMsg}, nil
+	}
+
+	// For error responses, we try to use the client NKey if available, otherwise empty.
+	// In the context where this is called, we usually have the client NKey from the request.
+	signedResponse, err := s.userJWTBuilder.BuildAuthResponse(serverPubKey, clientNKey, "", errMsg)
+	if err != nil {
+		// If we can't sign the response, return unsigned error
+		return &NATSAuthResponse{Error: errMsg}, nil
+	}
+
+	return &NATSAuthResponse{
+		Error:          errMsg,
+		SignedResponse: signedResponse,
 	}, nil
 }

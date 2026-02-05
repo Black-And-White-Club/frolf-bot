@@ -55,7 +55,8 @@ func (f *FakeJWTProvider) ValidateToken(tokenString string) (*authdomain.Claims,
 type FakeUserJWTBuilder struct {
 	trace []string
 
-	BuildUserJWTFunc func(claims *authdomain.Claims, perms *permissions.Permissions) (string, error)
+	BuildUserJWTFunc      func(userNkey string, claims *authdomain.Claims, perms *permissions.Permissions) (string, error)
+	BuildAuthResponseFunc func(audience string, subject string, userJWT string, errMsg string) (string, error)
 }
 
 func (f *FakeUserJWTBuilder) Trace() []string {
@@ -66,10 +67,18 @@ func (f *FakeUserJWTBuilder) record(step string) {
 	f.trace = append(f.trace, step)
 }
 
-func (f *FakeUserJWTBuilder) BuildUserJWT(claims *authdomain.Claims, perms *permissions.Permissions) (string, error) {
+func (f *FakeUserJWTBuilder) BuildUserJWT(userNkey string, claims *authdomain.Claims, perms *permissions.Permissions) (string, error) {
 	f.record("BuildUserJWT")
 	if f.BuildUserJWTFunc != nil {
-		return f.BuildUserJWTFunc(claims, perms)
+		return f.BuildUserJWTFunc(userNkey, claims, perms)
 	}
 	return "fake-nats-jwt", nil
+}
+
+func (f *FakeUserJWTBuilder) BuildAuthResponse(audience string, subject string, userJWT string, errMsg string) (string, error) {
+	f.record("BuildAuthResponse")
+	if f.BuildAuthResponseFunc != nil {
+		return f.BuildAuthResponseFunc(audience, subject, userJWT, errMsg)
+	}
+	return "fake-signed-response", nil
 }

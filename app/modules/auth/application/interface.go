@@ -39,8 +39,10 @@ type TicketResponse struct {
 
 // NATSAuthRequest represents a NATS auth callout request.
 type NATSAuthRequest struct {
-	ConnectOpts ConnectOptions `json:"connect_opts"`
-	ClientInfo  ClientInfo     `json:"client_info"`
+	UserNkey        string         `json:"user_nkey"`
+	ServerPublicKey string         `json:"server_public_key"` // The server's public key (aud for response)
+	ConnectOpts     ConnectOptions `json:"connect_opts"`
+	ClientInfo      ClientInfo     `json:"client_info"`
 }
 
 // ConnectOptions contains the connection options from the auth request.
@@ -58,8 +60,9 @@ type ClientInfo struct {
 
 // NATSAuthResponse represents the response to a NATS auth callout.
 type NATSAuthResponse struct {
-	Jwt   string `json:"jwt,omitempty"`
-	Error string `json:"error,omitempty"`
+	Jwt            string `json:"jwt,omitempty"`            // The user JWT (for logging)
+	Error          string `json:"error,omitempty"`          // Error message if auth failed
+	SignedResponse string `json:"signed_response,omitempty"` // The signed auth response JWT to send to NATS
 }
 
 // MagicLinkResponse represents the response for magic link generation

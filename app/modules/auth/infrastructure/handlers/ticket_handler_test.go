@@ -19,10 +19,11 @@ func TestAuthHandlers_HandleHTTPLogin(t *testing.T) {
 	tracer := noop.NewTracerProvider().Tracer("test")
 
 	tests := []struct {
-		name         string
-		url          string
-		setupService func(*FakeService)
-		verify       func(t *testing.T, rr *httptest.ResponseRecorder)
+		name          string
+		url           string
+		secureCookies bool
+		setupService  func(*FakeService)
+		verify        func(t *testing.T, rr *httptest.ResponseRecorder)
 	}{
 		{
 			name: "success",
@@ -62,6 +63,37 @@ func TestAuthHandlers_HandleHTTPLogin(t *testing.T) {
 			},
 		},
 		{
+			name: "success with secure cookies",
+			url:  "/api/auth/callback?t=otp-token",
+			setupService: func(s *FakeService) {
+				s.LoginUserFunc = func(ctx context.Context, oneTimeToken string) (*authservice.LoginResponse, error) {
+					return &authservice.LoginResponse{
+						RefreshToken: "valid-refresh-token",
+						UserUUID:     "test-uuid",
+					}, nil
+				}
+			},
+			secureCookies: true,
+			verify: func(t *testing.T, rr *httptest.ResponseRecorder) {
+				if rr.Code != http.StatusOK {
+					t.Errorf("expected status 200, got %d", rr.Code)
+				}
+				cookies := rr.Result().Cookies()
+				found := false
+				for _, c := range cookies {
+					if c.Name == RefreshTokenCookie {
+						found = true
+						if !c.Secure {
+							t.Error("expected cookie to be secure")
+						}
+					}
+				}
+				if !found {
+					t.Error("cookie not found")
+				}
+			},
+		},
+		{
 			name: "missing token",
 			url:  "/api/auth/callback",
 			verify: func(t *testing.T, rr *httptest.ResponseRecorder) {
@@ -92,7 +124,7 @@ func TestAuthHandlers_HandleHTTPLogin(t *testing.T) {
 			if tt.setupService != nil {
 				tt.setupService(fakeService)
 			}
-			h := NewAuthHandlers(fakeService, &FakeEventBus{}, &FakeHelpers{}, logger, tracer)
+			h := NewAuthHandlers(fakeService, &FakeEventBus{}, &FakeHelpers{}, logger, tracer, tt.secureCookies)
 			req := httptest.NewRequest("GET", tt.url, nil)
 			rr := httptest.NewRecorder()
 			h.HandleHTTPLogin(rr, req)
@@ -149,7 +181,7 @@ func TestAuthHandlers_HandleHTTPTicket(t *testing.T) {
 			if tt.setupService != nil {
 				tt.setupService(fakeService)
 			}
-			h := NewAuthHandlers(fakeService, &FakeEventBus{}, &FakeHelpers{}, logger, tracer)
+			h := NewAuthHandlers(fakeService, &FakeEventBus{}, &FakeHelpers{}, logger, tracer, false)
 			req := httptest.NewRequest("GET", "/api/auth/ticket", nil)
 			if tt.cookieValue != "" {
 				req.AddCookie(&http.Cookie{Name: RefreshTokenCookie, Value: tt.cookieValue})
@@ -204,7 +236,7 @@ func TestAuthHandlers_HandleHTTPLogout(t *testing.T) {
 					return nil
 				}
 			}
-			h := NewAuthHandlers(fakeService, &FakeEventBus{}, &FakeHelpers{}, logger, tracer)
+			h := NewAuthHandlers(fakeService, &FakeEventBus{}, &FakeHelpers{}, logger, tracer, false)
 			req := httptest.NewRequest("POST", "/api/auth/logout", nil)
 			if tt.cookieValue != "" {
 				req.AddCookie(&http.Cookie{Name: RefreshTokenCookie, Value: tt.cookieValue})

@@ -145,8 +145,31 @@ func (h *RoundHandlers) HandleScoreBulkUpdateRequest(
 		return nil, err
 	}
 
+	// Map result to ensure correct event payload structure
+	mappedResult := opResult.Map(
+		func(s *roundtypes.BulkScoreUpdateResult) any {
+			return &roundevents.RoundScoresBulkUpdatedPayloadV1{
+				GuildID:        s.GuildID,
+				RoundID:        s.RoundID,
+				EventMessageID: payload.MessageID,
+				ChannelID:      payload.ChannelID,
+				Participants:   nil, // Service doesn't return updated participants for bulk yet
+			}
+		},
+		func(err error) any {
+			return &roundevents.RoundScoreUpdateErrorPayloadV1{
+				GuildID: payload.GuildID,
+				ScoreUpdateRequest: &roundevents.ScoreUpdateRequestPayloadV1{
+					GuildID: payload.GuildID,
+					RoundID: payload.RoundID,
+				},
+				Error: err.Error(),
+			}
+		},
+	)
+
 	resultsOut := mapOperationResult(
-		opResult,
+		mappedResult,
 		roundevents.RoundScoresBulkUpdatedV1,
 		roundevents.RoundScoreUpdateErrorV1,
 	)

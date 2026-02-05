@@ -26,13 +26,15 @@ func TestBuilder_ForRole(t *testing.T) {
 				Role:           authdomain.RolePlayer,
 			},
 			verify: func(t *testing.T, p *Permissions) {
-				expectedSub := fmt.Sprintf("round.*.%s", clubUUID)
+				// Subscribe patterns now use versioned format: round.*.v1.{id}
+				expectedSub := fmt.Sprintf("round.*.v1.%s", clubUUID)
 				if !contains(p.Subscribe.Allow, expectedSub) {
-					t.Errorf("expected subscription allow for %s", expectedSub)
+					t.Errorf("expected subscription allow for %s, got %v", expectedSub, p.Subscribe.Allow)
 				}
-				expectedPub := fmt.Sprintf("round.participant.join.%s", clubUUID)
+				// Publish patterns use versioned format: round.participant.join.v1.{id}
+				expectedPub := fmt.Sprintf("round.participant.join.v1.%s", clubUUID)
 				if !contains(p.Publish.Allow, expectedPub) {
-					t.Errorf("expected publish allow for %s", expectedPub)
+					t.Errorf("expected publish allow for %s, got %v", expectedPub, p.Publish.Allow)
 				}
 			},
 		},
@@ -44,9 +46,10 @@ func TestBuilder_ForRole(t *testing.T) {
 				Role:           authdomain.RoleEditor,
 			},
 			verify: func(t *testing.T, p *Permissions) {
-				expectedPub := fmt.Sprintf("round.create.%s", clubUUID)
+				// Editor publish pattern: round.create.v1.{id}
+				expectedPub := fmt.Sprintf("round.create.v1.%s", clubUUID)
 				if !contains(p.Publish.Allow, expectedPub) {
-					t.Errorf("expected publish allow for %s", expectedPub)
+					t.Errorf("expected publish allow for %s, got %v", expectedPub, p.Publish.Allow)
 				}
 			},
 		},

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
@@ -54,11 +55,14 @@ func NewModule(
 	// Create NATS JWT builder if auth callout is enabled
 	var userJWTBuilder authnats.UserJWTBuilder
 	if cfg.AuthCallout.Enabled {
-		signingKey, err := nkeys.FromSeed([]byte(cfg.AuthCallout.SigningNKey))
+		// For centralized auth callout, sign with the account key directly
+		// The issuer key must match auth_callout.issuer in NATS config
+		// See: https://docs.nats.io/running-a-nats-service/configuration/securing_nats/auth_callout
+		accountKey, err := nkeys.FromSeed([]byte(cfg.AuthCallout.IssuerNKey))
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse signing key: %w", err)
+			return nil, fmt.Errorf("failed to parse account key: %w", err)
 		}
-		userJWTBuilder = authnats.NewUserJWTBuilder(signingKey, cfg.AuthCallout.IssuerNKey)
+		userJWTBuilder = authnats.NewUserJWTBuilder(accountKey, cfg.AuthCallout.IssuerNKey)
 	}
 
 	// Create service config
@@ -72,13 +76,20 @@ func NewModule(
 		jwtProvider,
 		userJWTBuilder,
 		userRepo,
+		eventBus,
 		serviceConfig,
 		logger,
 		tracer,
 	)
 
+	// Use secure cookies unless in development or using localhost
+	secureCookies := cfg.Observability.Environment != "development"
+	if strings.Contains(cfg.PWA.BaseURL, "localhost") || strings.HasPrefix(cfg.PWA.BaseURL, "http://") {
+		secureCookies = false
+	}
+
 	// Create handlers
-	handlers := authhandlers.NewAuthHandlers(service, eventBus, helper, logger, tracer)
+	handlers := authhandlers.NewAuthHandlers(service, eventBus, helper, logger, tracer, secureCookies)
 
 	// Create router
 	router := authrouter.NewRouter(handlers, nc)
@@ -89,7 +100,7 @@ func NewModule(
 		httpRouter.Route("/api/auth", func(r chi.Router) {
 			r.Use(authhandlers.CORSMiddleware(cfg.HTTP.AllowedOrigins))
 			r.Use(authhandlers.RateLimitMiddleware(limiter))
-			
+
 			// Public routes
 			r.Get("/callback", handlers.HandleHTTPLogin)
 

@@ -12,6 +12,7 @@ import (
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/migrate"
 
+	clubmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/club/infrastructure/repositories/migrations"
 	guildmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories/migrations"
 	leaderboardmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories/migrations"
 	roundmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/migrations"
@@ -42,6 +43,7 @@ func runMigrationsWithConnStr(db *bun.DB, pgConnStr string) error {
 	}{
 		{"guild", guildmigrations.Migrations},
 		{"user", usermigrations.Migrations},
+		{"club", clubmigrations.Migrations},
 		{"round", roundmigrations.Migrations},
 		{"leaderboard", leaderboardmigrations.Migrations},
 		{"score", scoremigrations.Migrations},

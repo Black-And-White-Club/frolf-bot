@@ -129,7 +129,7 @@ func TestService_GenerateMagicLink(t *testing.T) {
 				tt.setupMock(jwtProvider, natsBuilder, repo)
 			}
 
-			s := NewService(jwtProvider, natsBuilder, repo, config, logger, tracer)
+			s := NewService(jwtProvider, natsBuilder, repo, nil, config, logger, tracer)
 			resp, err := s.GenerateMagicLink(ctx, tt.userID, tt.guildID, tt.role)
 			tt.verify(t, resp, err)
 		})
@@ -197,7 +197,7 @@ func TestService_ValidateToken(t *testing.T) {
 				tt.setupMock(jwtProvider)
 			}
 
-			s := NewService(jwtProvider, &FakeUserJWTBuilder{}, &userdb.FakeRepository{}, config, logger, tracer)
+			s := NewService(jwtProvider, &FakeUserJWTBuilder{}, &userdb.FakeRepository{}, nil, config, logger, tracer)
 			claims, err := s.ValidateToken(ctx, tt.tokenString)
 			tt.verify(t, claims, err)
 		})
@@ -218,12 +218,15 @@ func TestService_HandleNATSAuthRequest(t *testing.T) {
 	}{
 		{
 			name: "success",
-			req:  &NATSAuthRequest{ConnectOpts: ConnectOptions{Password: "valid-token"}},
+			req:  &NATSAuthRequest{UserNkey: "test-nkey", ConnectOpts: ConnectOptions{Password: "valid-token"}},
 			setupMock: func(j *FakeJWTProvider, n *FakeUserJWTBuilder) {
 				j.ValidateTokenFunc = func(tokenString string) (*authdomain.Claims, error) {
-					return &authdomain.Claims{UserID: "u1", GuildID: "g1", Role: authdomain.RolePlayer}, nil
+					return &authdomain.Claims{UserID: "u1", GuildID: "g1", Role: authdomain.RolePlayer, UserUUID: uuid.New(), ActiveClubUUID: uuid.New()}, nil
 				}
-				n.BuildUserJWTFunc = func(claims *authdomain.Claims, perms *permissions.Permissions) (string, error) {
+				n.BuildUserJWTFunc = func(userNkey string, claims *authdomain.Claims, perms *permissions.Permissions) (string, error) {
+					if userNkey != "test-nkey" {
+						return "", errors.New("wrong nkey")
+					}
 					return "nats-jwt", nil
 				}
 			},
@@ -270,12 +273,12 @@ func TestService_HandleNATSAuthRequest(t *testing.T) {
 		},
 		{
 			name: "nats builder error",
-			req:  &NATSAuthRequest{ConnectOpts: ConnectOptions{Password: "valid-token"}},
+			req:  &NATSAuthRequest{UserNkey: "test-nkey", ConnectOpts: ConnectOptions{Password: "valid-token"}},
 			setupMock: func(j *FakeJWTProvider, n *FakeUserJWTBuilder) {
 				j.ValidateTokenFunc = func(tokenString string) (*authdomain.Claims, error) {
-					return &authdomain.Claims{UserID: "u1", GuildID: "g1", Role: authdomain.RolePlayer}, nil
+					return &authdomain.Claims{UserID: "u1", GuildID: "g1", Role: authdomain.RolePlayer, UserUUID: uuid.New(), ActiveClubUUID: uuid.New()}, nil
 				}
-				n.BuildUserJWTFunc = func(claims *authdomain.Claims, perms *permissions.Permissions) (string, error) {
+				n.BuildUserJWTFunc = func(userNkey string, claims *authdomain.Claims, perms *permissions.Permissions) (string, error) {
 					return "", errors.New("nats error")
 				}
 			},
@@ -298,7 +301,7 @@ func TestService_HandleNATSAuthRequest(t *testing.T) {
 				tt.setupMock(jwtProvider, natsBuilder)
 			}
 
-			s := NewService(jwtProvider, natsBuilder, &userdb.FakeRepository{}, config, logger, tracer)
+			s := NewService(jwtProvider, natsBuilder, &userdb.FakeRepository{}, nil, config, logger, tracer)
 			resp, err := s.HandleNATSAuthRequest(ctx, tt.req)
 			tt.verify(t, resp, err)
 		})
@@ -376,7 +379,7 @@ func TestService_LoginUser(t *testing.T) {
 				tt.setupMock(jwtProvider, repo)
 			}
 
-			s := NewService(jwtProvider, &FakeUserJWTBuilder{}, repo, config, logger, tracer)
+			s := NewService(jwtProvider, &FakeUserJWTBuilder{}, repo, nil, config, logger, tracer)
 			resp, err := s.LoginUser(ctx, tt.oneTimeToken)
 			tt.verify(t, resp, err)
 		})
@@ -412,16 +415,19 @@ func TestService_GetTicket(t *testing.T) {
 				r.GetClubMembershipsByUserUUIDFn = func(ctx context.Context, db bun.IDB, u uuid.UUID) ([]*userdb.ClubMembership, error) {
 					return []*userdb.ClubMembership{{ClubUUID: clubUUID, Role: "admin"}}, nil
 				}
-				n.BuildUserJWTFunc = func(claims *authdomain.Claims, perms *permissions.Permissions) (string, error) {
-					return "nats-ticket", nil
+				r.SaveRefreshTokenFn = func(ctx context.Context, db bun.IDB, token *userdb.RefreshToken) error {
+					return nil
+				}
+				r.RevokeRefreshTokenFn = func(ctx context.Context, db bun.IDB, hash string) error {
+					return nil
 				}
 			},
 			verify: func(t *testing.T, resp *TicketResponse, err error) {
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
-				if resp.NATSToken != "nats-ticket" {
-					t.Errorf("expected nats-ticket, got %s", resp.NATSToken)
+				if resp.NATSToken != "fake-token" { // Default from FakeJWTProvider.GenerateToken
+					t.Errorf("expected fake-token, got %s", resp.NATSToken)
 				}
 			},
 		},
@@ -449,7 +455,7 @@ func TestService_GetTicket(t *testing.T) {
 				tt.setupMock(repo, natsBuilder)
 			}
 
-			s := NewService(&FakeJWTProvider{}, natsBuilder, repo, config, logger, tracer)
+			s := NewService(&FakeJWTProvider{}, natsBuilder, repo, nil, config, logger, tracer)
 			resp, err := s.GetTicket(ctx, tt.refreshToken)
 			tt.verify(t, resp, err)
 		})
@@ -488,7 +494,7 @@ func TestService_LogoutUser(t *testing.T) {
 				tt.setupMock(repo)
 			}
 
-			s := NewService(&FakeJWTProvider{}, &FakeUserJWTBuilder{}, repo, Config{}, logger, tracer)
+			s := NewService(&FakeJWTProvider{}, &FakeUserJWTBuilder{}, repo, nil, Config{}, logger, tracer)
 			err := s.LogoutUser(ctx, tt.refreshToken)
 			tt.verify(t, err)
 		})

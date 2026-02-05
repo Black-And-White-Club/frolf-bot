@@ -78,7 +78,7 @@ func TestAuthHandlers_HandleMagicLinkRequest(t *testing.T) {
 				return nil
 			}
 
-			h := NewAuthHandlers(fakeService, fakeEventBus, fakeHelpers, logger, tracer)
+			h := NewAuthHandlers(fakeService, fakeEventBus, fakeHelpers, logger, tracer, false)
 
 			data, _ := json.Marshal(tt.reqPayload)
 			msg := &nats.Msg{Data: data}
@@ -104,7 +104,7 @@ func TestAuthHandlers_HandleNATSAuthCallout(t *testing.T) {
 	}{
 		{
 			name:    "success",
-			reqData: []byte(`{"connect_opts":{"pass":"token"}}`),
+			reqData: []byte(`{"nats":{"connect_opts":{"pass":"token"}}}`),
 			setupService: func(s *FakeService) {
 				s.HandleNATSAuthRequestFunc = func(ctx context.Context, req *authservice.NATSAuthRequest) (*authservice.NATSAuthResponse, error) {
 					return &authservice.NATSAuthResponse{Jwt: "jwt"}, nil
@@ -130,7 +130,7 @@ func TestAuthHandlers_HandleNATSAuthCallout(t *testing.T) {
 				tt.setupService(fakeService)
 			}
 
-			h := NewAuthHandlers(fakeService, &FakeEventBus{}, &FakeHelpers{}, logger, tracer)
+			h := NewAuthHandlers(fakeService, &FakeEventBus{}, &FakeHelpers{}, logger, tracer, false)
 			msg := &nats.Msg{Data: tt.reqData}
 			h.HandleNATSAuthCallout(msg)
 

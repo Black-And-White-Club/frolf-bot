@@ -429,6 +429,12 @@ func TestRoundHandlers_HandleRoundFinalized(t *testing.T) {
 			if tt.wantResultLen > 0 && results[0].Topic != tt.wantResultTopic {
 				t.Errorf("HandleRoundFinalized() result topic = %v, want %v", results[0].Topic, tt.wantResultTopic)
 			}
+			if tt.wantResultLen > 0 && results[0].Topic == sharedevents.ProcessRoundScoresRequestedV1 {
+				_, ok := results[0].Payload.(*sharedevents.ProcessRoundScoresRequestedPayloadV1)
+				if !ok {
+					t.Errorf("HandleRoundFinalized() payload type mismatch, got %T, want *sharedevents.ProcessRoundScoresRequestedPayloadV1", results[0].Payload)
+				}
+			}
 		})
 	}
 }

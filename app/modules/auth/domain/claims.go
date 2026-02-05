@@ -8,8 +8,9 @@ import (
 
 // ClubRole represents a user's role within a specific club.
 type ClubRole struct {
-	ClubUUID uuid.UUID
-	Role     Role
+	ClubUUID    uuid.UUID `json:"club_uuid"`
+	Role        Role      `json:"role"`
+	DisplayName string    `json:"display_name,omitempty"` // Resolved display name (club nickname or fallback)
 }
 
 // Claims represents the domain model for authentication claims.

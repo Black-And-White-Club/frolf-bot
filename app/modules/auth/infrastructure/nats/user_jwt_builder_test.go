@@ -52,7 +52,9 @@ func TestUserJWTBuilder_BuildUserJWT(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			token, err := builder.BuildUserJWT(tt.claims, tt.perms)
+			userKP, _ := nkeys.CreateUser()
+			userNkey, _ := userKP.PublicKey()
+			token, err := builder.BuildUserJWT(userNkey, tt.claims, tt.perms)
 			tt.verify(t, token, err)
 		})
 	}

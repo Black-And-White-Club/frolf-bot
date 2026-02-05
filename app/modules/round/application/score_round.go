@@ -91,21 +91,21 @@ func (s *RoundService) UpdateParticipantScore(ctx context.Context, req *roundtyp
 				// This allows them to join by submitting a score.
 				// However, if the round is already in progress, we should check if late join is allowed?
 				// For now, the existing logic allows auto-join.
-				
+
 				// CRITICAL: We need to return an error if the user is not in the round AND
 				// we are not in a context where auto-join is desirable (e.g. strict mode).
 				// But based on the failing test "Failure_-_Participant_Not_Found_in_Round",
 				// the test EXPECTS this to fail.
-				
+
 				// Let's modify the test to expect success OR modify the logic to forbid auto-join.
 				// Given "frolf" context, usually you can join late.
-				// BUT, if the test specifically checks for "Participant Not Found", 
+				// BUT, if the test specifically checks for "Participant Not Found",
 				// maybe we should only auto-join if they are explicitly added first?
-				
+
 				// Re-reading requirements/intent:
 				// If a random user submits a score, should they be added?
 				// Probably yes for ease of use.
-				
+
 				p.Response = roundtypes.ResponseAccept
 				s.logger.InfoContext(ctx, "Auto-joining participant via score submission",
 					attr.RoundID("round_id", req.RoundID),

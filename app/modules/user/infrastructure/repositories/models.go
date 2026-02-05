@@ -57,6 +57,7 @@ type ClubMembership struct {
 	ExternalID    *string                  `bun:"external_id" json:"external_id"`
 	JoinedAt      time.Time                `bun:"joined_at,notnull,default:current_timestamp" json:"joined_at"`
 	UpdatedAt     time.Time                `bun:"updated_at,notnull,default:current_timestamp" json:"updated_at"`
+	SyncedAt      *time.Time               `bun:"synced_at" json:"synced_at"` // When display_name was last synced from Discord
 
 	// ORM relationships
 	User *User `bun:"rel:belongs-to,join:user_uuid=uuid" json:"-"`
@@ -75,8 +76,8 @@ type RefreshToken struct {
 	Revoked     bool       `bun:"revoked,notnull,default:false"`
 	RevokedAt   *time.Time `bun:"revoked_at"`
 	RevokedBy   *string    `bun:"revoked_by"` // 'user' | 'admin' | 'security'
-	IPAddress   string     `bun:"ip_address"`
-	UserAgent   string     `bun:"user_agent"`
+	IPAddress   *string    `bun:"ip_address,nullzero"`
+	UserAgent   *string    `bun:"user_agent,nullzero"`
 }
 
 // MagicLink represents a one-time login token.

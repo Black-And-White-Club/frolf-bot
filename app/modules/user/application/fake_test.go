@@ -34,9 +34,11 @@ type FakeUserRepository struct {
 	// Identity resolution
 	GetUUIDByDiscordIDFn          func(ctx context.Context, db bun.IDB, discordID sharedtypes.DiscordID) (uuid.UUID, error)
 	GetClubUUIDByDiscordGuildIDFn func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (uuid.UUID, error)
+	GetDiscordGuildIDByClubUUIDFn func(ctx context.Context, db bun.IDB, clubUUID uuid.UUID) (sharedtypes.GuildID, error)
 
 	// Global user operations
 	GetUserGlobalFunc    func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID) (*userdb.User, error)
+	GetUserByUUIDFunc    func(ctx context.Context, db bun.IDB, userUUID uuid.UUID) (*userdb.User, error)
 	SaveGlobalUserFunc   func(ctx context.Context, db bun.IDB, user *userdb.User) error
 	UpdateGlobalUserFunc func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, updates *userdb.UserUpdateFields) error
 	GetByUserIDsFunc     func(ctx context.Context, db bun.IDB, userIDs []sharedtypes.DiscordID) ([]*userdb.User, error)
@@ -115,10 +117,26 @@ func (f *FakeUserRepository) GetClubUUIDByDiscordGuildID(ctx context.Context, db
 	return uuid.Nil, nil
 }
 
+func (f *FakeUserRepository) GetDiscordGuildIDByClubUUID(ctx context.Context, db bun.IDB, clubUUID uuid.UUID) (sharedtypes.GuildID, error) {
+	f.record("GetDiscordGuildIDByClubUUID")
+	if f.GetDiscordGuildIDByClubUUIDFn != nil {
+		return f.GetDiscordGuildIDByClubUUIDFn(ctx, db, clubUUID)
+	}
+	return "", nil
+}
+
 func (f *FakeUserRepository) GetUserGlobal(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID) (*userdb.User, error) {
 	f.record("GetUserGlobal")
 	if f.GetUserGlobalFunc != nil {
 		return f.GetUserGlobalFunc(ctx, db, userID)
+	}
+	return nil, userdb.ErrNotFound
+}
+
+func (f *FakeUserRepository) GetUserByUUID(ctx context.Context, db bun.IDB, userUUID uuid.UUID) (*userdb.User, error) {
+	f.record("GetUserByUUID")
+	if f.GetUserByUUIDFunc != nil {
+		return f.GetUserByUUIDFunc(ctx, db, userUUID)
 	}
 	return nil, userdb.ErrNotFound
 }

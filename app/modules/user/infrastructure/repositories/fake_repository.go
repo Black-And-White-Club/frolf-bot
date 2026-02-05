@@ -12,8 +12,10 @@ import (
 type FakeRepository struct {
 	GetUUIDByDiscordIDFn          func(ctx context.Context, db bun.IDB, discordID sharedtypes.DiscordID) (uuid.UUID, error)
 	GetClubUUIDByDiscordGuildIDFn func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (uuid.UUID, error)
+	GetDiscordGuildIDByClubUUIDFn func(ctx context.Context, db bun.IDB, clubUUID uuid.UUID) (sharedtypes.GuildID, error)
 
 	GetUserGlobalFn         func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID) (*User, error)
+	GetUserByUUIDFn         func(ctx context.Context, db bun.IDB, userUUID uuid.UUID) (*User, error)
 	GetByUserIDsFn          func(ctx context.Context, db bun.IDB, userIDs []sharedtypes.DiscordID) ([]*User, error)
 	SaveGlobalUserFn        func(ctx context.Context, db bun.IDB, user *User) error
 	UpdateGlobalUserFn      func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, updates *UserUpdateFields) error
@@ -63,6 +65,13 @@ func (f *FakeRepository) GetClubUUIDByDiscordGuildID(ctx context.Context, db bun
 		return f.GetClubUUIDByDiscordGuildIDFn(ctx, db, guildID)
 	}
 	return uuid.Nil, nil
+}
+
+func (f *FakeRepository) GetDiscordGuildIDByClubUUID(ctx context.Context, db bun.IDB, clubUUID uuid.UUID) (sharedtypes.GuildID, error) {
+	if f.GetDiscordGuildIDByClubUUIDFn != nil {
+		return f.GetDiscordGuildIDByClubUUIDFn(ctx, db, clubUUID)
+	}
+	return "", nil
 }
 
 func (f *FakeRepository) GetClubMembership(ctx context.Context, db bun.IDB, userUUID, clubUUID uuid.UUID) (*ClubMembership, error) {

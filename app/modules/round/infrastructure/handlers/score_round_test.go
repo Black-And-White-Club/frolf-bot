@@ -373,3 +373,85 @@ func TestRoundHandlers_HandleParticipantScoreUpdated(t *testing.T) {
 		})
 	}
 }
+
+func TestRoundHandlers_HandleScoreBulkUpdateRequest(t *testing.T) {
+	testRoundID := sharedtypes.RoundID(uuid.New())
+	testGuildID := sharedtypes.GuildID("test-guild")
+	testUserID1 := sharedtypes.DiscordID("user-1")
+	testUserID2 := sharedtypes.DiscordID("user-2")
+	testScore := sharedtypes.Score(60)
+
+	testPayload := &roundevents.ScoreBulkUpdateRequestPayloadV1{
+		GuildID: testGuildID,
+		RoundID: testRoundID,
+		Updates: []roundevents.ScoreUpdateRequestPayloadV1{
+			{UserID: testUserID1, Score: &testScore},
+			{UserID: testUserID2, Score: &testScore},
+		},
+	}
+
+	logger := loggerfrolfbot.NoOpLogger
+
+	tests := []struct {
+		name            string
+		fakeSetup       func(*FakeService)
+		payload         *roundevents.ScoreBulkUpdateRequestPayloadV1
+		wantErr         bool
+		wantResultLen   int
+		wantResultTopic string
+	}{
+		{
+			name: "Successfully handle ScoreBulkUpdateRequest",
+			fakeSetup: func(fake *FakeService) {
+				fake.UpdateParticipantScoresBulkFunc = func(ctx context.Context, req *roundtypes.BulkScoreUpdateRequest) (roundservice.BulkScoreUpdateResult, error) {
+					return results.SuccessResult[*roundtypes.BulkScoreUpdateResult, error](&roundtypes.BulkScoreUpdateResult{
+						GuildID: testGuildID,
+						RoundID: testRoundID,
+						Updates: []roundtypes.ScoreUpdateRequest{
+							{UserID: testUserID1, Score: &testScore},
+							{UserID: testUserID2, Score: &testScore},
+						},
+					}), nil
+				}
+			},
+			payload:         testPayload,
+			wantErr:         false,
+			wantResultLen:   2, // RoundScoresBulkUpdatedV1 + ScoreBulkUpdatedV1
+			wantResultTopic: roundevents.RoundScoresBulkUpdatedV1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fakeService := NewFakeService()
+			if tt.fakeSetup != nil {
+				tt.fakeSetup(fakeService)
+			}
+
+			h := &RoundHandlers{
+				service:     fakeService,
+				userService: NewFakeUserService(),
+				logger:      logger,
+			}
+
+			ctx := context.Background()
+			results, err := h.HandleScoreBulkUpdateRequest(ctx, tt.payload)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("HandleScoreBulkUpdateRequest() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if len(results) != tt.wantResultLen {
+				t.Errorf("HandleScoreBulkUpdateRequest() result length = %d, want %d", len(results), tt.wantResultLen)
+			}
+			if tt.wantResultLen > 0 && results[0].Topic != tt.wantResultTopic {
+				t.Errorf("HandleScoreBulkUpdateRequest() result topic = %v, want %v", results[0].Topic, tt.wantResultTopic)
+			}
+			if tt.wantResultLen > 0 {
+				_, ok := results[0].Payload.(*roundevents.RoundScoresBulkUpdatedPayloadV1)
+				if !ok {
+					t.Errorf("HandleScoreBulkUpdateRequest() payload type mismatch, got %T, want *roundevents.RoundScoresBulkUpdatedPayloadV1", results[0].Payload)
+				}
+			}
+		})
+	}
+}

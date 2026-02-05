@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	RefreshTokenCookie  = "refresh_token"
-	RefreshTokenExpiry  = 30 * 24 * time.Hour
+	RefreshTokenCookie = "refresh_token"
+	RefreshTokenExpiry = 30 * 24 * time.Hour
 )
 
 func (h *AuthHandlers) httpError(w http.ResponseWriter, r *http.Request, message string, code int, err error) {
@@ -38,7 +38,7 @@ func (h *AuthHandlers) HandleHTTPLogin(w http.ResponseWriter, r *http.Request) {
 		Value:    resp.RefreshToken,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   h.secureCookies,
 		SameSite: http.SameSiteStrictMode,
 		Expires:  time.Now().Add(RefreshTokenExpiry),
 	})
@@ -92,7 +92,7 @@ func (h *AuthHandlers) HandleHTTPLogout(w http.ResponseWriter, r *http.Request) 
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   h.secureCookies,
 		SameSite: http.SameSiteStrictMode,
 		MaxAge:   -1,
 	})
