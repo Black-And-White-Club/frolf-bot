@@ -3,6 +3,8 @@ package leaderboardhandlers
 import (
 	"context"
 	"fmt"
+	"io"
+	"log/slog"
 	"testing"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
@@ -129,6 +131,7 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 				service:         fakeSvc,
 				userService:     fakeUserService,
 				sagaCoordinator: fakeSaga,
+				logger:          slog.New(slog.NewTextHandler(io.Discard, nil)),
 			}
 
 			res, err := h.HandleLeaderboardUpdateRequested(context.Background(), tt.payload)

@@ -3,6 +3,8 @@ package leaderboardhandlers
 import (
 	"context"
 	"fmt"
+	"io"
+	"log/slog"
 	"testing"
 
 	guildevents "github.com/Black-And-White-Club/frolf-bot-shared/events/guild"
@@ -28,7 +30,7 @@ func TestNewLeaderboardHandlers(t *testing.T) {
 				noOpMetrics := &leaderboardmetrics.NoOpMetrics{}
 
 				// Call the constructor
-				handlers := NewLeaderboardHandlers(fakeService, fakeUserService, fakeSaga, nil, tracer, fakeHelpers, noOpMetrics)
+				handlers := NewLeaderboardHandlers(fakeService, fakeUserService, fakeSaga, slog.New(slog.NewTextHandler(io.Discard, nil)), tracer, fakeHelpers, noOpMetrics)
 
 				if handlers == nil {
 					t.Fatalf("NewLeaderboardHandlers returned nil")
@@ -117,6 +119,7 @@ func TestLeaderboardHandlers_HandleGuildConfigCreated(t *testing.T) {
 
 			h := &LeaderboardHandlers{
 				service: fakeSvc,
+				logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
 			}
 
 			res, err := h.HandleGuildConfigCreated(context.Background(), testPayload)

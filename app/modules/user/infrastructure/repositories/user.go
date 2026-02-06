@@ -618,7 +618,6 @@ func (r *Impl) RevokeRefreshToken(ctx context.Context, db bun.IDB, hash string) 
 	}
 	_, err := db.NewUpdate().
 		Model((*RefreshToken)(nil)).
-		TableExpr("refresh_tokens").
 		Set("revoked = ?", true).
 		Set("revoked_at = ?", time.Now()).
 		Where("hash = ?", hash).
@@ -635,7 +634,6 @@ func (r *Impl) RevokeAllUserTokens(ctx context.Context, db bun.IDB, userUUID uui
 	}
 	_, err := db.NewUpdate().
 		Model((*RefreshToken)(nil)).
-		TableExpr("refresh_tokens").
 		Set("revoked = ?", true).
 		Set("revoked_at = ?", time.Now()).
 		Where("user_uuid = ?", userUUID).

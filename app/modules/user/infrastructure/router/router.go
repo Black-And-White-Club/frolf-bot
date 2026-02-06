@@ -139,6 +139,8 @@ func registerHandler[T any](
 ) {
 	handlerName := "user." + topic
 
+	deps.logger.Info("Registering user handler", "topic", topic, "handler_name", handlerName)
+
 	deps.router.AddHandler(
 		handlerName,
 		topic,

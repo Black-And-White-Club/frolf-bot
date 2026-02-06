@@ -61,6 +61,26 @@ func TestAuthHandlers_HandleMagicLinkRequest(t *testing.T) {
 				// Currently, the fake has called = true if Publish is called.
 			},
 		},
+		{
+			name: "business logic error - soft error with nil error",
+			reqPayload: MagicLinkRequest{
+				UserID:        "u1",
+				GuildID:       "g1",
+				Role:          "invalid-role",
+				CorrelationID: "corr2",
+			},
+			setupService: func(s *FakeService) {
+				s.GenerateMagicLinkFunc = func(ctx context.Context, userID, guildID string, role authdomain.Role) (*authservice.MagicLinkResponse, error) {
+					// Service returns soft error with nil error (business logic failure)
+					return &authservice.MagicLinkResponse{Success: false, Error: "invalid role"}, nil
+				}
+			},
+			verify: func(t *testing.T, called bool) {
+				if !called {
+					t.Error("expected EventBus.Publish to be called with error payload")
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {

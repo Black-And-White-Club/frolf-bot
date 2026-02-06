@@ -35,27 +35,6 @@ import (
 	usermigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories/migrations"
 )
 
-// --- Minimal health server for Kubernetes probes ---
-func startHealthServer() {
-	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
-	})
-	go func() {
-		port := os.Getenv("HEALTH_PORT")
-		if port == "" {
-			port = ":8080"
-		}
-		if !strings.HasPrefix(port, ":") {
-			port = ":" + port
-		}
-		log.Printf("Starting health server on %s", port)
-		if err := http.ListenAndServe(port, nil); err != nil {
-			log.Fatalf("Health server failed: %v", err)
-		}
-	}()
-}
-
 // --- Optional pprof server for on-demand profiling ---
 func startPprofIfEnabled() {
 	if os.Getenv("PPROF_ENABLED") != "true" {
@@ -80,8 +59,6 @@ func startPprofIfEnabled() {
 }
 
 func main() {
-	// Start health server for Kubernetes probes
-	startHealthServer()
 	// Optionally start pprof for profiling
 	startPprofIfEnabled()
 

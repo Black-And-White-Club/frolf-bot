@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"io"
+	"log/slog"
 	"testing"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
@@ -57,7 +59,7 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fakeSvc := NewFakeService()
 			tt.setupFake(fakeSvc)
-			h := &LeaderboardHandlers{service: fakeSvc, userService: NewFakeUserService()}
+			h := &LeaderboardHandlers{service: fakeSvc, userService: NewFakeUserService(), logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
 
 			res, err := h.HandleGetLeaderboardRequest(context.Background(), testPayload)
 
@@ -114,7 +116,7 @@ func TestLeaderboardHandlers_HandleGetTagByUserIDRequest(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fakeSvc := NewFakeService()
 			tt.setupFake(fakeSvc)
-			h := &LeaderboardHandlers{service: fakeSvc, userService: NewFakeUserService()}
+			h := &LeaderboardHandlers{service: fakeSvc, userService: NewFakeUserService(), logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
 
 			res, _ := h.HandleGetTagByUserIDRequest(context.Background(), testPayload)
 
@@ -180,7 +182,7 @@ func TestLeaderboardHandlers_HandleRoundGetTagRequest(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fakeSvc := NewFakeService()
 			tt.setupFake(fakeSvc)
-			h := &LeaderboardHandlers{service: fakeSvc, userService: NewFakeUserService()}
+			h := &LeaderboardHandlers{service: fakeSvc, userService: NewFakeUserService(), logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
 
 			res, err := h.HandleRoundGetTagRequest(context.Background(), testPayload)
 

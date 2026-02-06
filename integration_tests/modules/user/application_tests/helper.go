@@ -18,7 +18,7 @@ import (
 	"go.opentelemetry.io/otel/trace/noop"
 )
 
-var standardStreamNames = []string{"user", "discord", "leaderboard", "round", "score"}
+var standardStreamNames = []string{"user", "discord", "leaderboard", "round", "score", "guild", "club"}
 
 // Global variables for the test environment, initialized once.
 var (
