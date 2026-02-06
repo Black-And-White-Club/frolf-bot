@@ -66,7 +66,6 @@ func (h *AuthHandlers) HandleMagicLinkRequest(msg *nats.Msg) {
 		UserID:        req.UserID,
 		GuildID:       req.GuildID,
 		CorrelationID: req.CorrelationID,
-		Success:       err == nil,
 	}
 
 	if err != nil {
@@ -74,8 +73,17 @@ func (h *AuthHandlers) HandleMagicLinkRequest(msg *nats.Msg) {
 			attr.Error(err),
 			attr.String("user_id", req.UserID),
 		)
+		respPayload.Success = false
 		respPayload.Error = err.Error()
+	} else if !response.Success {
+		h.logger.WarnContext(ctx, "Magic link generation returned business error",
+			attr.String("error", response.Error),
+			attr.String("user_id", req.UserID),
+		)
+		respPayload.Success = false
+		respPayload.Error = response.Error
 	} else {
+		respPayload.Success = true
 		respPayload.URL = response.URL
 		h.logger.InfoContext(ctx, "Magic link generated successfully",
 			attr.String("user_id", req.UserID),
