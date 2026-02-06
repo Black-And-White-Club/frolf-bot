@@ -14,16 +14,28 @@ import (
 // ErrNotFound is returned when a club is not found.
 var ErrNotFound = errors.New("club not found")
 
-// ClubRepository implements Repository.
-type ClubRepository struct{}
+// Impl implements the Repository interface using Bun ORM.
+type Impl struct {
+	db bun.IDB
+}
 
-// NewClubRepository creates a new ClubRepository.
-func NewClubRepository() *ClubRepository {
-	return &ClubRepository{}
+// NewRepository creates a new club repository.
+func NewRepository(db bun.IDB) Repository {
+	return &Impl{db: db}
+}
+
+// resolveDB returns the provided db handle, falling back to the repository's
+// default connection if db is nil.
+func (r *Impl) resolveDB(db bun.IDB) bun.IDB {
+	if db == nil {
+		return r.db
+	}
+	return db
 }
 
 // GetByUUID retrieves a club by its UUID.
-func (r *ClubRepository) GetByUUID(ctx context.Context, db bun.IDB, clubUUID uuid.UUID) (*Club, error) {
+func (r *Impl) GetByUUID(ctx context.Context, db bun.IDB, clubUUID uuid.UUID) (*Club, error) {
+	db = r.resolveDB(db)
 	club := new(Club)
 	err := db.NewSelect().
 		Model(club).
@@ -39,7 +51,8 @@ func (r *ClubRepository) GetByUUID(ctx context.Context, db bun.IDB, clubUUID uui
 }
 
 // GetByDiscordGuildID retrieves a club by its Discord guild ID.
-func (r *ClubRepository) GetByDiscordGuildID(ctx context.Context, db bun.IDB, guildID string) (*Club, error) {
+func (r *Impl) GetByDiscordGuildID(ctx context.Context, db bun.IDB, guildID string) (*Club, error) {
+	db = r.resolveDB(db)
 	club := new(Club)
 	err := db.NewSelect().
 		Model(club).
@@ -55,7 +68,8 @@ func (r *ClubRepository) GetByDiscordGuildID(ctx context.Context, db bun.IDB, gu
 }
 
 // Upsert creates or updates a club.
-func (r *ClubRepository) Upsert(ctx context.Context, db bun.IDB, club *Club) error {
+func (r *Impl) Upsert(ctx context.Context, db bun.IDB, club *Club) error {
+	db = r.resolveDB(db)
 	club.UpdatedAt = time.Now()
 	_, err := db.NewInsert().
 		Model(club).
@@ -72,7 +86,8 @@ func (r *ClubRepository) Upsert(ctx context.Context, db bun.IDB, club *Club) err
 }
 
 // UpdateName updates a club's name.
-func (r *ClubRepository) UpdateName(ctx context.Context, db bun.IDB, clubUUID uuid.UUID, name string) error {
+func (r *Impl) UpdateName(ctx context.Context, db bun.IDB, clubUUID uuid.UUID, name string) error {
+	db = r.resolveDB(db)
 	result, err := db.NewUpdate().
 		Model((*Club)(nil)).
 		Set("name = ?", name).

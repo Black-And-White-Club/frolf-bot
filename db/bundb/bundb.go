@@ -69,6 +69,7 @@ func newDBServiceWithDB(db *bun.DB) (*DBService, error) {
 	db.RegisterModel(&scoredb.Score{})
 	db.RegisterModel(&leaderboarddb.Leaderboard{})
 	db.RegisterModel(&guilddb.GuildConfig{})
+	db.RegisterModel(&clubdb.Club{})
 	log.Println("newDBServiceWithDB - Models registered successfully")
 
 	dbService := &DBService{
@@ -77,7 +78,7 @@ func newDBServiceWithDB(db *bun.DB) (*DBService, error) {
 		ScoreDB:       scoredb.NewRepository(db),
 		LeaderboardDB: leaderboarddb.NewRepository(db),
 		GuildDB:       guilddb.NewRepository(db),
-		ClubDB:        clubdb.NewClubRepository(),
+		ClubDB:        clubdb.NewRepository(db),
 		db:            db,
 	}
 

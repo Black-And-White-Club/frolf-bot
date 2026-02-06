@@ -41,7 +41,7 @@ func NewClubModule(
 	logger.InfoContext(ctx, "club.NewClubModule initializing")
 
 	// 1. Initialize Repository
-	repo := clubdb.NewClubRepository()
+	repo := clubdb.NewRepository(db)
 
 	// 2. Initialize Metrics (noop for now, real metrics wired via observability registry)
 	metrics := clubmetrics.NewNoop()
