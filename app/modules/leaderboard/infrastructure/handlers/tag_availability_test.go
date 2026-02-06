@@ -3,6 +3,8 @@ package leaderboardhandlers
 import (
 	"context"
 	"fmt"
+	"io"
+	"log/slog"
 	"testing"
 
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
@@ -103,6 +105,7 @@ func TestLeaderboardHandlers_HandleTagAvailabilityCheckRequested(t *testing.T) {
 			h := &LeaderboardHandlers{
 				service:     fakeSvc,
 				userService: NewFakeUserService(),
+				logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),
 			}
 
 			res, err := h.HandleTagAvailabilityCheckRequested(context.Background(), tt.payload)

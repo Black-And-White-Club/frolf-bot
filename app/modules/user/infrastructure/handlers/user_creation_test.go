@@ -13,6 +13,7 @@ import (
 	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
+	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/otel/trace/noop"
 )
 
@@ -26,12 +27,13 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 	metrics := &usermetrics.NoOpMetrics{}
 
 	tests := []struct {
-		name      string
-		payload   *userevents.UserSignupRequestedPayloadV1
-		setupFake func(*FakeUserService)
-		wantLen   int
-		wantTopic string
-		wantErr   bool
+		name           string
+		payload        *userevents.UserSignupRequestedPayloadV1
+		setupFake      func(*FakeUserService)
+		wantLen        int
+		wantTopic      string
+		wantClubSync   bool
+		wantErr        bool
 	}{
 		{
 			name: "Successful signup with tag (Availability Check Flow)",
@@ -43,9 +45,24 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 			setupFake: func(f *FakeUserService) {
 				// No service call expected for this branch
 			},
-			wantLen:   1,
-			wantTopic: sharedevents.TagAvailabilityCheckRequestedV1,
-			wantErr:   false,
+			wantLen:      1,
+			wantTopic:    sharedevents.TagAvailabilityCheckRequestedV1,
+			wantClubSync: false,
+			wantErr:      false,
+		},
+		{
+			name: "Successful signup with tag and guild metadata publishes club sync",
+			payload: &userevents.UserSignupRequestedPayloadV1{
+				GuildID:   testGuildID,
+				UserID:    testUserID,
+				TagNumber: &testTagNumber,
+				GuildName: "Test Guild",
+			},
+			setupFake: func(f *FakeUserService) {},
+			wantLen:      2,
+			wantTopic:    sharedevents.TagAvailabilityCheckRequestedV1,
+			wantClubSync: true,
+			wantErr:      false,
 		},
 		{
 			name: "Successful signup without tag (Direct Creation Flow)",
@@ -63,9 +80,32 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 					}), nil
 				}
 			},
-			wantLen:   1,
-			wantTopic: userevents.UserCreatedV1,
-			wantErr:   false,
+			wantLen:      1,
+			wantTopic:    userevents.UserCreatedV1,
+			wantClubSync: false,
+			wantErr:      false,
+		},
+		{
+			name: "Successful signup without tag with guild metadata publishes club sync",
+			payload: &userevents.UserSignupRequestedPayloadV1{
+				GuildID:   testGuildID,
+				UserID:    testUserID,
+				GuildName: "Test Guild",
+			},
+			setupFake: func(f *FakeUserService) {
+				f.CreateUserFunc = func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber, udiscUsername *string, udiscName *string) (userservice.UserResult, error) {
+					return results.SuccessResult[*userservice.CreateUserResponse, error](&userservice.CreateUserResponse{
+						UserData: usertypes.UserData{
+							UserID: userID,
+						},
+						TagNumber: tag,
+					}), nil
+				}
+			},
+			wantLen:      2,
+			wantTopic:    userevents.UserCreatedV1,
+			wantClubSync: true,
+			wantErr:      false,
 		},
 		{
 			name: "Failed signup (Domain Failure)",
@@ -78,9 +118,10 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 					return results.FailureResult[*userservice.CreateUserResponse, error](errors.New("already exists")), nil
 				}
 			},
-			wantLen:   1,
-			wantTopic: userevents.UserCreationFailedV1,
-			wantErr:   false,
+			wantLen:      1,
+			wantTopic:    userevents.UserCreationFailedV1,
+			wantClubSync: false,
+			wantErr:      false,
 		},
 		{
 			name: "Error from CreateUser (Infrastructure Failure)",
@@ -113,12 +154,17 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 			}
 
 			if !tt.wantErr {
-				if len(res) != tt.wantLen {
-					t.Errorf("HandleUserSignupRequest() got %d results, want %d", len(res), tt.wantLen)
-					return
+				assert.Len(t, res, tt.wantLen)
+				if len(res) > 0 {
+					assert.Equal(t, tt.wantTopic, res[0].Topic)
 				}
-				if len(res) > 0 && res[0].Topic != tt.wantTopic {
-					t.Errorf("HandleUserSignupRequest() got topic %s, want %s", res[0].Topic, tt.wantTopic)
+				if tt.wantClubSync {
+					lastResult := res[len(res)-1]
+					assert.Equal(t, sharedevents.ClubSyncFromDiscordRequestedV1, lastResult.Topic)
+					syncPayload, ok := lastResult.Payload.(*sharedevents.ClubSyncFromDiscordRequestedPayloadV1)
+					assert.True(t, ok)
+					assert.Equal(t, tt.payload.GuildID, syncPayload.GuildID)
+					assert.Equal(t, tt.payload.GuildName, syncPayload.GuildName)
 				}
 			}
 		})

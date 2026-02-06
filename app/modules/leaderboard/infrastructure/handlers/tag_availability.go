@@ -12,6 +12,8 @@ func (h *LeaderboardHandlers) HandleTagAvailabilityCheckRequested(
 	ctx context.Context,
 	payload *sharedevents.TagAvailabilityCheckRequestedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
+	h.logger.Info("HandleTagAvailabilityCheckRequested triggered", "guild_id", payload.GuildID, "user_id", payload.UserID, "tag_number", payload.TagNumber)
+
 	result, err := h.service.CheckTagAvailability(ctx, payload.GuildID, payload.UserID, *payload.TagNumber)
 	if err != nil {
 		return nil, err
