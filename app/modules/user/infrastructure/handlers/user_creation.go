@@ -15,15 +15,34 @@ func (h *UserHandlers) HandleUserSignupRequest(
 	ctx context.Context,
 	payload *userevents.UserSignupRequestedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
+	h.logger.Info("HandleUserSignupRequest triggered", "user_id", payload.UserID, "guild_id", payload.GuildID, "tag_number", payload.TagNumber)
+
+	// Build the club sync result if guild metadata is present
+	var clubSyncResult *handlerwrapper.Result
+	if payload.GuildName != "" {
+		clubSyncResult = &handlerwrapper.Result{
+			Topic: sharedevents.ClubSyncFromDiscordRequestedV1,
+			Payload: &sharedevents.ClubSyncFromDiscordRequestedPayloadV1{
+				GuildID:   payload.GuildID,
+				GuildName: payload.GuildName,
+				IconURL:   payload.IconURL,
+			},
+		}
+	}
+
 	// Check for tag availability first - this is a special flow that doesn't go through the service
 	if payload.TagNumber != nil {
-		return []handlerwrapper.Result{
+		results := []handlerwrapper.Result{
 			{Topic: sharedevents.TagAvailabilityCheckRequestedV1, Payload: &sharedevents.TagAvailabilityCheckRequestedPayloadV1{
 				GuildID:   payload.GuildID,
 				TagNumber: payload.TagNumber,
 				UserID:    payload.UserID,
 			}},
-		}, nil
+		}
+		if clubSyncResult != nil {
+			results = append(results, *clubSyncResult)
+		}
+		return results, nil
 	}
 
 	// Create user without tag
@@ -56,5 +75,9 @@ func (h *UserHandlers) HandleUserSignupRequest(
 		},
 	)
 
-	return mapOperationResult(mappedResult, userevents.UserCreatedV1, userevents.UserCreationFailedV1), nil
+	results := mapOperationResult(mappedResult, userevents.UserCreatedV1, userevents.UserCreationFailedV1)
+	if clubSyncResult != nil {
+		results = append(results, *clubSyncResult)
+	}
+	return results, nil
 }

@@ -27,6 +27,7 @@ type LeaderboardHandlers struct {
 	userService     userservice.Service
 	sagaCoordinator saga.SagaCoordinator
 	helpers         utils.Helpers
+	logger          *slog.Logger
 }
 
 // NewLeaderboardHandlers creates a new LeaderboardHandlers instance.
@@ -44,6 +45,7 @@ func NewLeaderboardHandlers(
 		userService:     userService,
 		sagaCoordinator: sagaCoordinator,
 		helpers:         helpers,
+		logger:          logger,
 	}
 }
 

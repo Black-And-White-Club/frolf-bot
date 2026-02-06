@@ -7,7 +7,7 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	clubevents "github.com/Black-And-White-Club/frolf-bot-shared/events/club"
 	guildevents "github.com/Black-And-White-Club/frolf-bot-shared/events/guild"
-	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	clubhandlers "github.com/Black-And-White-Club/frolf-bot/app/modules/club/infrastructure/handlers"
@@ -74,12 +74,12 @@ func (r *ClubRouter) registerHandlers(handlers clubhandlers.Handlers) {
 	r.logger.Info("Registering club module handlers",
 		slog.String("club_info_request_subject", clubevents.ClubInfoRequestV1+".*"),
 		slog.String("guild_setup_subject", guildevents.GuildSetupRequestedV1),
-		slog.String("user_signup_subject", userevents.UserSignupRequestedV1),
+		slog.String("club_sync_subject", sharedevents.ClubSyncFromDiscordRequestedV1),
 	)
 
 	registerHandler(deps, clubevents.ClubInfoRequestV1+".*", handlers.HandleClubInfoRequest)
 	registerHandler(deps, guildevents.GuildSetupRequestedV1, handlers.HandleGuildSetup)
-	registerHandler(deps, userevents.UserSignupRequestedV1, handlers.HandleUserSignupRequest)
+	registerHandler(deps, sharedevents.ClubSyncFromDiscordRequestedV1, handlers.HandleClubSyncFromDiscord)
 
 	r.logger.Info("Club module handlers registered successfully")
 }

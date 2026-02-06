@@ -7,7 +7,7 @@ import (
 
 	clubevents "github.com/Black-And-White-Club/frolf-bot-shared/events/club"
 	guildevents "github.com/Black-And-White-Club/frolf-bot-shared/events/guild"
-	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	clubservice "github.com/Black-And-White-Club/frolf-bot/app/modules/club/application"
 	clubdb "github.com/Black-And-White-Club/frolf-bot/app/modules/club/infrastructure/repositories"
@@ -145,19 +145,19 @@ func (h *ClubHandlers) HandleGuildSetup(ctx context.Context, payload *guildevent
 	}}, nil
 }
 
-// HandleUserSignupRequest handles user signup requests to sync club info.
-func (h *ClubHandlers) HandleUserSignupRequest(ctx context.Context, payload *userevents.UserSignupRequestedPayloadV1) ([]handlerwrapper.Result, error) {
-	// Only process if GuildName is present
+// HandleClubSyncFromDiscord handles cross-module club sync events published
+// by the user module during signup when guild metadata is present.
+func (h *ClubHandlers) HandleClubSyncFromDiscord(ctx context.Context, payload *sharedevents.ClubSyncFromDiscordRequestedPayloadV1) ([]handlerwrapper.Result, error) {
 	if payload.GuildName == "" {
 		return nil, nil
 	}
 
-	ctx, span := h.tracer.Start(ctx, "ClubHandlers.HandleUserSignupRequest")
+	ctx, span := h.tracer.Start(ctx, "ClubHandlers.HandleClubSyncFromDiscord")
 	defer span.End()
 
 	_, err := h.service.UpsertClubFromDiscord(ctx, string(payload.GuildID), payload.GuildName, payload.IconURL)
 	if err != nil {
-		h.logger.ErrorContext(ctx, "Failed to upsert club from user signup",
+		h.logger.ErrorContext(ctx, "Failed to upsert club from discord sync",
 			slog.String("guild_id", string(payload.GuildID)),
 			slog.String("error", err.Error()),
 		)

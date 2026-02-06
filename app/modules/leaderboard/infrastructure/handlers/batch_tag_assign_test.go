@@ -3,6 +3,8 @@ package leaderboardhandlers
 import (
 	"context"
 	"fmt"
+	"io"
+	"log/slog"
 	"testing"
 
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
@@ -74,6 +76,7 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 				service:         fakeSvc,
 				userService:     NewFakeUserService(),
 				sagaCoordinator: fakeSaga,
+				logger:          slog.New(slog.NewTextHandler(io.Discard, nil)),
 			}
 
 			payload := &sharedevents.BatchTagAssignmentRequestedPayloadV1{

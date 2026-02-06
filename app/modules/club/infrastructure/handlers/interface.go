@@ -5,7 +5,7 @@ import (
 
 	clubevents "github.com/Black-And-White-Club/frolf-bot-shared/events/club"
 	guildevents "github.com/Black-And-White-Club/frolf-bot-shared/events/guild"
-	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 )
 
@@ -17,6 +17,6 @@ type Handlers interface {
 	// HandleGuildSetup handles guild setup events to sync club info.
 	HandleGuildSetup(ctx context.Context, payload *guildevents.GuildSetupPayloadV1) ([]handlerwrapper.Result, error)
 
-	// HandleUserSignupRequest handles user signup requests to sync club info.
-	HandleUserSignupRequest(ctx context.Context, payload *userevents.UserSignupRequestedPayloadV1) ([]handlerwrapper.Result, error)
+	// HandleClubSyncFromDiscord handles cross-module club sync events from user signup.
+	HandleClubSyncFromDiscord(ctx context.Context, payload *sharedevents.ClubSyncFromDiscordRequestedPayloadV1) ([]handlerwrapper.Result, error)
 }
