@@ -71,6 +71,13 @@ func (app *App) Initialize(ctx context.Context, cfg *config.Config, obs observab
 	app.HTTPRouter.Use(chi_middleware.Recoverer)
 	app.HTTPRouter.Use(chi_middleware.RealIP)
 	app.HTTPRouter.Use(SecurityHeaders)
+
+	// Health endpoint for Kubernetes probes (served by the same chi router)
+	app.HTTPRouter.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	})
+
 	// Initialize database
 	var err error
 	app.DB, err = bundb.NewBunDBService(ctx, cfg.Postgres)
@@ -197,7 +204,7 @@ func (app *App) Run(ctx context.Context) error {
 	// Start HTTP Server
 	port := app.Config.HTTP.Port
 	if port == "" {
-		port = ":3001"
+		port = ":8080"
 	}
 	if !strings.HasPrefix(port, ":") {
 		port = ":" + port
