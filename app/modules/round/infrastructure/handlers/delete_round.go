@@ -85,13 +85,16 @@ func (h *RoundHandlers) HandleRoundDeleteAuthorized(
 	// 1. Extract the Discord Message ID from context to ensure it propagates
 	discordMessageID, _ := ctx.Value("discord_message_id").(string)
 
+	// 2. Fetch DiscordEventID before deletion (best-effort, non-blocking)
+	var discordEventID string
+	roundResult, err := h.service.GetRound(ctx, payload.GuildID, payload.RoundID)
+	if err == nil && roundResult.Success != nil {
+		discordEventID = (*roundResult.Success).DiscordEventID
+	}
+
 	req := &roundtypes.DeleteRoundInput{
 		GuildID: payload.GuildID,
 		RoundID: payload.RoundID,
-		// UserID not strictly needed for deletion op (already authorized), but available if needed?
-		// AuthorizedPayload doesn't seem to have UserID.
-		// DeleteRoundRequest struct has UserID.
-		// Service.DeleteRound doesn't seem to check UserID (checked in Validate).
 	}
 
 	result, err := h.service.DeleteRound(ctx, req)
@@ -106,6 +109,7 @@ func (h *RoundHandlers) HandleRoundDeleteAuthorized(
 				GuildID:        payload.GuildID,
 				RoundID:        payload.RoundID,
 				EventMessageID: discordMessageID,
+				DiscordEventID: discordEventID,
 			}
 		},
 		func(err error) any {

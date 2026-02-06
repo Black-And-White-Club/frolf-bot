@@ -81,6 +81,8 @@ type FakeRepo struct {
 	GetRoundStateFunc                  func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID) (roundtypes.RoundState, error)
 	GetParticipantsFunc                func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID) ([]roundtypes.Participant, error)
 	UpdateEventMessageIDFunc           func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, discordMessageID string) (*roundtypes.Round, error)
+	UpdateDiscordEventIDFunc           func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, discordEventID string) (*roundtypes.Round, error)
+	GetRoundByDiscordEventIDFunc       func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, discordEventID string) (*roundtypes.Round, error)
 	GetParticipantFunc                 func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID, uID sharedtypes.DiscordID) (*roundtypes.Participant, error)
 	RemoveParticipantFunc              func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID, uID sharedtypes.DiscordID) ([]roundtypes.Participant, error)
 	GetEventMessageIDFunc              func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID) (string, error)
@@ -203,6 +205,22 @@ func (f *FakeRepo) UpdateEventMessageID(ctx context.Context, db bun.IDB, guildID
 	f.record("UpdateEventMessageID")
 	if f.UpdateEventMessageIDFunc != nil {
 		return f.UpdateEventMessageIDFunc(ctx, db, guildID, roundID, discordMessageID)
+	}
+	return &roundtypes.Round{}, nil
+}
+
+func (f *FakeRepo) UpdateDiscordEventID(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, discordEventID string) (*roundtypes.Round, error) {
+	f.record("UpdateDiscordEventID")
+	if f.UpdateDiscordEventIDFunc != nil {
+		return f.UpdateDiscordEventIDFunc(ctx, db, guildID, roundID, discordEventID)
+	}
+	return &roundtypes.Round{}, nil
+}
+
+func (f *FakeRepo) GetRoundByDiscordEventID(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, discordEventID string) (*roundtypes.Round, error) {
+	f.record("GetRoundByDiscordEventID")
+	if f.GetRoundByDiscordEventIDFunc != nil {
+		return f.GetRoundByDiscordEventIDFunc(ctx, db, guildID, discordEventID)
 	}
 	return &roundtypes.Round{}, nil
 }

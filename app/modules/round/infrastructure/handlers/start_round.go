@@ -44,6 +44,7 @@ func (h *RoundHandlers) HandleRoundStartRequested(
 				StartTime:      round.StartTime,
 				Participants:   eventParticipants,
 				EventMessageID: round.EventMessageID,
+				DiscordEventID: round.DiscordEventID,
 			}
 		},
 		func(f error) any {

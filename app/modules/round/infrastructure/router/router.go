@@ -135,6 +135,10 @@ func (r *RoundRouter) registerHandlers(h roundhandlers.Handlers) error {
 	registerHandler(deps, roundevents.RoundEntityCreatedV1, h.HandleRoundEntityCreated)
 	registerHandler(deps, roundevents.RoundEventMessageIDUpdateV1, h.HandleRoundEventMessageIDUpdate)
 
+	// Native Event handlers — store Discord Guild Scheduled Event ID and resolve lookups
+	registerHandler(deps, roundevents.NativeEventCreatedV1, h.HandleNativeEventCreated)
+	registerHandler(deps, roundevents.NativeEventLookupRequestV1, h.HandleNativeEventLookupRequest)
+
 	registerHandler(deps, roundevents.RoundDeleteRequestedV1, h.HandleRoundDeleteRequest)
 	registerHandler(deps, roundevents.RoundDeleteValidatedV1, h.HandleRoundDeleteValidated)
 	registerHandler(deps, roundevents.RoundDeleteAuthorizedV1, h.HandleRoundDeleteAuthorized)

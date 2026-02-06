@@ -134,6 +134,7 @@ func toLocalRound(r *roundtypes.Round) *Round {
 		Participants:    r.Participants,
 		Teams:           r.Teams,
 		EventMessageID:  r.EventMessageID,
+		DiscordEventID:  r.DiscordEventID,
 		GuildID:         r.GuildID,
 		ImportID:        r.ImportID,
 		ImportStatus:    ImportStatus(r.ImportStatus),
@@ -170,6 +171,7 @@ func toSharedRound(r *Round) *roundtypes.Round {
 		Participants:    r.Participants,
 		Teams:           r.Teams,
 		EventMessageID:  r.EventMessageID,
+		DiscordEventID:  r.DiscordEventID,
 		GuildID:         r.GuildID,
 		ImportID:        r.ImportID,
 		ImportStatus:    string(r.ImportStatus),
@@ -248,6 +250,7 @@ func convertToDomainRound(dbRound Round) *roundtypes.Round {
 		Participants:    dbRound.Participants,
 		Teams:           dbRound.Teams,
 		EventMessageID:  dbRound.EventMessageID,
+		DiscordEventID:  dbRound.DiscordEventID,
 		GuildID:         dbRound.GuildID,
 		ImportID:        dbRound.ImportID,
 		ImportStatus:    string(dbRound.ImportStatus),
@@ -722,10 +725,74 @@ func (r *Impl) UpdateEventMessageID(ctx context.Context, db bun.IDB, guildID sha
 		Participants:   dbRound.Participants,
 		Teams:          dbRound.Teams,
 		EventMessageID: dbRound.EventMessageID,
+		DiscordEventID: dbRound.DiscordEventID,
 		GuildID:        dbRound.GuildID,
 	}
 
 	return round, nil
+}
+
+// UpdateDiscordEventID updates the DiscordEventID for an existing round.
+func (r *Impl) UpdateDiscordEventID(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, discordEventID string) (*roundtypes.Round, error) {
+	if db == nil {
+		db = r.db
+	}
+	var dbRound Round
+
+	// Build update with conditional guild filter
+	upd := db.NewUpdate().
+		Model(&dbRound).
+		Set("discord_event_id = ?", discordEventID)
+	if string(guildID) == "" {
+		// No guild provided: update by round ID only (test helper may omit guild)
+		upd = upd.Where("id = ?", roundID)
+	} else {
+		upd = upd.Where("id = ? AND guild_id = ?", roundID, guildID)
+	}
+
+	_, err := upd.Returning("*").Exec(ctx, &dbRound)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update discord event ID and return row: %w", err)
+	}
+
+	// Convert from DB model to domain model
+	round := &roundtypes.Round{
+		ID:             dbRound.ID,
+		Title:          dbRound.Title,
+		Description:    dbRound.Description,
+		Location:       dbRound.Location,
+		EventType:      dbRound.EventType,
+		StartTime:      &dbRound.StartTime,
+		Finalized:      dbRound.Finalized,
+		CreatedBy:      dbRound.CreatedBy,
+		State:          dbRound.State,
+		Participants:   dbRound.Participants,
+		Teams:          dbRound.Teams,
+		EventMessageID: dbRound.EventMessageID,
+		DiscordEventID: dbRound.DiscordEventID,
+		GuildID:        dbRound.GuildID,
+	}
+
+	return round, nil
+}
+
+// GetRoundByDiscordEventID retrieves a round by its Discord Event ID.
+func (r *Impl) GetRoundByDiscordEventID(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, discordEventID string) (*roundtypes.Round, error) {
+	if db == nil {
+		db = r.db
+	}
+	localRound := new(Round)
+	err := db.NewSelect().
+		Model(localRound).
+		Where("discord_event_id = ? AND guild_id = ?", discordEventID, guildID).
+		Scan(ctx)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to fetch round by discord event ID: %w", err)
+	}
+	return toSharedRound(localRound), nil
 }
 
 // GetEventMessageID retrieves the EventMessageID for a given round.

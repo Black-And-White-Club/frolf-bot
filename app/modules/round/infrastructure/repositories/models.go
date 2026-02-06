@@ -31,6 +31,7 @@ type Round struct {
 
 	// Discord Integration
 	EventMessageID string              `bun:"event_message_id,nullzero"`
+	DiscordEventID string              `bun:"discord_event_id,nullzero"`
 	GuildID        sharedtypes.GuildID `bun:"guild_id,notnull"`
 
 	// Timestamps

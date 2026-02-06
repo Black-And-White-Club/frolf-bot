@@ -66,6 +66,10 @@ type Handlers interface {
 	// Discord message ID update handler
 	HandleDiscordMessageIDUpdated(ctx context.Context, payload *roundevents.RoundScheduledPayloadV1) ([]handlerwrapper.Result, error)
 
+	// Native Event handlers
+	HandleNativeEventCreated(ctx context.Context, payload *roundevents.NativeEventCreatedPayloadV1) ([]handlerwrapper.Result, error)
+	HandleNativeEventLookupRequest(ctx context.Context, payload *roundevents.NativeEventLookupRequestPayloadV1) ([]handlerwrapper.Result, error)
+
 	// Scorecard import handlers
 	HandleScorecardUploaded(ctx context.Context, payload *roundevents.ScorecardUploadedPayloadV1) ([]handlerwrapper.Result, error)
 	HandleScorecardURLRequested(ctx context.Context, payload *roundevents.ScorecardURLRequestedPayloadV1) ([]handlerwrapper.Result, error)
