@@ -6,6 +6,7 @@ import (
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
+	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 )
 
 // HandleNativeEventCreated handles storing the Discord Native Event ID
@@ -39,6 +40,12 @@ func (h *RoundHandlers) HandleNativeEventLookupRequest(
 	// Call service to look up the round by Discord Event ID
 	round, err := h.service.GetRoundByDiscordEventID(ctx, payload.GuildID, payload.DiscordEventID)
 
+	// If a technical error occurred (DB down, etc), return error to trigger retry.
+	// We only return success (Found=false) if we specifically know it wasn't found.
+	if err != nil && !errors.Is(err, roundservice.ErrRoundNotFound) {
+		return nil, err
+	}
+
 	// Build result payload
 	resultPayload := &roundevents.NativeEventLookupResultPayloadV1{
 		GuildID:        payload.GuildID,
@@ -52,7 +59,7 @@ func (h *RoundHandlers) HandleNativeEventLookupRequest(
 		resultPayload.Found = true
 	}
 
-	// Return the lookup result (not an error even if round not found)
+	// Return the lookup result (Found=true or Found=false)
 	return []handlerwrapper.Result{
 		{
 			Topic:   roundevents.NativeEventLookupResultV1,

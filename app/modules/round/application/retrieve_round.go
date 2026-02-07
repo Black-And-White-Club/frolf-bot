@@ -2,12 +2,14 @@ package roundservice
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
+	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
 )
 
 // GetRound retrieves the round from the database.
@@ -87,6 +89,14 @@ func (s *RoundService) GetRoundByDiscordEventID(ctx context.Context, guildID sha
 
 	round, err := s.repo.GetRoundByDiscordEventID(ctx, s.db, guildID, discordEventID)
 	if err != nil {
+		if errors.Is(err, rounddb.ErrNotFound) {
+			s.logger.InfoContext(ctx, "Round not found for Discord Event ID",
+				attr.String("discord_event_id", discordEventID),
+				attr.String("guild_id", string(guildID)),
+			)
+			return nil, ErrRoundNotFound
+		}
+
 		s.logger.ErrorContext(ctx, "Failed to retrieve round by Discord event ID",
 			attr.String("discord_event_id", discordEventID),
 			attr.String("guild_id", string(guildID)),
