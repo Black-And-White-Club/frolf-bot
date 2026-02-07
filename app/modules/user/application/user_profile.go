@@ -23,6 +23,14 @@ func (s *UserService) UpdateUserProfile(
 ) error {
 
 	op := func(ctx context.Context, db bun.IDB) (results.OperationResult[bool, error], error) {
+		// Validation: Don't overwrite display name with empty string if we have an existing one.
+		// This guards against sync events that might have missing nickname data.
+		if displayName == "" {
+			if existingUser, err := s.repo.GetUserGlobal(ctx, db, userID); err == nil && existingUser != nil && existingUser.DisplayName != nil {
+				displayName = *existingUser.DisplayName
+			}
+		}
+
 		// Update global profile
 		if err := s.repo.UpdateProfile(ctx, db, userID, displayName, avatarHash); err != nil {
 			return results.OperationResult[bool, error]{}, err
