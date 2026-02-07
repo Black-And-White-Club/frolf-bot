@@ -8,8 +8,8 @@ import (
 
 	clubevents "github.com/Black-And-White-Club/frolf-bot-shared/events/club"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
-	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	clubtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/club"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	clubdb "github.com/Black-And-White-Club/frolf-bot/app/modules/club/infrastructure/repositories"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
