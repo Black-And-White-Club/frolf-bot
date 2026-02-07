@@ -40,8 +40,9 @@ func (v *RoundValidatorImpl) ValidateBaseRoundPayload(input roundtypes.BaseRound
 		errs = append(errs, "location cannot be empty")
 	}
 
-	if input.Description == "" {
-		errs = append(errs, "description cannot be empty")
+	// Description is optional in base payload too (it's a value type there, but we relax validation)
+	if len(input.Description) > 2000 {
+		errs = append(errs, "description cannot exceed 2000 characters")
 	}
 
 	return errs
@@ -63,8 +64,9 @@ func (v *RoundValidatorImpl) ValidateRoundInput(input roundtypes.CreateRoundInpu
 		errs = append(errs, "location cannot be empty")
 	}
 
-	if input.Description == "" {
-		errs = append(errs, "description cannot be empty")
+	// Description is optional, so we only validate length if it's present
+	if input.Description != nil && len(*input.Description) > 2000 {
+		errs = append(errs, "description cannot exceed 2000 characters")
 	}
 
 	return errs

@@ -14,6 +14,11 @@ import (
 	"github.com/google/uuid"
 )
 
+func descPtr(s string) *roundtypes.Description {
+	d := roundtypes.Description(s)
+	return &d
+}
+
 // createValidRequest creates a valid round request for testing
 func createValidRequest(userID sharedtypes.DiscordID) testutils.RoundRequest {
 	return testutils.RoundRequest{
@@ -75,7 +80,7 @@ func createCreateRoundPayload(req testutils.RoundRequest) roundevents.CreateRoun
 		UserID:      req.UserID,
 		ChannelID:   req.ChannelID,
 		Title:       roundtypes.Title(req.Title),
-		Description: roundtypes.Description(req.Description),
+		Description: descPtr(req.Description),
 		Location:    location,
 		StartTime:   req.StartTime,
 		Timezone:    roundtypes.Timezone(req.Timezone),
@@ -188,7 +193,7 @@ func TestHandleCreateRoundRequest(t *testing.T) {
 			timeout: 5 * time.Second,
 		},
 		{
-			name: "Failure - Empty Description",
+			name: "Success - Empty Description",
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
 				return nil
 			},
@@ -207,18 +212,22 @@ func TestHandleCreateRoundRequest(t *testing.T) {
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{roundevents.RoundValidationFailedV1},
+			expectedOutgoingTopics: []string{roundevents.RoundEntityCreatedV1},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
-				expectedTopic := roundevents.RoundValidationFailedV1
+				expectedTopic := roundevents.RoundEntityCreatedV1
 				msgs := receivedMsgs[expectedTopic]
 				if len(msgs) == 0 {
 					t.Fatalf("Expected at least one message on topic %q, but received none", expectedTopic)
 				}
 
-				// Ensure no success message was published
-				successMsgs := receivedMsgs[roundevents.RoundEntityCreatedV1]
-				if len(successMsgs) > 0 {
-					t.Errorf("Expected no success messages, got %d", len(successMsgs))
+				receivedMsg := msgs[0]
+				var payload roundevents.RoundEntityCreatedPayloadV1
+				if err := deps.TestHelpers.UnmarshalPayload(receivedMsg, &payload); err != nil {
+					t.Fatalf("Failed to unmarshal payload: %v", err)
+				}
+
+				if payload.Round.Description != "" {
+					t.Errorf("Expected empty description, got %v", payload.Round.Description)
 				}
 			},
 			timeout: 5 * time.Second,

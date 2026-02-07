@@ -46,10 +46,11 @@ type RoundRequest struct {
 func (h *RoundTestHelper) PublishRoundRequest(t *testing.T, ctx context.Context, req RoundRequest) *message.Message {
 	t.Helper()
 
+	desc := roundtypes.Description(req.Description)
 	payload := roundevents.CreateRoundRequestedPayloadV1{
 		GuildID:     req.GuildID,
 		Title:       roundtypes.Title(req.Title),
-		Description: roundtypes.Description(req.Description),
+		Description: &desc,
 		Location:    roundtypes.Location(req.Location),
 		StartTime:   req.StartTime,
 		UserID:      req.UserID,
@@ -134,9 +135,9 @@ func (h *RoundTestHelper) ClearMessagesAndDrain() {
 	// Clear the buffer
 	h.capture.Clear()
 	// Wait longer for consumers to drain any pending messages from NATS
-	// Consumers poll every 25ms, so we need enough time for multiple polling cycles
-	// plus message processing time. 300ms = ~12 polling cycles.
-	time.Sleep(300 * time.Millisecond)
+	// Consumers poll frequently so 50ms should be enough for basic drainage.
+	// If tests become flaky, increase this slightly.
+	time.Sleep(50 * time.Millisecond)
 	// Clear again to remove any drained messages
 	h.capture.Clear()
 	// Small delay to ensure clean state before test publishes new messages

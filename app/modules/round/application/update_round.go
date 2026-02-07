@@ -403,26 +403,30 @@ func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, req *roun
 			attr.Time("start_time", startTimeUTC),
 		)
 
-		startPayload := roundevents.RoundStartedPayloadV1{
-			GuildID:   req.GuildID,
-			RoundID:   req.RoundID,
-			Title:     roundtypes.Title(finalTitle),
-			Location:  roundtypes.Location(finalLocation),
-			StartTime: req.StartTime,
-		}
+		// startPayload := roundevents.RoundStartedPayloadV1{
+		// 	GuildID:   req.GuildID,
+		// 	RoundID:   req.RoundID,
+		// 	Title:     roundtypes.Title(finalTitle),
+		// 	Location:  roundtypes.Location(finalLocation),
+		// 	StartTime: req.StartTime,
+		// }
 
 		// Enrich with config if available (checking again as it might have been skipped in reminder block)
-		if cfg := s.getGuildConfigForEnrichment(ctx, req.GuildID); cfg != nil && cfg.EventChannelID != "" {
-			startPayload.ChannelID = cfg.EventChannelID
-		}
+		// if cfg := s.getGuildConfigForEnrichment(ctx, req.GuildID); cfg != nil && cfg.EventChannelID != "" {
+		// 	startPayload.ChannelID = cfg.EventChannelID
+		// }
 
-		if err := s.queueService.ScheduleRoundStart(ctx, req.GuildID, req.RoundID, startTimeUTC, startPayload); err != nil {
-			s.logger.ErrorContext(ctx, "Failed to reschedule round start",
-				attr.RoundID("round_id", req.RoundID),
-				attr.Error(err),
-			)
-			return results.OperationResult[bool, error]{}, err
-		}
+		// if err := s.queueService.ScheduleRoundStart(ctx, req.GuildID, req.RoundID, startTimeUTC, startPayload); err != nil {
+		// 	s.logger.ErrorContext(ctx, "Failed to reschedule round start",
+		// 		attr.RoundID("round_id", req.RoundID),
+		// 		attr.Error(err),
+		// 	)
+		// 	return results.OperationResult[bool, error]{}, err
+		// }
+		s.logger.InfoContext(ctx, "Skipping round start rescheduling (disabled per configuration/request)",
+			attr.RoundID("round_id", req.RoundID),
+			attr.Time("start_time", startTimeUTC),
+		)
 
 		s.logger.InfoContext(ctx, "Round events rescheduled successfully",
 			attr.RoundID("round_id", req.RoundID),

@@ -68,11 +68,16 @@ func (s *RoundService) ValidateRoundCreationWithClock(ctx context.Context, req *
 			return results.FailureResult[*roundtypes.CreateRoundResult](errors.New("start time is in the past")), nil
 		}
 
+		description := ""
+		if req.Description != nil {
+			description = string(*req.Description)
+		}
+
 		// Create round object
 		roundObject := roundtypes.Round{
 			ID:           sharedtypes.RoundID(uuid.New()),
 			Title:        req.Title,
-			Description:  req.Description,
+			Description:  roundtypes.Description(description),
 			Location:     req.Location,
 			StartTime:    (*sharedtypes.StartTime)(&parsedTime),
 			CreatedBy:    req.UserID,

@@ -3,7 +3,6 @@ package userintegrationtests
 
 import (
 	"context"
-	"errors"
 	"io"
 	"log/slog"
 	"testing"
@@ -223,7 +222,7 @@ func TestCreateUser(t *testing.T) {
 			skipCleanup:     false,
 		},
 		{
-			name: "Failure - User already exists",
+			name: "Success - User already exists (idempotent)",
 			setupFn: func(t *testing.T, deps TestDeps) (context.Context, sharedtypes.DiscordID, *sharedtypes.TagNumber) {
 				userID := sharedtypes.DiscordID("99999999999999999")
 				tag := tagPtr(100)
@@ -243,27 +242,22 @@ func TestCreateUser(t *testing.T) {
 				}
 
 				// Return the same userID and guildID to attempt creation again in the test logic
-				// This will trigger "user already exists in guild" error
 				return deps.Ctx, userID, tag
 			},
 			validateFn: func(t *testing.T, deps TestDeps, userID sharedtypes.DiscordID, result userservice.UserResult, err error) {
-				// Service now returns failure payload with nil top-level error for duplicate user
 				if err != nil {
-					t.Fatalf("Did not expect top-level error when creating duplicate user, got: %v", err)
+					t.Fatalf("CreateUser returned unexpected error: %v", err)
 				}
-				if result.IsSuccess() {
-					t.Fatalf("Result contained non-nil Success payload, got: %+v", result.Success)
-				}
-				if !result.IsFailure() {
-					t.Fatal("Result contained nil Failure payload, expected non-nil")
+				if !result.IsSuccess() {
+					t.Fatalf("Result contained nil Success payload. Failure payload: %+v", result.Failure)
 				}
 
-				errVal := *result.Failure
-				if !errors.Is(errVal, userservice.ErrUserAlreadyExists) {
-					t.Errorf("Expected ErrUserAlreadyExists, got %v", errVal)
+				successPayload := *result.Success
+				if successPayload.IsReturningUser != true {
+					t.Errorf("Expected IsReturningUser to be true, got false")
 				}
 			},
-			expectedSuccess: false,
+			expectedSuccess: true,
 			skipCleanup:     false,
 		},
 	}

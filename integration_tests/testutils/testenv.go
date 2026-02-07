@@ -167,6 +167,21 @@ func (env *TestEnvironment) Reset(ctx context.Context) error {
 	return nil
 }
 
+// SoftReset cleans up the environment for the next test without destroying consumers
+func (env *TestEnvironment) SoftReset(ctx context.Context) error {
+	// Clean up database
+	if err := CleanupDatabase(ctx, env.DB); err != nil {
+		return fmt.Errorf("failed to cleanup database: %w", err)
+	}
+
+	// Purge messages but keep consumers
+	if err := env.ResetJetStreamState(ctx, StandardStreamNames...); err != nil {
+		return fmt.Errorf("failed to reset JetStream state: %w", err)
+	}
+
+	return nil
+}
+
 // CheckContainerHealth verifies that containers are running and responsive
 func (env *TestEnvironment) CheckContainerHealth() error {
 	ctx, cancel := context.WithTimeout(env.Ctx, 10*time.Second)

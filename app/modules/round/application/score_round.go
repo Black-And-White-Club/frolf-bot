@@ -141,12 +141,55 @@ func (s *RoundService) UpdateParticipantScore(ctx context.Context, req *roundtyp
 
 // UpdateParticipantScoresBulk updates scores for multiple participants.
 func (s *RoundService) UpdateParticipantScoresBulk(ctx context.Context, req *roundtypes.BulkScoreUpdateRequest) (BulkScoreUpdateResult, error) {
-	// Implementation pending definition of BulkScoreUpdateRequest and business logic
-	return results.SuccessResult[*roundtypes.BulkScoreUpdateResult, error](&roundtypes.BulkScoreUpdateResult{
-		GuildID: req.GuildID,
-		RoundID: req.RoundID,
-		Updates: req.Updates,
-	}), nil
+	return runInTx[*roundtypes.BulkScoreUpdateResult, error](s, ctx, func(ctx context.Context, tx bun.IDB) (BulkScoreUpdateResult, error) {
+		// 1. Validate round exists (optional optimization, but good for safety)
+		// We could do this inside the loop or once upfront. Upfront is better.
+		_, err := s.repo.GetRound(ctx, tx, req.GuildID, req.RoundID)
+		if err != nil {
+			return results.FailureResult[*roundtypes.BulkScoreUpdateResult, error](fmt.Errorf("failed to fetch round: %w", err)), nil
+		}
+
+		// 2. Iterate and update each participant
+		for _, update := range req.Updates {
+			// Reuse the single update logic but maybe we need a dedicated bulk repo method for efficiency?
+			// For now, looping is fine as bulk updates are usually small (User count < 100).
+			// We construct a Participant object for the update.
+			p := roundtypes.Participant{
+				UserID: update.UserID,
+				Score:  update.Score,
+				// TagNumber: update.TagNumber, // If we supported updating tags here
+			}
+
+			// We use UpdateParticipant which handles upsert (auto-join) logic if needed,
+			// or we can strictly require them to be in the round.
+			// Given "Override/Correction", they should probably already be in the round,
+			// but if the modal allows adding people, UpdateParticipant is safe.
+			_, err := s.repo.UpdateParticipant(ctx, tx, req.GuildID, req.RoundID, p)
+			if err != nil {
+				s.logger.ErrorContext(ctx, "Failed to update participant in bulk operation",
+					attr.RoundID("round_id", req.RoundID),
+					attr.String("user_id", string(update.UserID)),
+					attr.Error(err),
+				)
+				// Fail the whole transaction? Yes, partial updates are bad for "Bulk".
+				return results.FailureResult[*roundtypes.BulkScoreUpdateResult, error](fmt.Errorf("failed to update score for user %s: %w", update.UserID, err)), nil
+			}
+		}
+
+		// 3. Fetch all participants to return the full state
+		// This is needed for the Discord scorecard to re-render completely.
+		participants, err := s.repo.GetParticipants(ctx, tx, req.GuildID, req.RoundID)
+		if err != nil {
+			return results.FailureResult[*roundtypes.BulkScoreUpdateResult, error](fmt.Errorf("failed to fetch updated participants: %w", err)), nil
+		}
+
+		return results.SuccessResult[*roundtypes.BulkScoreUpdateResult, error](&roundtypes.BulkScoreUpdateResult{
+			GuildID:      req.GuildID,
+			RoundID:      req.RoundID,
+			Updates:      req.Updates,
+			Participants: participants,
+		}), nil
+	})
 }
 
 // CheckAllScoresSubmitted checks if all participants have submitted scores.

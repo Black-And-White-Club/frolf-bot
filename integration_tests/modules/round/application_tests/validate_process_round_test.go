@@ -9,6 +9,11 @@ import (
 	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
 )
 
+func descPtr(s string) *roundtypes.Description {
+	d := roundtypes.Description(s)
+	return &d
+}
+
 func TestValidateRoundCreation(t *testing.T) {
 	tests := []struct {
 		name                     string
@@ -20,7 +25,7 @@ func TestValidateRoundCreation(t *testing.T) {
 			name: "Valid round creation request",
 			payload: &roundtypes.CreateRoundInput{
 				Title:       "Test Round",
-				Description: "Test Description",
+				Description: descPtr("Test Description"),
 				Location:    "Test Location",
 				StartTime:   "tomorrow at 12:00",
 				UserID:      "user_123",

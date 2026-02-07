@@ -43,6 +43,15 @@ func (f *FakeUserLookup) FindByNormalizedUDiscUsername(ctx context.Context, db b
 	return nil, nil
 }
 
+func (f *FakeUserLookup) FindGlobalByNormalizedUDiscUsername(ctx context.Context, db bun.IDB, n string) (*UserIdentity, error) {
+	if f.FindByUsernameFn != nil {
+		if id := f.FindByUsernameFn(n); id != "" {
+			return &UserIdentity{UserID: id}, nil
+		}
+	}
+	return nil, nil
+}
+
 func (f *FakeUserLookup) FindByNormalizedUDiscDisplayName(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, n string) (*UserIdentity, error) {
 	if f.FindByDisplayFn != nil {
 		if id := f.FindByDisplayFn(n); id != "" {
