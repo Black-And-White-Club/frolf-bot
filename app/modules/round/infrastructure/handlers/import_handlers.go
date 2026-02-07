@@ -31,7 +31,19 @@ func (h *RoundHandlers) HandleScorecardUploaded(ctx context.Context, payload *ro
 	}
 
 	if result.Failure != nil {
-		return []handlerwrapper.Result{{Topic: roundevents.ImportFailedV1, Payload: result.Failure}}, nil
+		return []handlerwrapper.Result{{
+			Topic: roundevents.ImportFailedV1,
+			Payload: &roundevents.ImportFailedPayloadV1{
+				GuildID:        payload.GuildID,
+				RoundID:        payload.RoundID,
+				ImportID:       payload.ImportID,
+				EventMessageID: payload.MessageID,
+				UserID:         payload.UserID,
+				ChannelID:      payload.ChannelID,
+				Error:          (*result.Failure).Error(),
+				Timestamp:      time.Now().UTC(),
+			},
+		}}, nil
 	}
 
 	return []handlerwrapper.Result{{Topic: roundevents.ScorecardParseRequestedV1, Payload: result.Success.Job}}, nil
@@ -55,7 +67,19 @@ func (h *RoundHandlers) HandleScorecardURLRequested(ctx context.Context, payload
 	}
 
 	if result.Failure != nil {
-		return []handlerwrapper.Result{{Topic: roundevents.ImportFailedV1, Payload: result.Failure}}, nil
+		return []handlerwrapper.Result{{
+			Topic: roundevents.ImportFailedV1,
+			Payload: &roundevents.ImportFailedPayloadV1{
+				GuildID:        payload.GuildID,
+				RoundID:        payload.RoundID,
+				ImportID:       payload.ImportID,
+				EventMessageID: payload.MessageID,
+				UserID:         payload.UserID,
+				ChannelID:      payload.ChannelID,
+				Error:          (*result.Failure).Error(),
+				Timestamp:      time.Now().UTC(),
+			},
+		}}, nil
 	}
 
 	return []handlerwrapper.Result{{Topic: roundevents.ScorecardParseRequestedV1, Payload: result.Success.Job}}, nil
@@ -80,7 +104,19 @@ func (h *RoundHandlers) HandleParseScorecardRequest(ctx context.Context, payload
 	}
 
 	if result.Failure != nil {
-		return []handlerwrapper.Result{{Topic: roundevents.ImportFailedV1, Payload: result.Failure}}, nil
+		return []handlerwrapper.Result{{
+			Topic: roundevents.ImportFailedV1,
+			Payload: &roundevents.ImportFailedPayloadV1{
+				GuildID:        payload.GuildID,
+				RoundID:        payload.RoundID,
+				ImportID:       payload.ImportID,
+				EventMessageID: payload.MessageID,
+				UserID:         payload.UserID,
+				ChannelID:      payload.ChannelID,
+				Error:          (*result.Failure).Error(),
+				Timestamp:      time.Now().UTC(),
+			},
+		}}, nil
 	}
 
 	payloadOut := &roundevents.ParsedScorecardPayloadV1{
@@ -136,7 +172,18 @@ func (h *RoundHandlers) HandleScorecardParsedForNormalization(ctx context.Contex
 				Timestamp:      time.Now().UTC(),
 			}
 		},
-		func(f error) any { return f },
+		func(f error) any {
+			return &roundevents.ImportFailedPayloadV1{
+				GuildID:        payload.GuildID,
+				RoundID:        payload.RoundID,
+				ImportID:       payload.ImportID,
+				EventMessageID: payload.EventMessageID,
+				UserID:         payload.UserID,
+				ChannelID:      payload.ChannelID,
+				Error:          f.Error(),
+				Timestamp:      time.Now().UTC(),
+			}
+		},
 	), roundevents.ScorecardNormalizedV1, roundevents.ImportFailedV1), nil
 }
 
@@ -167,7 +214,18 @@ func (h *RoundHandlers) HandleScorecardNormalized(ctx context.Context, payload *
 				Timestamp:      s.Timestamp,
 			}
 		},
-		func(f error) any { return f },
+		func(f error) any {
+			return &roundevents.ImportFailedPayloadV1{
+				GuildID:        payload.GuildID,
+				RoundID:        payload.RoundID,
+				ImportID:       payload.ImportID,
+				EventMessageID: payload.EventMessageID,
+				UserID:         payload.UserID,
+				ChannelID:      payload.ChannelID,
+				Error:          f.Error(),
+				Timestamp:      time.Now().UTC(),
+			}
+		},
 	), roundevents.ImportCompletedV1, roundevents.ImportFailedV1), nil
 }
 
@@ -199,7 +257,19 @@ func (h *RoundHandlers) HandleImportCompleted(
 	}
 
 	if res.Failure != nil {
-		return []handlerwrapper.Result{{Topic: roundevents.ImportFailedV1, Payload: res.Failure}}, nil
+		return []handlerwrapper.Result{{
+			Topic: roundevents.ImportFailedV1,
+			Payload: &roundevents.ImportFailedPayloadV1{
+				GuildID:        payload.GuildID,
+				RoundID:        payload.RoundID,
+				ImportID:       payload.ImportID,
+				EventMessageID: payload.EventMessageID,
+				UserID:         payload.UserID,
+				ChannelID:      payload.ChannelID,
+				Error:          (*res.Failure).Error(),
+				Timestamp:      time.Now().UTC(),
+			},
+		}}, nil
 	}
 
 	// Map Result to Event Payload

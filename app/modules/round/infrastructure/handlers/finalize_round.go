@@ -53,6 +53,7 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(
 		Participants:   resultData.Participants,
 		Teams:          resultData.Teams,
 		EventMessageID: fetchedRound.EventMessageID,
+		DiscordEventID: fetchedRound.DiscordEventID,
 	}
 
 	backendFinalizationPayload := &roundevents.RoundFinalizedPayloadV1{

@@ -24,7 +24,7 @@ func TestRoundService_ValidateRoundCreationWithClock(t *testing.T) {
 	// Valid input for testing
 	validInput := &roundtypes.CreateRoundInput{
 		Title:       roundtypes.Title("Test Round"),
-		Description: roundtypes.Description("Test Description"),
+		Description: descPtr("Test Description"),
 		Location:    roundtypes.Location("Test Location"),
 		StartTime:   "2029-09-16T12:00:00Z",
 		UserID:      sharedtypes.DiscordID("user-1"),
@@ -71,7 +71,7 @@ func TestRoundService_ValidateRoundCreationWithClock(t *testing.T) {
 			name: "validation failure - all required fields missing",
 			input: &roundtypes.CreateRoundInput{
 				Title:       "",
-				Description: "",
+				Description: nil,
 				Location:    "",
 				StartTime:   "",
 				UserID:      "user-x",
@@ -196,6 +196,11 @@ func TestRoundService_ValidateRoundCreationWithClock(t *testing.T) {
 func startTimePtr(t time.Time) *sharedtypes.StartTime {
 	st := sharedtypes.StartTime(t)
 	return &st
+}
+
+func descPtr(s string) *roundtypes.Description {
+	d := roundtypes.Description(s)
+	return &d
 }
 
 // ErrInvalidTime is a sentinel for testing time parse failures

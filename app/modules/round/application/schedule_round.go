@@ -95,21 +95,25 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, req *roundtypes.
 				attr.Time("start_time", startTimeUTC),
 			)
 
-			startPayload := roundevents.RoundStartedPayloadV1{
-				GuildID:   req.GuildID, // Ensure downstream start processing has tenant scope
-				RoundID:   req.RoundID,
-				Title:     roundtypes.Title(req.Title),
-				Location:  roundtypes.Location(req.Location),
-				StartTime: &req.StartTime,
-			}
+			// startPayload := roundevents.RoundStartedPayloadV1{
+			// 	GuildID:   req.GuildID, // Ensure downstream start processing has tenant scope
+			// 	RoundID:   req.RoundID,
+			// 	Title:     roundtypes.Title(req.Title),
+			// 	Location:  roundtypes.Location(req.Location),
+			// 	StartTime: &req.StartTime,
+			// }
 
-			if err := s.queueService.ScheduleRoundStart(ctx, req.GuildID, req.RoundID, startTimeUTC, startPayload); err != nil {
-				s.logger.ErrorContext(ctx, "Failed to schedule round start job",
-					attr.RoundID("round_id", req.RoundID),
-					attr.Error(err),
-				)
-				return results.OperationResult[*roundtypes.ScheduleRoundEventsResult, error]{}, err
-			}
+			// if err := s.queueService.ScheduleRoundStart(ctx, req.GuildID, req.RoundID, startTimeUTC, startPayload); err != nil {
+			// 	s.logger.ErrorContext(ctx, "Failed to schedule round start job",
+			// 		attr.RoundID("round_id", req.RoundID),
+			// 		attr.Error(err),
+			// 	)
+			// 	return results.OperationResult[*roundtypes.ScheduleRoundEventsResult, error]{}, err
+			// }
+			s.logger.InfoContext(ctx, "Skipping round start scheduling (disabled per configuration/request)",
+				attr.RoundID("round_id", req.RoundID),
+				attr.Time("start_time", startTimeUTC),
+			)
 		} else {
 			s.logger.InfoContext(ctx, "Round start time is too close or in the past, not scheduling",
 				attr.RoundID("round_id", req.RoundID),

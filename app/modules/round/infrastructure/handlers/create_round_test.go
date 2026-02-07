@@ -27,7 +27,7 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 
 	testPayload := &roundevents.CreateRoundRequestedPayloadV1{
 		Title:       testTitle,
-		Description: testDescription,
+		Description: &testDescription,
 		Location:    testLocation,
 		StartTime:   testStartTimeString,
 		UserID:      testUserID,

@@ -60,34 +60,34 @@ func (r *Impl) GetClubUUIDByDiscordGuildID(ctx context.Context, db bun.IDB, guil
 	if db == nil {
 		db = r.db
 	}
-	var gc struct {
+	var c struct {
 		UUID uuid.UUID `bun:"uuid"`
 	}
-	err := db.NewSelect().Table("guild_configs").Column("uuid").Where("guild_id = ?", guildID).Scan(ctx, &gc)
+	err := db.NewSelect().Table("clubs").Column("uuid").Where("discord_guild_id = ?", guildID).Scan(ctx, &c)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return uuid.Nil, ErrNotFound
 		}
 		return uuid.Nil, err
 	}
-	return gc.UUID, nil
+	return c.UUID, nil
 }
 
 func (r *Impl) GetDiscordGuildIDByClubUUID(ctx context.Context, db bun.IDB, clubUUID uuid.UUID) (sharedtypes.GuildID, error) {
 	if db == nil {
 		db = r.db
 	}
-	var gc struct {
-		GuildID sharedtypes.GuildID `bun:"guild_id"`
+	var c struct {
+		GuildID sharedtypes.GuildID `bun:"discord_guild_id"`
 	}
-	err := db.NewSelect().Table("guild_configs").Column("guild_id").Where("uuid = ?", clubUUID).Scan(ctx, &gc)
+	err := db.NewSelect().Table("clubs").Column("discord_guild_id").Where("uuid = ?", clubUUID).Scan(ctx, &c)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", ErrNotFound
 		}
 		return "", err
 	}
-	return gc.GuildID, nil
+	return c.GuildID, nil
 }
 
 // --- GLOBAL USER METHODS ---
@@ -432,13 +432,19 @@ func (r *Impl) FindByUDiscUsername(ctx context.Context, db bun.IDB, guildID shar
 		db = r.db
 	}
 	uwm := &UserWithMembership{User: &User{}}
+	// Check for username "jace" or "@jace"
+	targetWithAt := "@" + username
+	if strings.HasPrefix(username, "@") {
+		targetWithAt = username
+	}
+
 	err := db.NewSelect().
 		Model(uwm.User).
 		ColumnExpr("u.*").
 		ColumnExpr("gm.role").
 		ColumnExpr("gm.joined_at").
 		Join("JOIN guild_memberships AS gm ON u.user_id = gm.user_id").
-		Where("LOWER(u.udisc_username) = LOWER(?)", username).
+		Where("LOWER(TRIM(u.udisc_username)) IN (LOWER(?), LOWER(?))", username, targetWithAt).
 		Where("gm.guild_id = ?", guildID).
 		Limit(1).
 		Scan(ctx, uwm)
@@ -449,6 +455,31 @@ func (r *Impl) FindByUDiscUsername(ctx context.Context, db bun.IDB, guildID shar
 		return nil, fmt.Errorf("userdb.FindByUDiscUsername: %w", err)
 	}
 	return uwm, nil
+}
+
+func (r *Impl) FindGlobalByUDiscUsername(ctx context.Context, db bun.IDB, username string) (*User, error) {
+	if db == nil {
+		db = r.db
+	}
+	// Check for username "jace" or "@jace"
+	targetWithAt := "@" + username
+	if strings.HasPrefix(username, "@") {
+		targetWithAt = username
+	}
+
+	user := &User{}
+	err := db.NewSelect().
+		Model(user).
+		Where("LOWER(TRIM(u.udisc_username)) IN (LOWER(?), LOWER(?))", username, targetWithAt).
+		Limit(1).
+		Scan(ctx)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("userdb.FindGlobalByUDiscUsername: %w", err)
+	}
+	return user, nil
 }
 
 func (r *Impl) FindByUDiscName(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, name string) (*UserWithMembership, error) {
@@ -462,7 +493,7 @@ func (r *Impl) FindByUDiscName(ctx context.Context, db bun.IDB, guildID sharedty
 		ColumnExpr("gm.role").
 		ColumnExpr("gm.joined_at").
 		Join("JOIN guild_memberships AS gm ON u.user_id = gm.user_id").
-		Where("LOWER(u.udisc_name) = LOWER(?)", name).
+		Where("LOWER(TRIM(u.udisc_name)) = LOWER(?)", name).
 		Where("gm.guild_id = ?", guildID).
 		Limit(1).
 		Scan(ctx, uwm)

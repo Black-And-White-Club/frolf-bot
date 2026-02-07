@@ -326,26 +326,24 @@ func TestHandleUserSignupRequest(t *testing.T) {
 			timeout:            5 * time.Second,
 		},
 		{
-			name: "Failure - User Already Exists (no tag)",
+			name: "Success - User Already Exists (idempotent)",
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
 				// Pre-create the user to simulate "already exists" scenario
 				userID := sharedtypes.DiscordID("testuser-exists-789")
-				tag := sharedtypes.TagNumber(23) // Dummy tag for pre-creation
-				// Use the service from the user module to create the user
+				tag := sharedtypes.TagNumber(23)
 				guildID := sharedtypes.GuildID("test-guild")
-				createResult, createErr := deps.UserModule.UserService.CreateUser(env.Ctx, guildID, userID, &tag, nil, nil) // Use env.Ctx
+				createResult, createErr := deps.UserModule.UserService.CreateUser(env.Ctx, guildID, userID, &tag, nil, nil)
 				if createErr != nil || createResult.Success == nil {
 					t.Fatalf("Failed to pre-create user for test setup: %v, result: %+v", createErr, createResult.Failure)
 				}
-				log.Printf("Pre-created user %q for test", userID)
 				return nil
 			},
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
-				userID := sharedtypes.DiscordID("testuser-exists-789") // Same user ID as pre-created
+				userID := sharedtypes.DiscordID("testuser-exists-789")
 				payload := userevents.UserSignupRequestedPayloadV1{
 					GuildID:   "test-guild",
 					UserID:    userID,
-					TagNumber: nil, // No tag number, will attempt creation
+					TagNumber: nil,
 				}
 				payloadBytes, err := json.Marshal(payload)
 				if err != nil {
@@ -354,72 +352,51 @@ func TestHandleUserSignupRequest(t *testing.T) {
 				msg := message.NewMessage(uuid.New().String(), payloadBytes)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
-				// Use testutils.PublishMessage
 				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, userevents.UserSignupRequestedV1, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{userevents.UserCreationFailedV1},
+			expectedOutgoingTopics: []string{userevents.UserCreatedV1},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
-				// 1. Verify user still exists (no change expected from signup attempt)
 				userID := sharedtypes.DiscordID("testuser-exists-789")
+
+				// 1. Verify user still exists
 				guildID := sharedtypes.GuildID("test-guild")
 				getUserResult, getUserErr := deps.UserModule.UserService.GetUser(env.Ctx, guildID, userID)
-				// Expect no technical error and a successful result (user was already there)
 				if getUserErr != nil {
 					t.Fatalf("Expected GetUser to succeed for existing user, but got error: %v", getUserErr)
 				}
 				if !getUserResult.IsSuccess() || *getUserResult.Success == nil {
 					t.Fatalf("Expected GetUser to return success payload for existing user, but got nil. Failure: %+v", getUserResult.Failure)
 				}
-				existingUser := *getUserResult.Success
-				if existingUser.UserID != userID {
-					t.Errorf("Existing user ID mismatch: expected %q, got %q", userID, existingUser.UserID)
-				}
-				// Removed existingUser.TagNumber check as usertypes.UserData does not contain it.
 
-				// 2. Verify the UserCreationFailed event was published
-				expectedTopic := userevents.UserCreationFailedV1
+				// 2. Verify UserCreated event was published (idempotent success)
+				expectedTopic := userevents.UserCreatedV1
 				msgs := receivedMsgs[expectedTopic]
 				if len(msgs) == 0 {
 					t.Fatalf("Expected at least one message on topic %q, but received none", expectedTopic)
 				}
-				if len(msgs) > 1 {
-					t.Errorf("Expected exactly one message on topic %q, but received %d", expectedTopic, len(msgs))
-				}
 
 				receivedMsg := msgs[0]
-				var failedPayload userevents.UserCreationFailedPayloadV1
-				if err := deps.UserModule.Helper.UnmarshalPayload(receivedMsg, &failedPayload); err != nil { // Use deps.UserModule.Helper
-					t.Fatalf("Failed to unmarshal UserCreationFailedPayload: %v", err)
+				var successPayload userevents.UserCreatedPayloadV1
+				if err := deps.UserModule.Helper.UnmarshalPayload(receivedMsg, &successPayload); err != nil {
+					t.Fatalf("Failed to unmarshal UserCreatedPayload: %v", err)
 				}
 
-				if failedPayload.UserID != userID {
-					t.Errorf("UserCreationFailedPayload UserID mismatch: expected %q, got %q", userID, failedPayload.UserID)
+				if successPayload.UserID != userID {
+					t.Errorf("UserCreatedPayload UserID mismatch: expected %q, got %q", userID, successPayload.UserID)
 				}
-				expectedReason := "user already exists in this guild"
-				if failedPayload.Reason != expectedReason {
-					t.Errorf("UserCreationFailedPayload Reason mismatch: expected %q, got %q", expectedReason, failedPayload.Reason)
-				}
-				// This check is correct for the event payload
-				if failedPayload.TagNumber != nil {
-					t.Errorf("UserCreationFailedPayload TagNumber mismatch: expected nil, got %v", failedPayload.TagNumber)
+				if successPayload.IsReturningUser != true {
+					t.Errorf("UserCreatedPayload IsReturningUser mismatch: expected true, got %v", successPayload.IsReturningUser)
 				}
 
-				// Verify correlation ID is propagated
 				if receivedMsg.Metadata.Get(middleware.CorrelationIDMetadataKey) != incomingMsg.Metadata.Get(middleware.CorrelationIDMetadataKey) {
-					t.Errorf("Correlation ID mismatch: expected %q, got %q", incomingMsg.Metadata.Get(middleware.CorrelationIDMetadataKey), receivedMsg.Metadata.Get(middleware.CorrelationIDMetadataKey))
-				}
-
-				// 3. Verify no UserCreated event was published
-				unexpectedTopic := userevents.UserCreatedV1
-				if len(receivedMsgs[unexpectedTopic]) > 0 {
-					t.Errorf("Expected no messages on topic %q, but received %d", unexpectedTopic, len(receivedMsgs[unexpectedTopic]))
+					t.Errorf("Correlation ID mismatch")
 				}
 			},
 			expectHandlerError: false,
-			timeout:            5 * time.Second, // Default timeout for this test case
+			timeout:            5 * time.Second,
 		},
 	}
 

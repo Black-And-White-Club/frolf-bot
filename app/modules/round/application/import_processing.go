@@ -112,14 +112,21 @@ func (s *RoundService) NormalizeParsedScorecard(ctx context.Context, data *round
 
 // resolveUserID attempts to find a user ID by normalized name using the UserLookup adapter.
 func (s *RoundService) resolveUserID(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, normalizedName string) sharedtypes.DiscordID {
-	// 1. Try finding by UDisc Display Name
+	// 1. Try finding by UDisc Display Name (Guild Scoped)
 	identity, err := s.userLookup.FindByNormalizedUDiscDisplayName(ctx, db, guildID, normalizedName)
 	if err == nil && identity != nil {
 		return identity.UserID
 	}
 
-	// 2. Try finding by UDisc Username
+	// 2. Try finding by UDisc Username (Guild Scoped)
 	identity, err = s.userLookup.FindByNormalizedUDiscUsername(ctx, db, guildID, normalizedName)
+	if err == nil && identity != nil {
+		return identity.UserID
+	}
+
+	// 3. Try finding by UDisc Username (Global Fallback)
+	// Useful if user is in DB but not yet linked in guild_memberships
+	identity, err = s.userLookup.FindGlobalByNormalizedUDiscUsername(ctx, db, normalizedName)
 	if err == nil && identity != nil {
 		return identity.UserID
 	}
@@ -218,6 +225,11 @@ func (s *RoundService) IngestNormalizedScorecard(ctx context.Context, req roundt
 				for _, p := range req.NormalizedData.Players {
 					normalizedName := normalizeName(p.DisplayName)
 					discordID := s.resolveUserID(ctx, tx, req.GuildID, normalizedName)
+					s.logger.InfoContext(ctx, "Resolving singles player",
+						attr.String("display_name", p.DisplayName),
+						attr.String("normalized_name", normalizedName),
+						attr.String("resolved_discord_id", string(discordID)),
+					)
 					if discordID == "" {
 						unmatchedPlayers = append(unmatchedPlayers, p.DisplayName)
 						continue

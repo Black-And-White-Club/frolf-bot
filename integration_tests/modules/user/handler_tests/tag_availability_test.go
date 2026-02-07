@@ -76,7 +76,7 @@ func TestHandleTagAvailable(t *testing.T) {
 			expectHandlerError: false,
 		},
 		{
-			name: "Failure - user already exists",
+			name: "Success - user already exists (idempotent)",
 			setupFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) interface{} {
 				// Create the user that will cause the "already exists" error
 				// Use testutils.InsertUser to directly insert the user into the database
@@ -105,13 +105,13 @@ func TestHandleTagAvailable(t *testing.T) {
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{userevents.UserCreationFailedV1},
+			expectedOutgoingTopics: []string{userevents.UserCreatedV1},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
-				msgs := receivedMsgs[userevents.UserCreationFailedV1]
+				msgs := receivedMsgs[userevents.UserCreatedV1]
 				if len(msgs) != 1 {
-					t.Fatalf("Expected 1 UserCreationFailed message, got %d", len(msgs))
+					t.Fatalf("Expected 1 UserCreated message, got %d", len(msgs))
 				}
-				var payload userevents.UserCreationFailedPayloadV1
+				var payload userevents.UserCreatedPayloadV1
 				// Access Helper via the passed deps argument
 				if err := deps.UserModule.Helper.UnmarshalPayload(msgs[0], &payload); err != nil {
 					t.Fatalf("Unmarshal error: %v", err)
@@ -119,12 +119,8 @@ func TestHandleTagAvailable(t *testing.T) {
 				if payload.UserID != "existing-tag-user" {
 					t.Errorf("Expected UserID 'existing-tag-user', got %q", payload.UserID)
 				}
-				if payload.TagNumber == nil || *payload.TagNumber != 22 {
-					t.Errorf("Expected TagNumber 22, got %v", payload.TagNumber)
-				}
-				// Check the reason field
-				if payload.Reason == "" {
-					t.Errorf("Expected non-empty reason, got empty")
+				if payload.IsReturningUser != true {
+					t.Errorf("Expected IsReturningUser to be true")
 				}
 				if msgs[0].Metadata.Get(middleware.CorrelationIDMetadataKey) != triggerMsg.Metadata.Get(middleware.CorrelationIDMetadataKey) {
 					t.Errorf("Correlation ID mismatch")

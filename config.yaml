@@ -4,6 +4,10 @@ postgres:
 nats:
   url: "nats://localhost:4222"
 
+jwt:
+  secret: "changeme"
+  default_ttl: 24h
+
 observability:
   loki_url: "http://loki.observability:3100"
   loki_tenant_id: "1"
@@ -14,7 +18,7 @@ observability:
   environment: "local"
 
 auth_callout:
-  enabled: true
+  enabled: false
   subject: "$SYS.REQ.USER.AUTH"
   # Account seed (SAA...) - used to sign user JWTs in centralized auth callout
   # In production, override via AUTH_CALLOUT_ISSUER_NKEY env var

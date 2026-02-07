@@ -27,13 +27,13 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 	metrics := &usermetrics.NoOpMetrics{}
 
 	tests := []struct {
-		name           string
-		payload        *userevents.UserSignupRequestedPayloadV1
-		setupFake      func(*FakeUserService)
-		wantLen        int
-		wantTopic      string
-		wantClubSync   bool
-		wantErr        bool
+		name         string
+		payload      *userevents.UserSignupRequestedPayloadV1
+		setupFake    func(*FakeUserService)
+		wantLen      int
+		wantTopic    string
+		wantClubSync bool
+		wantErr      bool
 	}{
 		{
 			name: "Successful signup with tag (Availability Check Flow)",
@@ -58,7 +58,7 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 				TagNumber: &testTagNumber,
 				GuildName: "Test Guild",
 			},
-			setupFake: func(f *FakeUserService) {},
+			setupFake:    func(f *FakeUserService) {},
 			wantLen:      2,
 			wantTopic:    sharedevents.TagAvailabilityCheckRequestedV1,
 			wantClubSync: true,

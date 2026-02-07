@@ -68,11 +68,16 @@ func (s *RoundService) ValidateRoundCreationWithClock(ctx context.Context, req *
 			return results.FailureResult[*roundtypes.CreateRoundResult](errors.New("start time is in the past")), nil
 		}
 
+		description := ""
+		if req.Description != nil {
+			description = string(*req.Description)
+		}
+
 		// Create round object
 		roundObject := roundtypes.Round{
 			ID:           sharedtypes.RoundID(uuid.New()),
 			Title:        req.Title,
-			Description:  req.Description,
+			Description:  roundtypes.Description(description),
 			Location:     req.Location,
 			StartTime:    (*sharedtypes.StartTime)(&parsedTime),
 			CreatedBy:    req.UserID,
@@ -227,6 +232,69 @@ func (s *RoundService) UpdateRoundMessageID(ctx context.Context, guildID sharedt
 		s.logger.InfoContext(ctx, "Successfully updated Discord message ID in DB",
 			attr.RoundID("round_id", roundID),
 			attr.String("discord_message_id", discordMessageID),
+			attr.String("guild_id_value", string(guildID)),
+		)
+
+		return results.SuccessResult[*roundtypes.Round, error](round), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if result.Success != nil {
+		return *result.Success, nil
+	}
+
+	if result.Failure != nil {
+		return nil, fmt.Errorf("operation failed: %w", *result.Failure)
+	}
+	return nil, errors.New("operation failed with unknown error")
+}
+
+// UpdateDiscordEventID updates the Discord native event ID for a round in the database
+// and returns the updated Round object.
+func (s *RoundService) UpdateDiscordEventID(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, discordEventID string) (*roundtypes.Round, error) {
+	// Note: guildID may be empty in some integration test flows where the test
+	// data was inserted without a guild. Log a warning but proceed; the DB
+	// layer filters by the provided guildID value.
+	if string(guildID) == "" {
+		s.logger.WarnContext(ctx, "UpdateDiscordEventID proceeding with empty guildID",
+			attr.RoundID("round_id", roundID),
+			attr.String("discord_event_id", discordEventID),
+		)
+	}
+
+	// Use a short-lived child context to protect DB work from premature cancellation
+	dbCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	result, err := withTelemetry(s, dbCtx, "UpdateDiscordEventID", roundID, func(ctx context.Context) (results.OperationResult[*roundtypes.Round, error], error) {
+		s.logger.InfoContext(ctx, "Attempting to update Discord event ID for round",
+			attr.RoundID("round_id", roundID),
+			attr.String("discord_event_id", discordEventID),
+			attr.Any("guild_id_type", fmt.Sprintf("%T", guildID)),
+			attr.Any("round_id_type", fmt.Sprintf("%T", roundID)),
+			attr.Any("discord_event_id_type", fmt.Sprintf("%T", discordEventID)),
+			attr.String("guild_id_value", string(guildID)),
+			attr.String("round_id_value", roundID.String()),
+		)
+
+		round, dbErr := s.repo.UpdateDiscordEventID(ctx, s.db, guildID, roundID, discordEventID)
+		if dbErr != nil {
+			s.metrics.RecordDBOperationError(ctx, "update_discord_event_id")
+			s.logger.ErrorContext(ctx, "Failed to update Discord event ID in DB",
+				attr.RoundID("round_id", roundID),
+				attr.String("discord_event_id", discordEventID),
+				attr.String("guild_id_value", string(guildID)),
+				attr.Error(dbErr),
+			)
+			return results.FailureResult[*roundtypes.Round](fmt.Errorf("database update failed: %w", dbErr)), fmt.Errorf("failed to update Discord event ID in DB: %w", dbErr)
+		}
+
+		s.metrics.RecordDBOperationSuccess(ctx, "update_discord_event_id")
+		s.logger.InfoContext(ctx, "Successfully updated Discord event ID in DB",
+			attr.RoundID("round_id", roundID),
+			attr.String("discord_event_id", discordEventID),
 			attr.String("guild_id_value", string(guildID)),
 		)
 

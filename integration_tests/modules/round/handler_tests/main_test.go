@@ -36,6 +36,7 @@ func TestMain(m *testing.M) {
 	os.Setenv("APP_ENV", oldAppEnv)
 
 	if testEnv != nil {
+		CleanupSharedDeps() // Cleanup shared dependencies first
 		testEnv.Cleanup()
 	}
 

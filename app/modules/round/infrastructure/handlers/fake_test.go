@@ -27,6 +27,7 @@ type FakeService struct {
 	ValidateRoundCreationWithClockFunc func(ctx context.Context, req *roundtypes.CreateRoundInput, timeParser roundtime.TimeParserInterface, clock roundutil.Clock) (roundservice.CreateRoundResult, error)
 	StoreRoundFunc                     func(ctx context.Context, round *roundtypes.Round, guildID sharedtypes.GuildID) (roundservice.CreateRoundResult, error)
 	UpdateRoundMessageIDFunc           func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, discordMessageID string) (*roundtypes.Round, error)
+	UpdateDiscordEventIDFunc           func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, discordEventID string) (*roundtypes.Round, error)
 
 	// Update Round
 	ValidateRoundUpdateWithClockFunc func(ctx context.Context, req *roundtypes.UpdateRoundRequest, timeParser roundtime.TimeParserInterface, clock roundutil.Clock) (roundservice.UpdateRoundResult, error)
@@ -63,8 +64,9 @@ type FakeService struct {
 	ProcessRoundReminderFunc func(ctx context.Context, req *roundtypes.ProcessRoundReminderRequest) (roundservice.ProcessRoundReminderResult, error)
 
 	// Retrieve Round
-	GetRoundFunc          func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (results.OperationResult[*roundtypes.Round, error], error)
-	GetRoundsForGuildFunc func(ctx context.Context, guildID sharedtypes.GuildID) ([]*roundtypes.Round, error)
+	GetRoundFunc                 func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (results.OperationResult[*roundtypes.Round, error], error)
+	GetRoundsForGuildFunc        func(ctx context.Context, guildID sharedtypes.GuildID) ([]*roundtypes.Round, error)
+	GetRoundByDiscordEventIDFunc func(ctx context.Context, guildID sharedtypes.GuildID, discordEventID string) (*roundtypes.Round, error)
 
 	// Schedule Round Events
 	ScheduleRoundEventsFunc func(ctx context.Context, req *roundtypes.ScheduleRoundEventsRequest) (roundservice.ScheduleRoundEventsResult, error)
@@ -119,6 +121,14 @@ func (f *FakeService) UpdateRoundMessageID(ctx context.Context, guildID sharedty
 	f.record("UpdateRoundMessageID")
 	if f.UpdateRoundMessageIDFunc != nil {
 		return f.UpdateRoundMessageIDFunc(ctx, guildID, roundID, discordMessageID)
+	}
+	return nil, nil
+}
+
+func (f *FakeService) UpdateDiscordEventID(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, discordEventID string) (*roundtypes.Round, error) {
+	f.record("UpdateDiscordEventID")
+	if f.UpdateDiscordEventIDFunc != nil {
+		return f.UpdateDiscordEventIDFunc(ctx, guildID, roundID, discordEventID)
 	}
 	return nil, nil
 }
@@ -313,6 +323,14 @@ func (f *FakeService) GetRoundsForGuild(ctx context.Context, guildID sharedtypes
 		return f.GetRoundsForGuildFunc(ctx, guildID)
 	}
 	return []*roundtypes.Round{}, nil
+}
+
+func (f *FakeService) GetRoundByDiscordEventID(ctx context.Context, guildID sharedtypes.GuildID, discordEventID string) (*roundtypes.Round, error) {
+	f.record("GetRoundByDiscordEventID")
+	if f.GetRoundByDiscordEventIDFunc != nil {
+		return f.GetRoundByDiscordEventIDFunc(ctx, guildID, discordEventID)
+	}
+	return nil, nil
 }
 
 // Schedule Round Events

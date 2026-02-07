@@ -30,14 +30,15 @@ type FakeRepository struct {
 	GetClubMembershipsByUserUUIDFn  func(ctx context.Context, db bun.IDB, userUUID uuid.UUID) ([]*ClubMembership, error)
 	GetClubMembershipsByUserUUIDsFn func(ctx context.Context, db bun.IDB, userUUIDs []uuid.UUID) ([]*ClubMembership, error)
 
-	GetUserByUserIDFn          func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID) (*UserWithMembership, error)
-	GetUserRoleFn              func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID) (sharedtypes.UserRoleEnum, error)
-	UpdateUserRoleFn           func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, role sharedtypes.UserRoleEnum) error
-	FindByUDiscUsernameFn      func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, username string) (*UserWithMembership, error)
-	FindByUDiscNameFn          func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, name string) (*UserWithMembership, error)
-	GetUsersByUDiscNamesFn     func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, names []string) ([]UserWithMembership, error)
-	GetUsersByUDiscUsernamesFn func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, usernames []string) ([]UserWithMembership, error)
-	FindByUDiscNameFuzzyFn     func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, partialName string) ([]*UserWithMembership, error)
+	GetUserByUserIDFn           func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID) (*UserWithMembership, error)
+	GetUserRoleFn               func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID) (sharedtypes.UserRoleEnum, error)
+	UpdateUserRoleFn            func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, role sharedtypes.UserRoleEnum) error
+	FindByUDiscUsernameFn       func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, username string) (*UserWithMembership, error)
+	FindGlobalByUDiscUsernameFn func(ctx context.Context, db bun.IDB, username string) (*User, error)
+	FindByUDiscNameFn           func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, name string) (*UserWithMembership, error)
+	GetUsersByUDiscNamesFn      func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, names []string) ([]UserWithMembership, error)
+	GetUsersByUDiscUsernamesFn  func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, usernames []string) ([]UserWithMembership, error)
+	FindByUDiscNameFuzzyFn      func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, partialName string) ([]*UserWithMembership, error)
 	// Profile operations
 	UpdateProfileFn func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, displayName string, avatarHash string) error
 
@@ -217,6 +218,13 @@ func (f *FakeRepository) UpdateUserRole(ctx context.Context, db bun.IDB, userID 
 func (f *FakeRepository) FindByUDiscUsername(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, username string) (*UserWithMembership, error) {
 	if f.FindByUDiscUsernameFn != nil {
 		return f.FindByUDiscUsernameFn(ctx, db, guildID, username)
+	}
+	return nil, nil
+}
+
+func (f *FakeRepository) FindGlobalByUDiscUsername(ctx context.Context, db bun.IDB, username string) (*User, error) {
+	if f.FindGlobalByUDiscUsernameFn != nil {
+		return f.FindGlobalByUDiscUsernameFn(ctx, db, username)
 	}
 	return nil, nil
 }

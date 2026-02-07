@@ -17,10 +17,16 @@ func (h *RoundHandlers) HandleCreateRoundRequest(
 ) ([]handlerwrapper.Result, error) {
 	clock := h.extractAnchorClock(ctx)
 
+	description := ""
+	if payload.Description != nil {
+		description = string(*payload.Description)
+	}
+
+	descVal := roundtypes.Description(description)
 	req := &roundtypes.CreateRoundInput{
 		GuildID:     payload.GuildID,
 		Title:       roundtypes.Title(payload.Title),
-		Description: roundtypes.Description(payload.Description),
+		Description: &descVal,
 		Location:    roundtypes.Location(payload.Location),
 		StartTime:   payload.StartTime,
 		Timezone:    string(payload.Timezone),

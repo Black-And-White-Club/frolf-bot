@@ -96,7 +96,7 @@ func TestUserService_CreateUser(t *testing.T) {
 			},
 		},
 		{
-			name:    "domain failure - user already exists in guild",
+			name:    "success - user already exists in guild (idempotent)",
 			userID:  testUserID,
 			guildID: testGuildID,
 			setupFake: func(f *FakeUserRepository) {
@@ -111,8 +111,11 @@ func TestUserService_CreateUser(t *testing.T) {
 				if infraErr != nil {
 					t.Fatalf("unexpected infra error: %v", infraErr)
 				}
-				if res.Failure == nil || !errors.Is(*res.Failure, ErrUserAlreadyExists) {
-					t.Errorf("expected ErrUserAlreadyExists, got %v", res.Failure)
+				if res.Success == nil {
+					t.Fatalf("expected success, got failure: %v", res.Failure)
+				}
+				if !(*res.Success).IsReturningUser {
+					t.Errorf("expected IsReturningUser to be true")
 				}
 			},
 		},

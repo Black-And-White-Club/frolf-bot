@@ -38,6 +38,21 @@ func (a *UserLookupAdapter) FindByNormalizedUDiscUsername(ctx context.Context, d
 	return &roundservice.UserIdentity{UserID: user.User.GetUserID()}, nil
 }
 
+func (a *UserLookupAdapter) FindGlobalByNormalizedUDiscUsername(ctx context.Context, db bun.IDB, normalizedUsername string) (*roundservice.UserIdentity, error) {
+	if db == nil {
+		db = a.db
+	}
+	user, err := a.userDB.FindGlobalByUDiscUsername(ctx, db, normalizedUsername)
+	if err != nil {
+		if err == userdb.ErrNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return &roundservice.UserIdentity{UserID: user.GetUserID()}, nil
+}
+
 func (a *UserLookupAdapter) FindByNormalizedUDiscDisplayName(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, normalizedDisplayName string) (*roundservice.UserIdentity, error) {
 	if db == nil {
 		db = a.db

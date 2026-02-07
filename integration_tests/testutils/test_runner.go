@@ -207,7 +207,7 @@ func RunTest(t *testing.T, tc TestCase, env *TestEnvironment) {
 			}
 		}
 		// Polling interval
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 	}
 
 	// 5. Final Attempt: If we timed out, run validation one last time with the REAL T
@@ -297,7 +297,7 @@ func WaitForMessages(
 	ctx, cancel := context.WithTimeout(env.Ctx, timeout)
 	defer cancel()
 
-	ticker := time.NewTicker(50 * time.Millisecond)
+	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 
 	for {

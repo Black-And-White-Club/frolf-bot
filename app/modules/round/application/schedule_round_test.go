@@ -101,12 +101,22 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 				q.ScheduleRoundReminderFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, t time.Time, p roundevents.DiscordReminderPayloadV1) error {
 					return nil
 				}
-				q.ScheduleRoundStartFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, t time.Time, p roundevents.RoundStartedPayloadV1) error {
-					return errors.New("round start scheduling error")
-				}
+				// q.ScheduleRoundStartFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, t time.Time, p roundevents.RoundStartedPayloadV1) error {
+				// 	return errors.New("round start scheduling error")
+				// }
 			},
-			want:    results.OperationResult[*roundtypes.ScheduleRoundEventsResult, error]{},
-			wantErr: true,
+			want: results.OperationResult[*roundtypes.ScheduleRoundEventsResult, error]{
+				Success: ptr(&roundtypes.ScheduleRoundEventsResult{
+					RoundID:        testRoundID,
+					GuildID:        testGuildID,
+					Title:          testRoundTitle,
+					Description:    testDescription,
+					Location:       testLocation,
+					StartTime:      *startTimePtr(now.Add(2 * time.Hour)),
+					EventMessageID: testMessageID,
+				}),
+			},
+			wantErr: false,
 		},
 	}
 

@@ -2,12 +2,14 @@ package roundservice
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
+	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
 )
 
 // GetRound retrieves the round from the database.
@@ -72,4 +74,44 @@ func (s *RoundService) GetRoundsForGuild(ctx context.Context, guildID sharedtype
 	)
 
 	return rounds, nil
+}
+
+// GetRoundByDiscordEventID retrieves a round by its Discord native event ID.
+// This is used for RSVP resolution when the discord-service's in-memory map is empty.
+func (s *RoundService) GetRoundByDiscordEventID(ctx context.Context, guildID sharedtypes.GuildID, discordEventID string) (*roundtypes.Round, error) {
+	ctx, span := s.tracer.Start(ctx, "GetRoundByDiscordEventID")
+	defer span.End()
+
+	s.logger.InfoContext(ctx, "Getting round by Discord event ID",
+		attr.String("discord_event_id", discordEventID),
+		attr.String("guild_id", string(guildID)),
+	)
+
+	round, err := s.repo.GetRoundByDiscordEventID(ctx, s.db, guildID, discordEventID)
+	if err != nil {
+		if errors.Is(err, rounddb.ErrNotFound) {
+			s.logger.InfoContext(ctx, "Round not found for Discord Event ID",
+				attr.String("discord_event_id", discordEventID),
+				attr.String("guild_id", string(guildID)),
+			)
+			return nil, ErrRoundNotFound
+		}
+
+		s.logger.ErrorContext(ctx, "Failed to retrieve round by Discord event ID",
+			attr.String("discord_event_id", discordEventID),
+			attr.String("guild_id", string(guildID)),
+			attr.Error(err),
+		)
+		s.metrics.RecordDBOperationError(ctx, "GetRoundByDiscordEventID")
+		return nil, fmt.Errorf("failed to get round by discord event ID: %w", err)
+	}
+
+	s.logger.InfoContext(ctx, "Round retrieved by Discord event ID",
+		attr.String("discord_event_id", discordEventID),
+		attr.String("guild_id", string(guildID)),
+		attr.RoundID("round_id", round.ID),
+	)
+
+	s.metrics.RecordDBOperationSuccess(ctx, "GetRoundByDiscordEventID")
+	return round, nil
 }

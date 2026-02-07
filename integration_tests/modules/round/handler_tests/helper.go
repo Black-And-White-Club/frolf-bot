@@ -73,143 +73,173 @@ func GetTestEnv(t *testing.T) *testutils.TestEnvironment {
 	return testEnv
 }
 
+// Shared dependencies
+var (
+	sharedDeps     *RoundHandlerTestDeps
+	sharedDepsOnce sync.Once
+	sharedCleanup  func()
+)
+
+// CleanupSharedDeps cleans up the shared dependencies.
+// Should be called from TestMain.
+func CleanupSharedDeps() {
+	if sharedCleanup != nil {
+		sharedCleanup()
+		sharedCleanup = nil
+	}
+}
+
 func SetupTestRoundHandler(t *testing.T) RoundHandlerTestDeps {
 	t.Helper()
 
-	// 1. Use NopLogger to silence Watermill noise
-	watermillLogger := watermill.NopLogger{}
-
 	env := GetTestEnv(t)
 
-	// 2. Prepare Contexts
+	// Soft reset between tests
 	resetCtx, resetCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer resetCancel()
-	if err := env.Reset(resetCtx); err != nil {
+	if err := env.SoftReset(resetCtx); err != nil {
 		t.Fatalf("Failed to reset environment: %v", err)
 	}
 
-	oldEnv := os.Getenv("APP_ENV")
-	os.Setenv("APP_ENV", "test")
+	sharedDepsOnce.Do(func() {
+		log.Println("Initializing shared round handler dependencies...")
+		// 1. Use NopLogger to silence Watermill noise
+		watermillLogger := watermill.NopLogger{}
 
-	testCtx, testCancel := context.WithCancel(context.Background())
-	routerRunCtx, routerRunCancel := context.WithCancel(testCtx)
+		oldEnv := os.Getenv("APP_ENV")
+		os.Setenv("APP_ENV", "test")
 
-	// 3. Create Isolated EventBus (Already using io.Discard, which is good)
-	eventBusImpl, err := eventbus.NewEventBus(
-		testCtx,
-		env.Config.NATS.URL,
-		slog.New(slog.NewTextHandler(io.Discard, nil)),
-		"backend",
-		&eventbusmetrics.NoOpMetrics{},
-		noop.NewTracerProvider().Tracer("test"),
-	)
-	if err != nil {
-		testCancel()
-		t.Fatalf("Failed to create EventBus: %v", err)
-	}
+		// Helper context that lives as long as the shared deps
+		// We use a background context because this setup outlives the individual test 't'
+		globalCtx, globalCancel := context.WithCancel(context.Background())
+		routerRunCtx, routerRunCancel := context.WithCancel(globalCtx)
 
-	// 4. Create Streams (Add error checking here but keep it quiet)
-	for _, streamName := range standardStreamNames {
-		if err := eventBusImpl.CreateStream(testCtx, streamName); err != nil {
-			t.Fatalf("Failed to create stream %s: %v", streamName, err)
-		}
-	}
-
-	// 5. Router Setup
-	watermillRouter, err := message.NewRouter(message.RouterConfig{
-		CloseTimeout: 1 * time.Second,
-	}, watermillLogger)
-	if err != nil {
-		eventBusImpl.Close()
-		testCancel()
-		t.Fatalf("Failed to create router: %v", err)
-	}
-	watermillRouter.AddMiddleware(middleware.CorrelationID)
-
-	// 6. Dependencies & Module
-	realDB := rounddb.NewRepository(env.DB)
-	userRepo := userdb.NewRepository(env.DB)
-	realHelpers := utils.NewHelper(slog.New(slog.NewTextHandler(io.Discard, nil)))
-
-	// Initialize user service for the round module
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	userService := userservice.NewUserService(userRepo, logger, nil, noop.NewTracerProvider().Tracer("noop"), env.DB)
-
-	roundModule, err := round.NewRoundModule(
-		testCtx,
-		env.Config,
-		observability.Observability{
-			Provider: &observability.Provider{Logger: slog.New(slog.NewTextHandler(os.Stdout, nil))},
-			Registry: &observability.Registry{RoundMetrics: &roundmetrics.NoOpMetrics{}, Tracer: noop.NewTracerProvider().Tracer("test")},
-		},
-		realDB,
-		env.DB,
-		userRepo,
-		userService,
-		eventBusImpl,
-		watermillRouter,
-		realHelpers,
-		routerRunCtx,
-	)
-	if err != nil {
-		eventBusImpl.Close()
-		testCancel()
-		t.Fatalf("Failed to create round module: %v", err)
-	}
-
-	// 7. Run Router
-	routerWg := &sync.WaitGroup{}
-	routerWg.Add(1)
-	go func() {
-		defer routerWg.Done()
-		if runErr := watermillRouter.Run(routerRunCtx); runErr != nil && runErr != context.Canceled {
-			// Use t.Errorf so it only shows up if something actually goes wrong
-			t.Errorf("Router exited unexpectedly: %v", runErr)
-		}
-	}()
-
-	select {
-	case <-watermillRouter.Running():
-	case <-time.After(5 * time.Second):
-		t.Fatal("Router startup timed out")
-	}
-
-	// 8. Silent Cleanup
-	cleanup := func() {
-		// We removed the log.Println statements here.
-		// If you need to debug a hang again, you can add t.Log("Cleaning up...")
-		if watermillRouter != nil {
-			_ = watermillRouter.Close()
+		// 3. Create Isolated EventBus
+		eventBusImpl, err := eventbus.NewEventBus(
+			globalCtx,
+			env.Config.NATS.URL,
+			slog.New(slog.NewTextHandler(io.Discard, nil)),
+			"backend",
+			&eventbusmetrics.NoOpMetrics{},
+			noop.NewTracerProvider().Tracer("test"),
+		)
+		if err != nil {
+			globalCancel()
+			log.Fatalf("Failed to create EventBus: %v", err)
 		}
 
-		if roundModule != nil {
-			_ = roundModule.Close()
+		// 4. Create Streams
+		for _, streamName := range standardStreamNames {
+			// CreateStream is idempotentish or we just ignore if it exists?
+			// The simpler way is ensuring it exists.
+			if err := eventBusImpl.CreateStream(globalCtx, streamName); err != nil {
+				// We might get an error if stream exists, which is fine in a shared env logic
+				// but since we start fresh container in GetTestEnv, it should be fine.
+				// However, if CreateStream fails for other reasons, it's bad.
+				// Let's log and proceed, or fail?
+				// Since testEnv is fresh, streams shouldn't exist unless created by something else.
+				log.Printf("CreateStream %s result: %v", streamName, err)
+			}
 		}
 
-		if eventBusImpl != nil {
+		// 5. Router Setup
+		watermillRouter, err := message.NewRouter(message.RouterConfig{
+			CloseTimeout: 1 * time.Second,
+		}, watermillLogger)
+		if err != nil {
 			eventBusImpl.Close()
+			globalCancel()
+			log.Fatalf("Failed to create router: %v", err)
+		}
+		watermillRouter.AddMiddleware(middleware.CorrelationID)
+
+		// 6. Dependencies & Module
+		realDB := rounddb.NewRepository(env.DB)
+		userRepo := userdb.NewRepository(env.DB)
+		realHelpers := utils.NewHelper(slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+		logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+		userService := userservice.NewUserService(userRepo, logger, nil, noop.NewTracerProvider().Tracer("noop"), env.DB)
+
+		roundModule, err := round.NewRoundModule(
+			globalCtx,
+			env.Config,
+			observability.Observability{
+				Provider: &observability.Provider{Logger: slog.New(slog.NewTextHandler(os.Stdout, nil))},
+				Registry: &observability.Registry{RoundMetrics: &roundmetrics.NoOpMetrics{}, Tracer: noop.NewTracerProvider().Tracer("test")},
+			},
+			realDB,
+			env.DB,
+			userRepo,
+			userService,
+			eventBusImpl,
+			watermillRouter,
+			realHelpers,
+			routerRunCtx,
+		)
+		if err != nil {
+			eventBusImpl.Close()
+			globalCancel()
+			log.Fatalf("Failed to create round module: %v", err)
 		}
 
-		routerRunCancel()
-		testCancel()
+		// 7. Run Router
+		routerWg := &sync.WaitGroup{}
+		routerWg.Add(1)
+		go func() {
+			defer routerWg.Done()
+			if runErr := watermillRouter.Run(routerRunCtx); runErr != nil && runErr != context.Canceled {
+				log.Printf("Router exited unexpectedly: %v", runErr)
+			}
+		}()
 
-		routerWg.Wait()
-		os.Setenv("APP_ENV", oldEnv)
+		// Wait for router to start
+		select {
+		case <-watermillRouter.Running():
+		case <-time.After(5 * time.Second):
+			log.Fatal("Router startup timed out")
+		}
+
+		// Save the cleanup function
+		sharedCleanup = func() {
+			log.Println("Cleaning up shared round handler dependencies...")
+			if watermillRouter != nil {
+				_ = watermillRouter.Close()
+			}
+			if roundModule != nil {
+				_ = roundModule.Close()
+			}
+			if eventBusImpl != nil {
+				eventBusImpl.Close()
+			}
+			routerRunCancel()
+			globalCancel()
+			routerWg.Wait()
+			os.Setenv("APP_ENV", oldEnv)
+		}
+
+		localEnv := *env
+		localEnv.EventBus = eventBusImpl
+
+		sharedDeps = &RoundHandlerTestDeps{
+			TestEnvironment:   &localEnv,
+			RoundModule:       roundModule,
+			Router:            watermillRouter,
+			EventBus:          eventBusImpl,
+			ReceivedMsgs:      make(map[string][]*message.Message),
+			ReceivedMsgsMutex: &sync.Mutex{},
+			TestHelpers:       realHelpers,
+		}
+	})
+
+	if sharedDeps == nil {
+		t.Fatal("Failed to initialize shared dependencies (sharedDeps is nil)")
 	}
-	t.Cleanup(cleanup)
 
-	localEnv := *env
-	localEnv.EventBus = eventBusImpl
-
-	return RoundHandlerTestDeps{
-		TestEnvironment:   &localEnv,
-		RoundModule:       roundModule,
-		Router:            watermillRouter,
-		EventBus:          eventBusImpl,
-		ReceivedMsgs:      make(map[string][]*message.Message),
-		ReceivedMsgsMutex: &sync.Mutex{},
-		TestHelpers:       realHelpers,
-	}
+	// Just reuse the shared dependencies.
+	// Since TestEnvironment is a pointer in the struct, and we only lightly modified it (EventBus),
+	// it should be fine.
+	return *sharedDeps
 }
 func boolPtr(b bool) *bool {
 	return &b

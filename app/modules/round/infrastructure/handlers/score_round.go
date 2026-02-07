@@ -153,7 +153,7 @@ func (h *RoundHandlers) HandleScoreBulkUpdateRequest(
 				RoundID:        s.RoundID,
 				EventMessageID: payload.MessageID,
 				ChannelID:      payload.ChannelID,
-				Participants:   nil, // Service doesn't return updated participants for bulk yet
+				Participants:   s.Participants, // Use the participants returned from service
 			}
 		},
 		func(err error) any {

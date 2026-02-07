@@ -16,6 +16,7 @@ type Service interface {
 	ValidateRoundCreationWithClock(ctx context.Context, req *roundtypes.CreateRoundInput, timeParser roundtime.TimeParserInterface, clock roundutil.Clock) (CreateRoundResult, error)
 	StoreRound(ctx context.Context, round *roundtypes.Round, guildID sharedtypes.GuildID) (CreateRoundResult, error)
 	UpdateRoundMessageID(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, discordMessageID string) (*roundtypes.Round, error)
+	UpdateDiscordEventID(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, discordEventID string) (*roundtypes.Round, error)
 
 	// Update Round
 	ValidateRoundUpdateWithClock(ctx context.Context, req *roundtypes.UpdateRoundRequest, timeParser roundtime.TimeParserInterface, clock roundutil.Clock) (UpdateRoundResult, error)
@@ -54,6 +55,7 @@ type Service interface {
 	// Retrieve Round
 	GetRound(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (results.OperationResult[*roundtypes.Round, error], error)
 	GetRoundsForGuild(ctx context.Context, guildID sharedtypes.GuildID) ([]*roundtypes.Round, error)
+	GetRoundByDiscordEventID(ctx context.Context, guildID sharedtypes.GuildID, discordEventID string) (*roundtypes.Round, error)
 
 	// Schedule Round Events
 	ScheduleRoundEvents(ctx context.Context, req *roundtypes.ScheduleRoundEventsRequest) (ScheduleRoundEventsResult, error)
