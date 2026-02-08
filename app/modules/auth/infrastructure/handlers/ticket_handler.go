@@ -57,7 +57,9 @@ func (h *AuthHandlers) HandleHTTPTicket(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	resp, err := h.service.GetTicket(ctx, cookie.Value)
+	activeClubUUID := r.URL.Query().Get("active_club")
+
+	resp, err := h.service.GetTicket(ctx, cookie.Value, activeClubUUID)
 	if err != nil {
 		h.httpError(w, r, "unauthorized", http.StatusUnauthorized, err)
 		return

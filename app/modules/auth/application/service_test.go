@@ -456,7 +456,7 @@ func TestService_GetTicket(t *testing.T) {
 			}
 
 			s := NewService(&FakeJWTProvider{}, natsBuilder, repo, nil, config, logger, tracer, nil)
-			resp, err := s.GetTicket(ctx, tt.refreshToken)
+			resp, err := s.GetTicket(ctx, tt.refreshToken, "")
 			tt.verify(t, resp, err)
 		})
 	}

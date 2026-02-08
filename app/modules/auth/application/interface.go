@@ -21,7 +21,7 @@ type Service interface {
 	LoginUser(ctx context.Context, oneTimeToken string) (*LoginResponse, error)
 
 	// GetTicket validates a refresh token and mints a short-lived NATS ticket.
-	GetTicket(ctx context.Context, refreshToken string) (*TicketResponse, error)
+	GetTicket(ctx context.Context, refreshToken string, activeClubUUID string) (*TicketResponse, error)
 
 	// LogoutUser revokes a refresh token.
 	LogoutUser(ctx context.Context, refreshToken string) error

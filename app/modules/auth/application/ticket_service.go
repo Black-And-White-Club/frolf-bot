@@ -114,7 +114,7 @@ func (s *service) LoginUser(ctx context.Context, oneTimeToken string) (*LoginRes
 }
 
 // GetTicket validates a refresh token and mints a short-lived NATS ticket.
-func (s *service) GetTicket(ctx context.Context, rawToken string) (*TicketResponse, error) {
+func (s *service) GetTicket(ctx context.Context, rawToken string, activeClubUUID string) (*TicketResponse, error) {
 	ctx, span := s.tracer.Start(ctx, "AuthService.GetTicket")
 	defer span.End()
 
@@ -155,7 +155,7 @@ func (s *service) GetTicket(ctx context.Context, rawToken string) (*TicketRespon
 		return nil, fmt.Errorf("failed to load memberships: %w", err)
 	}
 
-	var activeClubUUID uuid.UUID
+	var activeUUID uuid.UUID
 	var activeRole authdomain.Role = authdomain.RolePlayer
 	var clubs []authdomain.ClubRole
 
@@ -164,8 +164,30 @@ func (s *service) GetTicket(ctx context.Context, rawToken string) (*TicketRespon
 	}
 
 	if len(memberships) > 0 {
-		activeClubUUID = memberships[0].ClubUUID
+		// Default to first membership
+		activeUUID = memberships[0].ClubUUID
 		activeRole = authdomain.Role(memberships[0].Role)
+
+		// If a specific active club was requested, try to find it
+		if activeClubUUID != "" {
+			if targetUUID, err := uuid.Parse(activeClubUUID); err == nil {
+				found := false
+				for _, m := range memberships {
+					if m.ClubUUID == targetUUID {
+						activeUUID = m.ClubUUID
+						activeRole = authdomain.Role(m.Role)
+						found = true
+						break
+					}
+				}
+				if !found {
+					s.logger.WarnContext(ctx, "Requested active club not found in user memberships",
+						attr.String("requested_uuid", activeClubUUID),
+						attr.String("user_uuid", token.UserUUID.String()),
+					)
+				}
+			}
+		}
 
 		// Get global user for fallback display name
 		var globalDisplayName string
@@ -197,16 +219,16 @@ func (s *service) GetTicket(ctx context.Context, rawToken string) (*TicketRespon
 	// Resolve Discord Guild ID from active club
 	// This is critical for NATS permissions if the frontend subscribes using Guild ID
 	var guildID string
-	if activeClubUUID != uuid.Nil {
-		if gid, err := s.repo.GetDiscordGuildIDByClubUUID(ctx, nil, activeClubUUID); err == nil {
+	if activeUUID != uuid.Nil {
+		if gid, err := s.repo.GetDiscordGuildIDByClubUUID(ctx, nil, activeUUID); err == nil {
 			guildID = string(gid)
 		} else {
 			s.logger.WarnContext(ctx, "Failed to resolve Discord Guild ID for club",
-				attr.String("club_uuid", activeClubUUID.String()),
+				attr.String("club_uuid", activeUUID.String()),
 				attr.Error(err),
 			)
 			// Fallback to club UUID string if resolution fails, though this may not match frontend expectations
-			guildID = activeClubUUID.String()
+			guildID = activeUUID.String()
 		}
 	}
 
@@ -215,7 +237,7 @@ func (s *service) GetTicket(ctx context.Context, rawToken string) (*TicketRespon
 		UserID:           token.UserUUID.String(), // Use UUID as ID for now since we are decoupling
 		UserUUID:         token.UserUUID,
 		GuildID:          guildID,
-		ActiveClubUUID:   activeClubUUID,
+		ActiveClubUUID:   activeUUID,
 		Role:             activeRole,
 		Clubs:            clubs,
 		RefreshTokenHash: newHashed,
