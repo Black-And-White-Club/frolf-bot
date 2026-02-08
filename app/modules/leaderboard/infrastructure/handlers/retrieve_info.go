@@ -7,6 +7,7 @@ import (
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
+	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
@@ -47,10 +48,14 @@ func (h *LeaderboardHandlers) HandleGetLeaderboardRequest(
 
 	// Lookup profiles
 	profiles := make(map[sharedtypes.DiscordID]*usertypes.UserProfile)
+	var syncRequests []*userevents.UserProfileSyncRequestPayloadV1
+
 	if len(userIDs) > 0 {
-		profileResult, _ := h.userService.LookupProfiles(ctx, userIDs)
+		profileResult, _ := h.userService.LookupProfiles(ctx, userIDs, payload.GuildID)
 		if profileResult.IsSuccess() {
-			profiles = *profileResult.Success
+			resp := profileResult.Success
+			profiles = (*resp).Profiles
+			syncRequests = (*resp).SyncRequests
 		}
 	}
 
@@ -66,7 +71,16 @@ func (h *LeaderboardHandlers) HandleGetLeaderboardRequest(
 		topic = replyTo
 	}
 
-	return []handlerwrapper.Result{{Topic: topic, Payload: resp}}, nil
+	results := []handlerwrapper.Result{{Topic: topic, Payload: resp}}
+
+	for _, syncReq := range syncRequests {
+		results = append(results, handlerwrapper.Result{
+			Topic:   userevents.UserProfileSyncRequestTopicV1,
+			Payload: syncReq,
+		})
+	}
+
+	return results, nil
 }
 
 // HandleGetTagByUserIDRequest performs a single tag lookup.

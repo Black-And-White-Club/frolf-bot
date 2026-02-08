@@ -10,7 +10,6 @@ import (
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/uptrace/bun"
@@ -352,7 +351,7 @@ func TestUserService_LookupProfiles(t *testing.T) {
 		name      string
 		ids       []sharedtypes.DiscordID
 		setupFake func(*FakeUserRepository)
-		verify    func(t *testing.T, res results.OperationResult[map[sharedtypes.DiscordID]*usertypes.UserProfile, error], err error)
+		verify    func(t *testing.T, res results.OperationResult[*LookupProfilesResponse, error], err error)
 	}{
 		{
 			name: "success with partial match",
@@ -364,14 +363,15 @@ func TestUserService_LookupProfiles(t *testing.T) {
 					}, nil
 				}
 			},
-			verify: func(t *testing.T, res results.OperationResult[map[sharedtypes.DiscordID]*usertypes.UserProfile, error], err error) {
+			verify: func(t *testing.T, res results.OperationResult[*LookupProfilesResponse, error], err error) {
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
 				if !res.IsSuccess() {
 					t.Fatalf("expected success")
 				}
-				profiles := *res.Success
+				resp := *res.Success
+				profiles := resp.Profiles
 				if len(profiles) != 2 {
 					t.Errorf("expected 2 profiles, got %d", len(profiles))
 				}
@@ -392,7 +392,7 @@ func TestUserService_LookupProfiles(t *testing.T) {
 				tt.setupFake(fakeRepo)
 			}
 			s := NewUserService(fakeRepo, loggerfrolfbot.NoOpLogger, &usermetrics.NoOpMetrics{}, noop.NewTracerProvider().Tracer("test"), nil)
-			res, err := s.LookupProfiles(ctx, tt.ids)
+			res, err := s.LookupProfiles(ctx, tt.ids, "")
 			tt.verify(t, res, err)
 		})
 	}

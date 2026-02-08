@@ -17,10 +17,16 @@ func (h *UserHandlers) HandleUserProfileUpdated(
 		"display_name", payload.DisplayName,
 	)
 
+	// Fallback to username if display name is missing
+	displayName := payload.DisplayName
+	if displayName == "" {
+		displayName = payload.Username
+	}
+
 	err := h.service.UpdateUserProfile(ctx,
 		payload.UserID,
 		payload.GuildID,
-		payload.DisplayName,
+		displayName,
 		payload.AvatarHash,
 	)
 

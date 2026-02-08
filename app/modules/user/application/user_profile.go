@@ -6,11 +6,17 @@ import (
 	"strconv"
 	"time"
 
+	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/uptrace/bun"
+)
+
+const (
+	// ProfileSyncStaleness defines how long we wait before re-syncing profile from Discord
+	ProfileSyncStaleness = 24 * time.Hour
 )
 
 // UpdateUserProfile updates user's display name and avatar hash.
@@ -72,6 +78,13 @@ func (s *UserService) UpdateUserProfile(
 				membership.Role = sharedtypes.UserRoleUser
 			}
 
+			// If the incoming display name is empty (e.g. from a partial sync),
+			// avoid overwriting a valid existing display name in the club membership.
+			if displayName == "" && existing != nil && existing.DisplayName != nil && *existing.DisplayName != "" {
+				displayNameToUse := *existing.DisplayName
+				membership.DisplayName = &displayNameToUse
+			}
+
 			if err := s.repo.UpsertClubMembership(ctx, db, membership); err != nil {
 				return results.OperationResult[bool, error]{}, err
 			}
@@ -91,17 +104,18 @@ func (s *UserService) UpdateUserProfile(
 func (s *UserService) LookupProfiles(
 	ctx context.Context,
 	userIDs []sharedtypes.DiscordID,
-) (results.OperationResult[map[sharedtypes.DiscordID]*usertypes.UserProfile, error], error) {
+	guildID sharedtypes.GuildID,
+) (results.OperationResult[*LookupProfilesResponse, error], error) {
 	userIdForTelemetry := sharedtypes.DiscordID("bulk")
 	if len(userIDs) > 0 {
 		userIdForTelemetry = userIDs[0] + "..."
 	}
 
-	op := func(ctx context.Context, db bun.IDB) (results.OperationResult[map[sharedtypes.DiscordID]*usertypes.UserProfile, error], error) {
-		return s.executeLookupProfiles(ctx, db, userIDs)
+	op := func(ctx context.Context, db bun.IDB) (results.OperationResult[*LookupProfilesResponse, error], error) {
+		return s.executeLookupProfiles(ctx, db, userIDs, guildID)
 	}
 
-	return withTelemetry(s, ctx, "LookupProfiles", userIdForTelemetry, func(ctx context.Context) (results.OperationResult[map[sharedtypes.DiscordID]*usertypes.UserProfile, error], error) {
+	return withTelemetry(s, ctx, "LookupProfiles", userIdForTelemetry, func(ctx context.Context) (results.OperationResult[*LookupProfilesResponse, error], error) {
 		return runInTx(s, ctx, op)
 	})
 }
@@ -110,35 +124,62 @@ func (s *UserService) executeLookupProfiles(
 	ctx context.Context,
 	db bun.IDB,
 	userIDs []sharedtypes.DiscordID,
-) (results.OperationResult[map[sharedtypes.DiscordID]*usertypes.UserProfile, error], error) {
+	guildID sharedtypes.GuildID,
+) (results.OperationResult[*LookupProfilesResponse, error], error) {
 	if len(userIDs) == 0 {
-		return results.SuccessResult[map[sharedtypes.DiscordID]*usertypes.UserProfile, error](make(map[sharedtypes.DiscordID]*usertypes.UserProfile)), nil
+		return results.SuccessResult[*LookupProfilesResponse, error](&LookupProfilesResponse{Profiles: make(map[sharedtypes.DiscordID]*usertypes.UserProfile)}), nil
 	}
 
 	users, err := s.repo.GetByUserIDs(ctx, db, userIDs)
 	if err != nil {
-		return results.FailureResult[map[sharedtypes.DiscordID]*usertypes.UserProfile](err), nil
+		return results.FailureResult[*LookupProfilesResponse, error](err), nil
 	}
 
-	result := make(map[sharedtypes.DiscordID]*usertypes.UserProfile, len(users))
+	responseProfiles := make(map[sharedtypes.DiscordID]*usertypes.UserProfile, len(users))
+	result := &LookupProfilesResponse{
+		Profiles:     responseProfiles,
+		SyncRequests: make([]*userevents.UserProfileSyncRequestPayloadV1, 0),
+	}
+
 	for _, u := range users {
-		result[u.GetUserID()] = &usertypes.UserProfile{
+		responseProfiles[u.GetUserID()] = &usertypes.UserProfile{
 			UserID:        u.GetUserID(),
 			DisplayName:   u.GetDisplayName(),
 			AvatarURL:     u.AvatarURL(64), // 64px for list views
 			UDiscUsername: u.UDiscUsername,
 			UDiscName:     u.UDiscName,
 		}
+
+		// Trigger profile sync if data is missing or stale
+		if guildID != "" {
+			needsSync := u.DisplayName == nil || *u.DisplayName == "" ||
+				u.ProfileUpdatedAt == nil ||
+				time.Since(*u.ProfileUpdatedAt) > ProfileSyncStaleness
+
+			if needsSync {
+				result.SyncRequests = append(result.SyncRequests, &userevents.UserProfileSyncRequestPayloadV1{
+					UserID:  u.GetUserID(),
+					GuildID: guildID,
+				})
+			}
+		}
 	}
 
 	// For users not in DB, generate default profiles
 	for _, id := range userIDs {
-		if _, exists := result[id]; !exists {
-			result[id] = s.generateDefaultProfile(id)
+		if _, exists := responseProfiles[id]; !exists {
+			responseProfiles[id] = s.generateDefaultProfile(id)
+			// Also request sync for new users we haven't seen before
+			if guildID != "" {
+				result.SyncRequests = append(result.SyncRequests, &userevents.UserProfileSyncRequestPayloadV1{
+					UserID:  id,
+					GuildID: guildID,
+				})
+			}
 		}
 	}
 
-	return results.SuccessResult[map[sharedtypes.DiscordID]*usertypes.UserProfile, error](result), nil
+	return results.SuccessResult[*LookupProfilesResponse, error](result), nil
 }
 
 func (s *UserService) generateDefaultProfile(userID sharedtypes.DiscordID) *usertypes.UserProfile {

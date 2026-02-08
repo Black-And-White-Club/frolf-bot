@@ -45,6 +45,14 @@ type MatchResult struct {
 
 type MatchResultResult = results.OperationResult[*MatchResult, error]
 
+// LookupProfilesResponse contains the retrieved profiles and any required sync actions.
+type LookupProfilesResponse struct {
+	Profiles     map[sharedtypes.DiscordID]*usertypes.UserProfile
+	SyncRequests []*userevents.UserProfileSyncRequestPayloadV1
+}
+
+type LookupProfilesResult = results.OperationResult[*LookupProfilesResponse, error]
+
 type Service interface {
 	// User Creation
 	CreateUser(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber, udiscUsername *string, udiscName *string) (UserResult, error)
@@ -61,7 +69,7 @@ type Service interface {
 
 	// User Profile
 	UpdateUserProfile(ctx context.Context, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, displayName, avatarHash string) error
-	LookupProfiles(ctx context.Context, userIDs []sharedtypes.DiscordID) (results.OperationResult[map[sharedtypes.DiscordID]*usertypes.UserProfile, error], error)
+	LookupProfiles(ctx context.Context, userIDs []sharedtypes.DiscordID, guildID sharedtypes.GuildID) (LookupProfilesResult, error)
 
 	// Identity Resolution
 	GetUUIDByDiscordID(ctx context.Context, discordID sharedtypes.DiscordID) (uuid.UUID, error)

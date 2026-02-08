@@ -5,17 +5,12 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"time"
 
-	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	authdomain "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/domain"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
-	"github.com/ThreeDotsLabs/watermill"
-	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/google/uuid"
 	"github.com/uptrace/bun"
 )
@@ -158,6 +153,7 @@ func (s *service) GetTicket(ctx context.Context, rawToken string, activeClubUUID
 	var activeUUID uuid.UUID
 	var activeRole authdomain.Role = authdomain.RolePlayer
 	var clubs []authdomain.ClubRole
+	var syncRequests []SyncRequest
 
 	if len(memberships) == 0 {
 		memberships = s.backfillClubMemberships(ctx, token.UserUUID)
@@ -192,8 +188,8 @@ func (s *service) GetTicket(ctx context.Context, rawToken string, activeClubUUID
 		// Get global user for fallback display name
 		var globalDisplayName string
 		user, err := s.repo.GetUserByUUID(ctx, nil, token.UserUUID)
-		if err == nil && user != nil && user.DisplayName != nil {
-			globalDisplayName = *user.DisplayName
+		if err == nil && user != nil {
+			globalDisplayName = user.GetDisplayName()
 		}
 
 		for _, m := range memberships {
@@ -205,7 +201,12 @@ func (s *service) GetTicket(ctx context.Context, rawToken string, activeClubUUID
 				time.Since(*m.SyncedAt) > ProfileSyncStaleness
 
 			if needsSync && m.ExternalID != nil {
-				s.requestProfileSync(ctx, *m.ExternalID, m.ClubUUID)
+				if gid, err := s.repo.GetDiscordGuildIDByClubUUID(ctx, nil, m.ClubUUID); err == nil {
+					syncRequests = append(syncRequests, SyncRequest{
+						UserID:  *m.ExternalID,
+						GuildID: string(gid),
+					})
+				}
 			}
 
 			clubs = append(clubs, authdomain.ClubRole{
@@ -276,6 +277,7 @@ func (s *service) GetTicket(ctx context.Context, rawToken string, activeClubUUID
 	return &TicketResponse{
 		NATSToken:    natsToken,
 		RefreshToken: newToken,
+		SyncRequests: syncRequests,
 	}, nil
 }
 
@@ -343,54 +345,4 @@ func resolveDisplayName(clubDisplayName *string, fallback string) string {
 		return *clubDisplayName
 	}
 	return fallback
-}
-
-// requestProfileSync publishes an async request to sync a user's profile from Discord.
-// This is fire-and-forget - failures are logged but don't block the ticket response.
-func (s *service) requestProfileSync(ctx context.Context, discordUserID string, clubUUID uuid.UUID) {
-	if s.eventBus == nil {
-		return
-	}
-
-	// Resolve guild ID from club UUID
-	guildID, err := s.repo.GetDiscordGuildIDByClubUUID(ctx, nil, clubUUID)
-	if err != nil {
-		s.logger.DebugContext(ctx, "Cannot request profile sync: failed to resolve guild ID",
-			attr.String("club_uuid", clubUUID.String()),
-			attr.Error(err),
-		)
-		return
-	}
-
-	payload := &userevents.UserProfileSyncRequestPayloadV1{
-		UserID:  sharedtypes.DiscordID(discordUserID),
-		GuildID: guildID,
-	}
-
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		s.logger.WarnContext(ctx, "Failed to marshal profile sync request",
-			attr.Error(err),
-		)
-		return
-	}
-
-	msg := message.NewMessage(watermill.NewUUID(), payloadBytes)
-	msg.Metadata.Set("topic", userevents.UserProfileSyncRequestTopicV1)
-	msg.Metadata.Set("user_id", discordUserID)
-	msg.Metadata.Set("guild_id", string(guildID))
-
-	if err := s.eventBus.Publish(userevents.UserProfileSyncRequestTopicV1, msg); err != nil {
-		s.logger.WarnContext(ctx, "Failed to publish profile sync request",
-			attr.Error(err),
-			attr.String("user_id", discordUserID),
-			attr.String("guild_id", string(guildID)),
-		)
-		return
-	}
-
-	s.logger.InfoContext(ctx, "Published profile sync request",
-		attr.String("user_id", discordUserID),
-		attr.String("guild_id", string(guildID)),
-	)
 }
