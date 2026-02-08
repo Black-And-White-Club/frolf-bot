@@ -24,6 +24,9 @@ func TestBuilder_ForRole(t *testing.T) {
 				UserUUID:       userUUID,
 				ActiveClubUUID: clubUUID,
 				Role:           authdomain.RolePlayer,
+				Clubs: []authdomain.ClubRole{
+					{ClubUUID: clubUUID, Role: authdomain.RolePlayer},
+				},
 			},
 			verify: func(t *testing.T, p *Permissions) {
 				// Subscribe patterns now use versioned format: round.*.v1.{id}
@@ -44,6 +47,9 @@ func TestBuilder_ForRole(t *testing.T) {
 				UserUUID:       userUUID,
 				ActiveClubUUID: clubUUID,
 				Role:           authdomain.RoleEditor,
+				Clubs: []authdomain.ClubRole{
+					{ClubUUID: clubUUID, Role: authdomain.RoleEditor},
+				},
 			},
 			verify: func(t *testing.T, p *Permissions) {
 				// Editor publish pattern: round.create.v1.{id}

@@ -41,21 +41,41 @@ func unique(strings []string) []string {
 
 // ForRole builds permissions based on the user's claims.
 func (b *Builder) ForRole(claims *authdomain.Claims) *Permissions {
-	clubUUID := claims.ActiveClubUUID.String()
 	userUUID := claims.UserUUID.String()
-	guildID := claims.GuildID
 	userID := claims.UserID
 
-	var perms *Permissions
-	switch claims.Role {
-	case authdomain.RoleViewer:
-		perms = b.viewerPermissions(clubUUID, guildID)
-	case authdomain.RolePlayer, authdomain.Role("User"):
-		perms = b.playerPermissions(clubUUID, userUUID, guildID, userID)
-	case authdomain.RoleEditor, authdomain.Role("Editor"):
-		perms = b.editorPermissions(clubUUID, userUUID, guildID, userID)
-	default:
-		perms = b.viewerPermissions(clubUUID, guildID)
+	perms := &Permissions{
+		Subscribe: PermissionSet{Allow: []string{}},
+		Publish:   PermissionSet{Allow: []string{}},
+	}
+
+	// Add permissions for each club membership
+	for _, membership := range claims.Clubs {
+		clubUUID := membership.ClubUUID.String()
+
+		// For now, we use a simple mapping for the legacy guild ID if it matches the active club.
+		// If we had the actual guild IDs for all clubs in the claims, we'd use them here.
+		// Since we don't, we primarily rely on the UUIDs which is the new standard.
+		var guildID string
+		if membership.ClubUUID == claims.ActiveClubUUID {
+			guildID = claims.GuildID
+		}
+
+		var clubPerms *Permissions
+		switch membership.Role {
+		case authdomain.RoleViewer:
+			clubPerms = b.viewerPermissions(clubUUID, guildID)
+		case authdomain.RolePlayer, authdomain.Role("User"):
+			clubPerms = b.playerPermissions(clubUUID, userUUID, guildID, userID)
+		case authdomain.RoleEditor, authdomain.Role("Editor"), authdomain.RoleAdmin:
+			clubPerms = b.editorPermissions(clubUUID, userUUID, guildID, userID)
+		default:
+			clubPerms = b.viewerPermissions(clubUUID, guildID)
+		}
+
+		// Merge permissions
+		perms.Subscribe.Allow = append(perms.Subscribe.Allow, clubPerms.Subscribe.Allow...)
+		perms.Publish.Allow = append(perms.Publish.Allow, clubPerms.Publish.Allow...)
 	}
 
 	// Add base permissions
