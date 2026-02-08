@@ -3,6 +3,7 @@ package roundhandlers
 import (
 	"context"
 
+	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
@@ -23,12 +24,16 @@ func (h *RoundHandlers) HandleRoundListRequest(
 	// Collect all user IDs from participants
 	userIDs := h.collectUserIDsFromRounds(rounds)
 
-	// Lookup profiles (best-effort, don't fail if this errors)
+	// Lookup profiles
 	profiles := make(map[sharedtypes.DiscordID]*usertypes.UserProfile)
+	var syncRequests []*userevents.UserProfileSyncRequestPayloadV1
+
 	if len(userIDs) > 0 {
-		result, _ := h.userService.LookupProfiles(ctx, userIDs)
+		result, _ := h.userService.LookupProfiles(ctx, userIDs, sharedtypes.GuildID(req.GuildID))
 		if result.IsSuccess() {
-			profiles = *result.Success
+			resp := result.Success
+			profiles = (*resp).Profiles
+			syncRequests = (*resp).SyncRequests
 		}
 	}
 
@@ -47,12 +52,21 @@ func (h *RoundHandlers) HandleRoundListRequest(
 		topic = replyTo
 	}
 
-	return []handlerwrapper.Result{
+	results := []handlerwrapper.Result{
 		{
 			Topic:   topic,
 			Payload: &response,
 		},
-	}, nil
+	}
+
+	for _, syncReq := range syncRequests {
+		results = append(results, handlerwrapper.Result{
+			Topic:   userevents.UserProfileSyncRequestTopicV1,
+			Payload: syncReq,
+		})
+	}
+
+	return results, nil
 }
 
 func (h *RoundHandlers) collectUserIDsFromRounds(rounds []*roundtypes.Round) []sharedtypes.DiscordID {

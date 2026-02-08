@@ -35,6 +35,12 @@ type LoginResponse struct {
 type TicketResponse struct {
 	NATSToken    string
 	RefreshToken string
+	SyncRequests []SyncRequest
+}
+
+type SyncRequest struct {
+	UserID  string
+	GuildID string
 }
 
 // NATSAuthRequest represents a NATS auth callout request.
@@ -67,7 +73,8 @@ type NATSAuthResponse struct {
 
 // MagicLinkResponse represents the response for magic link generation
 type MagicLinkResponse struct {
-	Success bool   `json:"success"`
-	URL     string `json:"url,omitempty"`
-	Error   string `json:"error,omitempty"`
+	Success   bool   `json:"success"`
+	URL       string `json:"url,omitempty"`
+	Error     string `json:"error,omitempty"`
+	NeedsSync bool   `json:"needs_sync,omitempty"`
 }

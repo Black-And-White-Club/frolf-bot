@@ -147,7 +147,7 @@ func TestAuthHandlers_HandleHTTPTicket(t *testing.T) {
 			name:        "success",
 			cookieValue: "old-token",
 			setupService: func(s *FakeService) {
-				s.GetTicketFunc = func(ctx context.Context, rt string) (*authservice.TicketResponse, error) {
+				s.GetTicketFunc = func(ctx context.Context, rt string, clubID string) (*authservice.TicketResponse, error) {
 					return &authservice.TicketResponse{NATSToken: "nats-jwt", RefreshToken: "rotated-token"}, nil
 				}
 			},

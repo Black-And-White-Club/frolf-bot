@@ -20,7 +20,7 @@ type FakeService struct {
 	ValidateTokenFunc         func(ctx context.Context, tokenString string) (*authdomain.Claims, error)
 	HandleNATSAuthRequestFunc func(ctx context.Context, req *authservice.NATSAuthRequest) (*authservice.NATSAuthResponse, error)
 	LoginUserFunc             func(ctx context.Context, oneTimeToken string) (*authservice.LoginResponse, error)
-	GetTicketFunc             func(ctx context.Context, refreshToken string) (*authservice.TicketResponse, error)
+	GetTicketFunc             func(ctx context.Context, refreshToken string, activeClubUUID string) (*authservice.TicketResponse, error)
 	LogoutUserFunc            func(ctx context.Context, refreshToken string) error
 }
 
@@ -52,9 +52,9 @@ func (f *FakeService) LoginUser(ctx context.Context, oneTimeToken string) (*auth
 	return &authservice.LoginResponse{RefreshToken: "fake-refresh-token", UserUUID: "test-uuid"}, nil
 }
 
-func (f *FakeService) GetTicket(ctx context.Context, refreshToken string) (*authservice.TicketResponse, error) {
+func (f *FakeService) GetTicket(ctx context.Context, refreshToken string, activeClubUUID string) (*authservice.TicketResponse, error) {
 	if f.GetTicketFunc != nil {
-		return f.GetTicketFunc(ctx, refreshToken)
+		return f.GetTicketFunc(ctx, refreshToken, activeClubUUID)
 	}
 	return &authservice.TicketResponse{NATSToken: "fake-nats-token", RefreshToken: "new-fake-refresh-token"}, nil
 }

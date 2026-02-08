@@ -149,7 +149,7 @@ var _ utils.Helpers = (*FakeHelpers)(nil)
 
 // FakeUserService implements userservice.Service for handler testing.
 type FakeUserService struct {
-	LookupProfilesFunc              func(ctx context.Context, userIDs []sharedtypes.DiscordID) (results.OperationResult[map[sharedtypes.DiscordID]*usertypes.UserProfile, error], error)
+	LookupProfilesFunc              func(ctx context.Context, userIDs []sharedtypes.DiscordID, guildID sharedtypes.GuildID) (results.OperationResult[*userservice.LookupProfilesResponse, error], error)
 	GetClubUUIDByDiscordGuildIDFunc func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error)
 }
 
@@ -157,12 +157,14 @@ func NewFakeUserService() *FakeUserService {
 	return &FakeUserService{}
 }
 
-func (f *FakeUserService) LookupProfiles(ctx context.Context, userIDs []sharedtypes.DiscordID) (results.OperationResult[map[sharedtypes.DiscordID]*usertypes.UserProfile, error], error) {
+func (f *FakeUserService) LookupProfiles(ctx context.Context, userIDs []sharedtypes.DiscordID, guildID sharedtypes.GuildID) (results.OperationResult[*userservice.LookupProfilesResponse, error], error) {
 	if f.LookupProfilesFunc != nil {
-		return f.LookupProfilesFunc(ctx, userIDs)
+		return f.LookupProfilesFunc(ctx, userIDs, guildID)
 	}
 	// Return empty map results
-	return results.SuccessResult[map[sharedtypes.DiscordID]*usertypes.UserProfile, error](map[sharedtypes.DiscordID]*usertypes.UserProfile{}), nil
+	return results.SuccessResult[*userservice.LookupProfilesResponse, error](&userservice.LookupProfilesResponse{
+		Profiles: make(map[sharedtypes.DiscordID]*usertypes.UserProfile),
+	}), nil
 }
 
 // Implement other methods as no-ops to satisfy interface

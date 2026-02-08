@@ -129,7 +129,7 @@ func TestService_GenerateMagicLink(t *testing.T) {
 				tt.setupMock(jwtProvider, natsBuilder, repo)
 			}
 
-			s := NewService(jwtProvider, natsBuilder, repo, nil, config, logger, tracer, nil)
+			s := NewService(jwtProvider, natsBuilder, repo, config, logger, tracer, nil)
 			resp, err := s.GenerateMagicLink(ctx, tt.userID, tt.guildID, tt.role)
 			tt.verify(t, resp, err)
 		})
@@ -197,7 +197,7 @@ func TestService_ValidateToken(t *testing.T) {
 				tt.setupMock(jwtProvider)
 			}
 
-			s := NewService(jwtProvider, &FakeUserJWTBuilder{}, &userdb.FakeRepository{}, nil, config, logger, tracer, nil)
+			s := NewService(jwtProvider, &FakeUserJWTBuilder{}, &userdb.FakeRepository{}, config, logger, tracer, nil)
 			claims, err := s.ValidateToken(ctx, tt.tokenString)
 			tt.verify(t, claims, err)
 		})
@@ -301,7 +301,7 @@ func TestService_HandleNATSAuthRequest(t *testing.T) {
 				tt.setupMock(jwtProvider, natsBuilder)
 			}
 
-			s := NewService(jwtProvider, natsBuilder, &userdb.FakeRepository{}, nil, config, logger, tracer, nil)
+			s := NewService(jwtProvider, natsBuilder, &userdb.FakeRepository{}, config, logger, tracer, nil)
 			resp, err := s.HandleNATSAuthRequest(ctx, tt.req)
 			tt.verify(t, resp, err)
 		})
@@ -379,7 +379,7 @@ func TestService_LoginUser(t *testing.T) {
 				tt.setupMock(jwtProvider, repo)
 			}
 
-			s := NewService(jwtProvider, &FakeUserJWTBuilder{}, repo, nil, config, logger, tracer, nil)
+			s := NewService(jwtProvider, &FakeUserJWTBuilder{}, repo, config, logger, tracer, nil)
 			resp, err := s.LoginUser(ctx, tt.oneTimeToken)
 			tt.verify(t, resp, err)
 		})
@@ -455,7 +455,7 @@ func TestService_GetTicket(t *testing.T) {
 				tt.setupMock(repo, natsBuilder)
 			}
 
-			s := NewService(&FakeJWTProvider{}, natsBuilder, repo, nil, config, logger, tracer, nil)
+			s := NewService(&FakeJWTProvider{}, natsBuilder, repo, config, logger, tracer, nil)
 			resp, err := s.GetTicket(ctx, tt.refreshToken, "")
 			tt.verify(t, resp, err)
 		})
@@ -494,7 +494,7 @@ func TestService_LogoutUser(t *testing.T) {
 				tt.setupMock(repo)
 			}
 
-			s := NewService(&FakeJWTProvider{}, &FakeUserJWTBuilder{}, repo, nil, Config{}, logger, tracer, nil)
+			s := NewService(&FakeJWTProvider{}, &FakeUserJWTBuilder{}, repo, Config{}, logger, tracer, nil)
 			err := s.LogoutUser(ctx, tt.refreshToken)
 			tt.verify(t, err)
 		})

@@ -6,8 +6,12 @@ import (
 	"strings"
 
 	authevents "github.com/Black-And-White-Club/frolf-bot-shared/events/auth"
+	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	authdomain "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/domain"
+	"github.com/ThreeDotsLabs/watermill"
+	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/nats-io/nats.go"
 )
 
@@ -89,6 +93,30 @@ func (h *AuthHandlers) HandleMagicLinkRequest(msg *nats.Msg) {
 			attr.String("user_id", req.UserID),
 			attr.String("guild_id", req.GuildID),
 		)
+
+		// Handle Profile Sync if needed
+		if response.NeedsSync {
+			syncPayload := userevents.UserProfileSyncRequestPayloadV1{
+				UserID:  sharedtypes.DiscordID(req.UserID),
+				GuildID: sharedtypes.GuildID(req.GuildID),
+			}
+
+			payloadBytes, _ := json.Marshal(syncPayload) // Ignoring error as struct is simple
+			syncMsg := message.NewMessage(watermill.NewUUID(), payloadBytes)
+			syncMsg.Metadata.Set("topic", userevents.UserProfileSyncRequestTopicV1)
+			syncMsg.Metadata.Set("user_id", req.UserID)
+			syncMsg.Metadata.Set("guild_id", req.GuildID)
+
+			if err := h.eventBus.Publish(userevents.UserProfileSyncRequestTopicV1, syncMsg); err != nil {
+				h.logger.WarnContext(ctx, "Failed to publish profile sync request",
+					attr.Error(err),
+				)
+			} else {
+				h.logger.InfoContext(ctx, "Published profile sync request",
+					attr.String("user_id", req.UserID),
+				)
+			}
+		}
 	}
 
 	// Publish response event

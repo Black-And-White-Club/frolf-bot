@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	authdomain "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/domain"
@@ -31,7 +30,6 @@ type service struct {
 	jwtProvider       authjwt.Provider
 	userJWTBuilder    authnats.UserJWTBuilder
 	permissionBuilder *permissions.Builder
-	eventBus          eventbus.EventBus
 	config            Config
 	logger            *slog.Logger
 	tracer            trace.Tracer
@@ -43,7 +41,6 @@ func NewService(
 	jwtProvider authjwt.Provider,
 	userJWTBuilder authnats.UserJWTBuilder,
 	repo userdb.Repository,
-	eventBus eventbus.EventBus,
 	config Config,
 	logger *slog.Logger,
 	tracer trace.Tracer,
@@ -54,7 +51,6 @@ func NewService(
 		jwtProvider:       jwtProvider,
 		userJWTBuilder:    userJWTBuilder,
 		permissionBuilder: permissions.NewBuilder(),
-		eventBus:          eventBus,
 		config:            config,
 		logger:            logger,
 		tracer:            tracer,
@@ -103,9 +99,18 @@ func (s *service) GenerateMagicLink(ctx context.Context, userID, guildID string,
 	}
 
 	// 3. Verify membership
-	if err := s.verifyMembership(ctx, userUUID, clubUUID); err != nil {
+	membership, err := s.verifyMembership(ctx, userUUID, clubUUID)
+	if err != nil {
 		return &MagicLinkResponse{Success: false, Error: "unauthorized: user is not a member of the requested club"}, nil
 	}
+
+	// 3.5 Smart Profile Sync
+	// Trigger sync if display name is missing or stale
+	needsSync := membership.DisplayName == nil || *membership.DisplayName == "" ||
+		membership.SyncedAt == nil ||
+		time.Since(*membership.SyncedAt) > ProfileSyncStaleness
+
+	needsSync = needsSync && membership.ExternalID != nil
 
 	// 4. Create and save magic link (stateful)
 	token, err := s.createAndSaveMagicLink(ctx, userUUID, guildID, role)
@@ -121,7 +126,7 @@ func (s *service) GenerateMagicLink(ctx context.Context, userID, guildID string,
 		attr.String("guild_id", guildID),
 	)
 
-	return &MagicLinkResponse{Success: true, URL: url}, nil
+	return &MagicLinkResponse{Success: true, URL: url, NeedsSync: needsSync}, nil
 }
 
 func (s *service) createAndSaveMagicLink(ctx context.Context, userUUID uuid.UUID, guildID string, role authdomain.Role) (string, error) {
@@ -169,14 +174,14 @@ func (s *service) resolveUserAndClub(ctx context.Context, userID, guildID string
 	return userUUID, clubUUID, nil
 }
 
-func (s *service) verifyMembership(ctx context.Context, userUUID, clubUUID uuid.UUID) error {
+func (s *service) verifyMembership(ctx context.Context, userUUID, clubUUID uuid.UUID) (*userdb.ClubMembership, error) {
 	// Check if user has membership in the specific club
 	// We can use GetClubMembership which is a direct lookup
-	_, err := s.repo.GetClubMembership(ctx, nil, userUUID, clubUUID)
+	membership, err := s.repo.GetClubMembership(ctx, nil, userUUID, clubUUID)
 	if err != nil {
-		return fmt.Errorf("user is not a member of the club")
+		return nil, fmt.Errorf("user is not a member of the club")
 	}
-	return nil
+	return membership, nil
 }
 
 // ValidateToken validates a JWT token and returns the claims if valid.

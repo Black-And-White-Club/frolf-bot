@@ -78,7 +78,6 @@ func NewModule(
 		jwtProvider,
 		userJWTBuilder,
 		userRepo,
-		eventBus,
 		serviceConfig,
 		logger,
 		tracer,
