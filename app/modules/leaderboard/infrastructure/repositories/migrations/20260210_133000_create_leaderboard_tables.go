@@ -33,6 +33,11 @@ func init() {
 		if err != nil {
 			return err
 		}
+		// Composite index for rollback and history queries
+		_, err = db.NewRaw("CREATE INDEX IF NOT EXISTS idx_point_history_member_round ON leaderboard_point_history (member_id, round_id)").Exec(ctx)
+		if err != nil {
+			return err
+		}
 
 		fmt.Println("Leaderboard tables created successfully!")
 		return nil

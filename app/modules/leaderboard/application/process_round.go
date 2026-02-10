@@ -134,17 +134,15 @@ func (s *LeaderboardService) ProcessRound(
 
 			pointsAwarded[ranked[i].PlayerID] = pointsEarned
 
-			// Persist PointHistory
-			if pointsEarned > 0 {
-				history := &leaderboarddb.PointHistory{
-					MemberID: ranked[i].PlayerID,
-					RoundID:  roundID,
-					Points:   pointsEarned,
-					Reason:   "Round Matchups",
-				}
-				if err := s.repo.SavePointHistory(ctx, db, history); err != nil {
-					return results.OperationResult[ProcessRoundResult, error]{}, fmt.Errorf("failed to save point history: %w", err)
-				}
+			// Persist PointHistory (even if 0 points)
+			history := &leaderboarddb.PointHistory{
+				MemberID: ranked[i].PlayerID,
+				RoundID:  roundID,
+				Points:   pointsEarned,
+				Reason:   "Round Matchups",
+			}
+			if err := s.repo.SavePointHistory(ctx, db, history); err != nil {
+				return results.OperationResult[ProcessRoundResult, error]{}, fmt.Errorf("failed to save point history: %w", err)
 			}
 
 			// Update SeasonStanding

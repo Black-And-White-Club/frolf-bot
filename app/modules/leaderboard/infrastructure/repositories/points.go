@@ -78,21 +78,12 @@ func (r *Impl) DecrementSeasonStanding(ctx context.Context, db bun.IDB, memberID
 	if db == nil {
 		db = r.db
 	}
-	// We decrease total_points and rounds_played.
-	// We do NOT decrement if rounds_played is 0 (though that shouldn't happen if history exists).
-	// We also ensure total_points doesn't go below 0 (logic choice: points strictly additive, but safe to clamp).
-	// Actually, if a player had 10 points and we remove 10, it goes to 0. If they had -5 (if penalties exist), it goes to -15.
-	// Simple subtraction is likely correct. I'll stick to the approved plan's logic but add a clamp if desired.
-	// The approved plan had: Where("total_points >= ?", pointsToRemove) which implicitly prevents negative.
-	// I will remove that check to allow negative points if the game supports it, or stick to 0 floor if that's safer.
-	// For Frolf (Disc Golf), points depend on system. Assuming non-negative total points is safe for now.
-
 	_, err := db.NewUpdate().
 		Model((*SeasonStanding)(nil)).
-		Set("total_points = total_points - ?", pointsToRemove).
-		Set("rounds_played = rounds_played - 1").
+		Set("total_points = GREATEST(total_points - ?, 0)", pointsToRemove).
+		Set("rounds_played = GREATEST(rounds_played - 1, 0)").
 		Where("member_id = ?", memberID).
-		Exec(ctx) // Removed the 'Where points >= ?' check to allow correction even if it dips (though unlikely) or simply trust valid state.
+		Exec(ctx)
 
 	if err != nil {
 		return fmt.Errorf("leaderboarddb.DecrementSeasonStanding: %w", err)
@@ -178,6 +169,10 @@ func (r *Impl) GetSeasonStandings(ctx context.Context, db bun.IDB, memberIDs []s
 }
 
 // CountSeasonMembers returns the total number of members with a standing in the current season.
+// Note: This counts all members who have ever had a standing record this season,
+// regardless of whether they are "active" in the current round.
+// This design decision means the tier buckets (Top 10% Gold, etc.) grow with the total participant pool,
+// making it slightly easier to reach higher tiers as more casual players join.
 func (r *Impl) CountSeasonMembers(ctx context.Context, db bun.IDB) (int, error) {
 	if db == nil {
 		db = r.db

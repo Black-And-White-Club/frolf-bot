@@ -114,19 +114,48 @@ func TestLeaderboardService_ProcessRound(t *testing.T) {
 					f.record("DecrementSeasonStandingCalled")
 					return nil
 				}
+				// Forward pass mocks
+				f.SaveLeaderboardFunc = func(ctx context.Context, db bun.IDB, leaderboard *leaderboardtypes.Leaderboard) error {
+					f.record("SaveLeaderboard")
+					return nil
+				}
+				f.CountSeasonMembersFunc = func(ctx context.Context, db bun.IDB) (int, error) {
+					return 1, nil
+				}
+				f.GetSeasonBestTagsFunc = func(ctx context.Context, db bun.IDB, memberIDs []sharedtypes.DiscordID) (map[sharedtypes.DiscordID]int, error) {
+					return map[sharedtypes.DiscordID]int{"p1": 1}, nil
+				}
+				f.GetSeasonStandingsFunc = func(ctx context.Context, db bun.IDB, memberIDs []sharedtypes.DiscordID) (map[sharedtypes.DiscordID]*leaderboarddb.SeasonStanding, error) {
+					return make(map[sharedtypes.DiscordID]*leaderboarddb.SeasonStanding), nil
+				}
+				f.SavePointHistoryFunc = func(ctx context.Context, db bun.IDB, history *leaderboarddb.PointHistory) error {
+					f.record("SavePointHistory")
+					return nil
+				}
+				f.UpsertSeasonStandingFunc = func(ctx context.Context, db bun.IDB, standing *leaderboarddb.SeasonStanding) error {
+					f.record("UpsertSeasonStanding")
+					return nil
+				}
 			},
 			expectErr: false,
 			verify: func(t *testing.T, res results.OperationResult[ProcessRoundResult, error], fake *FakeLeaderboardRepo) {
 				trace := fake.Trace()
 				foundRollback := false
+				foundForwardPass := false
+
 				for _, call := range trace {
 					if call == "DeletePointHistoryForRoundCalled" {
 						foundRollback = true
-						break
+					}
+					if call == "SaveLeaderboard" {
+						foundForwardPass = true
 					}
 				}
 				if !foundRollback {
 					t.Error("expected rollback to occur, but DeletePointHistoryForRound was not called")
+				}
+				if !foundForwardPass {
+					t.Error("expected forward pass to occur after rollback, but SaveLeaderboard was not called")
 				}
 			},
 		},
