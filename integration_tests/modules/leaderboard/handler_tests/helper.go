@@ -15,10 +15,16 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability"
 	eventbusmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/eventbus"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
+	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
+	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
+	roundadapters "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/adapters"
+	roundqueue "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/queue"
+	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
+	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
 	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
@@ -96,6 +102,7 @@ func SetupTestLeaderboardHandler(t *testing.T) LeaderboardHandlerTestDeps {
 	os.Setenv("APP_ENV", "test")
 
 	realDB := leaderboarddb.NewRepository(env.DB)
+	roundRepo := rounddb.NewRepository(env.DB)
 	// Use NopLogger for quieter test logs
 	watermillLogger := watermill.NopLogger{}
 
@@ -155,6 +162,42 @@ func SetupTestLeaderboardHandler(t *testing.T) LeaderboardHandlerTestDeps {
 	userRepo := userdb.NewRepository(env.DB)
 	userService := userservice.NewUserService(userRepo, slog.New(slog.NewTextHandler(io.Discard, nil)), nil, noop.NewTracerProvider().Tracer("noop"), env.DB)
 
+	// Initialize Round Service dependencies
+	userLookup := roundadapters.NewUserLookupAdapter(userRepo, env.DB)
+	roundValidator := roundutil.NewRoundValidator()
+	// Use NoOp metrics for round service
+	roundMetrics := &roundmetrics.NoOpMetrics{}
+
+	// Initialize Queue Service (needed for RoundService)
+	// For integration tests, we might not need the actual queue running if we don't trigger jobs,
+	// but we need the service instance.
+	queueService, err := roundqueue.NewService(
+		env.Ctx,
+		env.DB,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		env.Config.Postgres.DSN,
+		roundMetrics,
+		eventBusImpl,
+		realHelpers,
+	)
+	if err != nil {
+		eventBusCancel()
+		t.Fatalf("Failed to create round queue service: %v", err)
+	}
+
+	// Initialize Round Service
+	roundService := roundservice.NewRoundService(
+		roundRepo,
+		queueService,
+		eventBusImpl,
+		userLookup,
+		roundMetrics,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		noop.NewTracerProvider().Tracer("noop"),
+		roundValidator,
+		env.DB,
+	)
+
 	// Create the leaderboard module
 	leaderboardModule, err := leaderboard.NewLeaderboardModule(
 		env.Ctx,
@@ -162,6 +205,7 @@ func SetupTestLeaderboardHandler(t *testing.T) LeaderboardHandlerTestDeps {
 		testObservability,
 		env.DB,
 		realDB,
+		roundService,
 		eventBusImpl,
 		watermillRouter,
 		realHelpers,

@@ -29,8 +29,10 @@ func TestNewLeaderboardHandlers(t *testing.T) {
 				fakeHelpers := &FakeHelpers{}
 				noOpMetrics := &leaderboardmetrics.NoOpMetrics{}
 
+				fakeRoundLookup := &FakeRoundLookup{}
+
 				// Call the constructor
-				handlers := NewLeaderboardHandlers(fakeService, fakeUserService, fakeSaga, slog.New(slog.NewTextHandler(io.Discard, nil)), tracer, fakeHelpers, noOpMetrics)
+				handlers := NewLeaderboardHandlers(fakeService, fakeUserService, fakeSaga, slog.New(slog.NewTextHandler(io.Discard, nil)), tracer, fakeHelpers, noOpMetrics, fakeRoundLookup)
 
 				if handlers == nil {
 					t.Fatalf("NewLeaderboardHandlers returned nil")
@@ -54,12 +56,15 @@ func TestNewLeaderboardHandlers(t *testing.T) {
 				if lbHandlers.helpers != fakeHelpers {
 					t.Errorf("helpers not correctly assigned")
 				}
+				if lbHandlers.roundLookup != fakeRoundLookup {
+					t.Errorf("roundLookup not correctly assigned")
+				}
 			},
 		},
 		{
 			name: "Handles nil dependencies",
 			test: func(t *testing.T) {
-				handlers := NewLeaderboardHandlers(nil, nil, nil, nil, nil, nil, nil)
+				handlers := NewLeaderboardHandlers(nil, nil, nil, nil, nil, nil, nil, nil)
 
 				if handlers == nil {
 					t.Fatalf("NewLeaderboardHandlers returned nil")

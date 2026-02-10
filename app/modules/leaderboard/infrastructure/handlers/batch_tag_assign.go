@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
@@ -112,14 +113,64 @@ func (h *LeaderboardHandlers) handleRoundBasedAssignment(
 	results := h.mapSuccessResults(payload.GuildID, payload.RequestingUserID, payload.BatchID, result.Success.LeaderboardData, "batch_assignment")
 
 	// Emit points awarded event
+	pointsPayload := &sharedevents.PointsAwardedPayloadV1{
+		GuildID: payload.GuildID,
+		RoundID: *payload.RoundID,
+		Points:  result.Success.PointsAwarded,
+	}
+
+	if h.roundLookup != nil {
+		round, err := h.roundLookup.GetRound(ctx, payload.GuildID, *payload.RoundID)
+		if err != nil {
+			h.logger.WarnContext(ctx, "failed to fetch round for points enrichment", "error", err)
+		} else if round != nil {
+			pointsPayload.EventMessageID = round.EventMessageID
+			pointsPayload.Title = round.Title
+			pointsPayload.Location = round.Location
+			pointsPayload.StartTime = round.StartTime
+
+			// Deep copy participants to avoid mutating the source round object
+			if round.Participants != nil {
+				pointsPayload.Participants = make([]roundtypes.Participant, len(round.Participants))
+				copy(pointsPayload.Participants, round.Participants)
+
+				// Merge points into participants for pre-populated display
+				for i := range pointsPayload.Participants {
+					if pts, ok := pointsPayload.Points[pointsPayload.Participants[i].UserID]; ok {
+						p := pts
+						pointsPayload.Participants[i].Points = &p
+					}
+				}
+			}
+			// Deep copy Teams to avoid mutating source round
+			if round.Teams != nil {
+				pointsPayload.Teams = make([]roundtypes.NormalizedTeam, len(round.Teams))
+				for i, t := range round.Teams {
+					pointsPayload.Teams[i] = t
+					if t.Members != nil {
+						pointsPayload.Teams[i].Members = make([]roundtypes.TeamMember, len(t.Members))
+						copy(pointsPayload.Teams[i].Members, t.Members)
+					}
+					if t.HoleScores != nil {
+						pointsPayload.Teams[i].HoleScores = make([]int, len(t.HoleScores))
+						copy(pointsPayload.Teams[i].HoleScores, t.HoleScores)
+					}
+				}
+			}
+		}
+	}
+
 	results = append(results, handlerwrapper.Result{
-		Topic: sharedevents.PointsAwardedV1,
-		Payload: &sharedevents.PointsAwardedPayloadV1{
-			GuildID: payload.GuildID,
-			RoundID: *payload.RoundID,
-			Points:  result.Success.PointsAwarded,
-		},
+		Topic:   sharedevents.PointsAwardedV1,
+		Payload: pointsPayload,
 	})
+
+	// Add metadata if available
+	if pointsPayload.EventMessageID != "" {
+		results[len(results)-1].Metadata = map[string]string{
+			"discord_message_id": pointsPayload.EventMessageID,
+		}
+	}
 
 	propagateCorrelationID(ctx, results)
 
