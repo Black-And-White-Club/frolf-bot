@@ -4,6 +4,7 @@ import (
 	"context"
 
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
@@ -236,4 +237,16 @@ func (f *FakeHelpers) CreateNewMessage(payload interface{}, topic string) (*mess
 
 func (f *FakeHelpers) UnmarshalPayload(msg *message.Message, payload interface{}) error {
 	return nil
+}
+
+// FakeRoundLookup implements RoundLookup for handler testing.
+type FakeRoundLookup struct {
+	GetRoundFunc func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (*roundtypes.Round, error)
+}
+
+func (f *FakeRoundLookup) GetRound(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (*roundtypes.Round, error) {
+	if f.GetRoundFunc != nil {
+		return f.GetRoundFunc(ctx, guildID, roundID)
+	}
+	return nil, nil
 }

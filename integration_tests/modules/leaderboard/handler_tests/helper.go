@@ -19,6 +19,7 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
+	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
 	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
@@ -96,6 +97,7 @@ func SetupTestLeaderboardHandler(t *testing.T) LeaderboardHandlerTestDeps {
 	os.Setenv("APP_ENV", "test")
 
 	realDB := leaderboarddb.NewRepository(env.DB)
+	roundRepo := rounddb.NewRepository(env.DB)
 	// Use NopLogger for quieter test logs
 	watermillLogger := watermill.NopLogger{}
 
@@ -162,6 +164,7 @@ func SetupTestLeaderboardHandler(t *testing.T) LeaderboardHandlerTestDeps {
 		testObservability,
 		env.DB,
 		realDB,
+		roundRepo,
 		eventBusImpl,
 		watermillRouter,
 		realHelpers,

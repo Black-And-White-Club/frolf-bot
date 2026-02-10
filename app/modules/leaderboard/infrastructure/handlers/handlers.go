@@ -11,6 +11,7 @@ import (
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
@@ -21,6 +22,11 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+// RoundLookup provides read-only round data for cross-module enrichment.
+type RoundLookup interface {
+	GetRound(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (*roundtypes.Round, error)
+}
+
 // LeaderboardHandlers implements the Handlers interface for leaderboard events.
 type LeaderboardHandlers struct {
 	service         leaderboardservice.Service
@@ -28,6 +34,7 @@ type LeaderboardHandlers struct {
 	sagaCoordinator saga.SagaCoordinator
 	helpers         utils.Helpers
 	logger          *slog.Logger
+	roundLookup     RoundLookup
 }
 
 // NewLeaderboardHandlers creates a new LeaderboardHandlers instance.
@@ -39,6 +46,7 @@ func NewLeaderboardHandlers(
 	tracer trace.Tracer,
 	helpers utils.Helpers,
 	metrics leaderboardmetrics.LeaderboardMetrics,
+	roundLookup RoundLookup,
 ) Handlers {
 	return &LeaderboardHandlers{
 		service:         service,
@@ -46,6 +54,7 @@ func NewLeaderboardHandlers(
 		sagaCoordinator: sagaCoordinator,
 		helpers:         helpers,
 		logger:          logger,
+		roundLookup:     roundLookup,
 	}
 }
 
