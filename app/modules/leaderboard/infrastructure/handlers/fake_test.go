@@ -24,9 +24,11 @@ type FakeService struct {
 	TagSwapRequestedFunc          func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, targetTag sharedtypes.TagNumber) (results.OperationResult[leaderboardtypes.LeaderboardData, error], error)
 	GetLeaderboardFunc            func(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error], error)
 	GetTagByUserIDFunc            func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (results.OperationResult[sharedtypes.TagNumber, error], error)
-	RoundGetTagByUserIDFunc       func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (results.OperationResult[sharedtypes.TagNumber, error], error)
-	CheckTagAvailabilityFunc      func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tagNumber sharedtypes.TagNumber) (results.OperationResult[leaderboardservice.TagAvailabilityResult, error], error)
-	EnsureGuildLeaderboardFunc    func(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[bool, error], error)
+
+	RoundGetTagByUserIDFunc    func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (results.OperationResult[sharedtypes.TagNumber, error], error)
+	CheckTagAvailabilityFunc   func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tagNumber sharedtypes.TagNumber) (results.OperationResult[leaderboardservice.TagAvailabilityResult, error], error)
+	EnsureGuildLeaderboardFunc func(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[bool, error], error)
+	ProcessRoundFunc           func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, playerResults []leaderboardservice.PlayerResult, source sharedtypes.ServiceUpdateSource) (results.OperationResult[leaderboardservice.ProcessRoundResult, error], error)
 }
 
 func NewFakeService() *FakeService {
@@ -131,6 +133,20 @@ func (f *FakeService) CheckTagAvailability(ctx context.Context, guildID sharedty
 		return f.CheckTagAvailabilityFunc(ctx, guildID, userID, tagNumber)
 	}
 	return results.OperationResult[leaderboardservice.TagAvailabilityResult, error]{}, nil
+}
+
+func (f *FakeService) ProcessRound(
+	ctx context.Context,
+	guildID sharedtypes.GuildID,
+	roundID sharedtypes.RoundID,
+	playerResults []leaderboardservice.PlayerResult,
+	source sharedtypes.ServiceUpdateSource,
+) (results.OperationResult[leaderboardservice.ProcessRoundResult, error], error) {
+	f.record("ProcessRound")
+	if f.ProcessRoundFunc != nil {
+		return f.ProcessRoundFunc(ctx, guildID, roundID, playerResults, source)
+	}
+	return results.OperationResult[leaderboardservice.ProcessRoundResult, error]{}, nil
 }
 
 func (f *FakeService) EnsureGuildLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[bool, error], error) {

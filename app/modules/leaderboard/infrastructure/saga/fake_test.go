@@ -104,6 +104,17 @@ func (f *FakeLeaderboardService) RoundGetTagByUserID(ctx context.Context, guildI
 func (f *FakeLeaderboardService) CheckTagAvailability(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tagNumber sharedtypes.TagNumber) (results.OperationResult[leaderboardservice.TagAvailabilityResult, error], error) {
 	return results.FailureResult[leaderboardservice.TagAvailabilityResult, error](errors.New("not implemented")), nil
 }
+
 func (f *FakeLeaderboardService) EnsureGuildLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[bool, error], error) {
 	return results.FailureResult[bool, error](errors.New("not implemented")), nil
+}
+
+func (f *FakeLeaderboardService) ProcessRound(
+	ctx context.Context,
+	guildID sharedtypes.GuildID,
+	roundID sharedtypes.RoundID,
+	playerResults []leaderboardservice.PlayerResult,
+	source sharedtypes.ServiceUpdateSource,
+) (results.OperationResult[leaderboardservice.ProcessRoundResult, error], error) {
+	return results.FailureResult[leaderboardservice.ProcessRoundResult, error](errors.New("not implemented")), nil
 }
