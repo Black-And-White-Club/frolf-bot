@@ -245,8 +245,8 @@ type FakeRoundLookup struct {
 }
 
 func (f *FakeRoundLookup) GetRound(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (*roundtypes.Round, error) {
-	if f.GetRoundFunc != nil {
-		return f.GetRoundFunc(ctx, guildID, roundID)
+	if f == nil || f.GetRoundFunc == nil {
+		return nil, nil
 	}
-	return nil, nil
+	return f.GetRoundFunc(ctx, guildID, roundID)
 }

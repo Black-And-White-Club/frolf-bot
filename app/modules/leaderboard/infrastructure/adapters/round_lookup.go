@@ -2,6 +2,7 @@ package adapters
 
 import (
 	"context"
+	"fmt"
 
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
@@ -23,7 +24,14 @@ func (a *RoundLookupAdapter) GetRound(ctx context.Context, guildID sharedtypes.G
 		return nil, err
 	}
 	if result.IsFailure() {
-		return nil, *result.Failure
+		if result.Failure == nil {
+			return nil, fmt.Errorf("round lookup failed with nil error")
+		}
+		return nil, fmt.Errorf("round lookup failed: %w", *result.Failure)
+	}
+	// If for some reason Success is nil (and no failure), we return nil, nil
+	if result.Success == nil {
+		return nil, nil
 	}
 	return *result.Success, nil
 }

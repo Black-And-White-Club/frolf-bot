@@ -208,25 +208,93 @@ func TestLeaderboardHandlers_HandleRoundBasedAssignment(t *testing.T) {
 				assert.Empty(t, pointsEvent.Title)
 			},
 		},
+		{
+			name: "Nil RoundLookup - skips enrichment",
+			payload: &sharedevents.BatchTagAssignmentRequestedPayloadV1{
+				ScopedGuildID: sharedevents.ScopedGuildID{GuildID: testGuildID},
+				BatchID:       testBatchID,
+				RoundID:       &testRoundID,
+				Source:        sharedtypes.ServiceUpdateSourceProcessScores,
+				Assignments:   []sharedevents.TagAssignmentInfoV1{{UserID: "user-1", TagNumber: 1}},
+			},
+			setupFake: func(f *FakeService) {
+				f.ProcessRoundFunc = func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, playerResults []leaderboardservice.PlayerResult, source sharedtypes.ServiceUpdateSource) (results.OperationResult[leaderboardservice.ProcessRoundResult, error], error) {
+					return results.SuccessResult[leaderboardservice.ProcessRoundResult, error](leaderboardservice.ProcessRoundResult{
+						LeaderboardData: leaderboardtypes.LeaderboardData{{UserID: "user-1", TagNumber: 1}},
+						PointsAwarded:   map[sharedtypes.DiscordID]int{"user-1": 10},
+					}), nil
+				}
+			},
+			setupRoundLookup: nil, // This will result in h.roundLookup being nil
+			wantErr:          false,
+			validate: func(t *testing.T, res []handlerwrapper.Result) {
+				var pointsEvent *sharedevents.PointsAwardedPayloadV1
+				for _, r := range res {
+					if r.Topic == sharedevents.PointsAwardedV1 {
+						pointsEvent = r.Payload.(*sharedevents.PointsAwardedPayloadV1)
+					}
+				}
+				assert.NotNil(t, pointsEvent)
+				assert.Empty(t, pointsEvent.EventMessageID)
+				assert.Empty(t, pointsEvent.Title)
+			},
+		},
+		{
+			name: "Round returned as nil - skips enrichment",
+			payload: &sharedevents.BatchTagAssignmentRequestedPayloadV1{
+				ScopedGuildID: sharedevents.ScopedGuildID{GuildID: testGuildID},
+				BatchID:       testBatchID,
+				RoundID:       &testRoundID,
+				Source:        sharedtypes.ServiceUpdateSourceProcessScores,
+				Assignments:   []sharedevents.TagAssignmentInfoV1{{UserID: "user-1", TagNumber: 1}},
+			},
+			setupFake: func(f *FakeService) {
+				f.ProcessRoundFunc = func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, playerResults []leaderboardservice.PlayerResult, source sharedtypes.ServiceUpdateSource) (results.OperationResult[leaderboardservice.ProcessRoundResult, error], error) {
+					return results.SuccessResult[leaderboardservice.ProcessRoundResult, error](leaderboardservice.ProcessRoundResult{
+						LeaderboardData: leaderboardtypes.LeaderboardData{{UserID: "user-1", TagNumber: 1}},
+						PointsAwarded:   map[sharedtypes.DiscordID]int{"user-1": 10},
+					}), nil
+				}
+			},
+			setupRoundLookup: func(rl *FakeRoundLookup) {
+				rl.GetRoundFunc = func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return nil, nil // Nil round, no error
+				}
+			},
+			wantErr: false,
+			validate: func(t *testing.T, res []handlerwrapper.Result) {
+				var pointsEvent *sharedevents.PointsAwardedPayloadV1
+				for _, r := range res {
+					if r.Topic == sharedevents.PointsAwardedV1 {
+						pointsEvent = r.Payload.(*sharedevents.PointsAwardedPayloadV1)
+					}
+				}
+				assert.NotNil(t, pointsEvent)
+				assert.Empty(t, pointsEvent.EventMessageID)
+				assert.Empty(t, pointsEvent.Title)
+			},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fakeSvc := NewFakeService()
 			fakeSaga := NewFakeSagaCoordinator()
-			fakeRoundLookup := &FakeRoundLookup{}
+			var roundLookup RoundLookup
+			if tt.setupRoundLookup != nil {
+				fakeRoundLookup := &FakeRoundLookup{}
+				tt.setupRoundLookup(fakeRoundLookup)
+				roundLookup = fakeRoundLookup
+			}
 			if tt.setupFake != nil {
 				tt.setupFake(fakeSvc)
-			}
-			if tt.setupRoundLookup != nil {
-				tt.setupRoundLookup(fakeRoundLookup)
 			}
 
 			h := &LeaderboardHandlers{
 				service:         fakeSvc,
 				userService:     NewFakeUserService(),
 				sagaCoordinator: fakeSaga,
-				roundLookup:     fakeRoundLookup,
+				roundLookup:     roundLookup, // True nil interface if not set
 				logger:          slog.New(slog.NewTextHandler(io.Discard, nil)),
 			}
 
