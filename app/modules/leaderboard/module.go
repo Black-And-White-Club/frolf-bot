@@ -14,7 +14,7 @@ import (
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	leaderboardrouter "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/router"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/saga"
-	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
+	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
 	"github.com/Black-And-White-Club/frolf-bot/config"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -41,7 +41,7 @@ func NewLeaderboardModule(
 	obs observability.Observability,
 	db *bun.DB,
 	leaderboardDB leaderboarddb.Repository,
-	roundDB rounddb.Repository,
+	roundService roundservice.Service,
 	eventBus eventbus.EventBus,
 	router *message.Router,
 	helpers utils.Helpers,
@@ -69,7 +69,7 @@ func NewLeaderboardModule(
 	promRegistry := prometheus.NewRegistry()
 	lbRouter := leaderboardrouter.NewLeaderboardRouter(logger, router, eventBus, eventBus, cfg, helpers, tracer, promRegistry)
 
-	roundLookup := leaderboardadapters.NewRoundLookupAdapter(roundDB, db)
+	roundLookup := leaderboardadapters.NewRoundLookupAdapter(roundService)
 	handlers := leaderboardhandlers.NewLeaderboardHandlers(service, userService, sagaCoord, logger, tracer, helpers, metrics, roundLookup)
 
 	if err := lbRouter.Configure(routerCtx, handlers); err != nil {

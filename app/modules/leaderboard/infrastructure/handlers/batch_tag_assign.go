@@ -142,17 +142,35 @@ func (h *LeaderboardHandlers) handleRoundBasedAssignment(
 					}
 				}
 			}
-			pointsPayload.Teams = round.Teams
+			// Deep copy Teams to avoid mutating source round
+			if round.Teams != nil {
+				pointsPayload.Teams = make([]roundtypes.NormalizedTeam, len(round.Teams))
+				for i, t := range round.Teams {
+					pointsPayload.Teams[i] = t
+					if t.Members != nil {
+						pointsPayload.Teams[i].Members = make([]roundtypes.TeamMember, len(t.Members))
+						copy(pointsPayload.Teams[i].Members, t.Members)
+					}
+					if t.HoleScores != nil {
+						pointsPayload.Teams[i].HoleScores = make([]int, len(t.HoleScores))
+						copy(pointsPayload.Teams[i].HoleScores, t.HoleScores)
+					}
+				}
+			}
 		}
 	}
 
 	results = append(results, handlerwrapper.Result{
 		Topic:   sharedevents.PointsAwardedV1,
 		Payload: pointsPayload,
-		Metadata: map[string]string{
-			"discord_message_id": pointsPayload.EventMessageID,
-		},
 	})
+
+	// Add metadata if available
+	if pointsPayload.EventMessageID != "" {
+		results[len(results)-1].Metadata = map[string]string{
+			"discord_message_id": pointsPayload.EventMessageID,
+		}
+	}
 
 	propagateCorrelationID(ctx, results)
 
