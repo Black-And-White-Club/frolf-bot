@@ -75,6 +75,8 @@ func (h *ScoreHandlers) HandleProcessRoundScoresRequest(
 			RequestingUserID: "score-service",
 			BatchID:          uuid.New().String(),
 			Assignments:      batchAssignments,
+			RoundID:          &payload.RoundID,
+			Source:           sharedtypes.ServiceUpdateSourceProcessScores,
 		}
 
 		return []handlerwrapper.Result{

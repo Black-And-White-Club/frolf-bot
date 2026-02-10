@@ -8,10 +8,30 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 )
 
+// PlayerResult represents a player's performance in a round.
+type PlayerResult struct {
+	PlayerID  sharedtypes.DiscordID
+	TagNumber int
+}
+
+// ProcessRoundResult wraps the leaderboard data and the per-player points awarded.
+type ProcessRoundResult struct {
+	LeaderboardData leaderboardtypes.LeaderboardData
+	PointsAwarded   map[sharedtypes.DiscordID]int
+}
+
 // Service defines the contract for leaderboard operations.
 // All state mutations flow through ExecuteBatchTagAssignment (The Funnel).
 type Service interface {
 	// --- MUTATIONS (The Funnel) ---
+	// ProcessRound calculates and persists ratings and tag updates for a round.
+	ProcessRound(
+		ctx context.Context,
+		guildID sharedtypes.GuildID,
+		roundID sharedtypes.RoundID,
+		playerResults []PlayerResult,
+		source sharedtypes.ServiceUpdateSource,
+	) (results.OperationResult[ProcessRoundResult, error], error)
 
 	// ExecuteBatchTagAssignment is the consolidated funnel.
 	// All other mutation methods eventually call this internally.
