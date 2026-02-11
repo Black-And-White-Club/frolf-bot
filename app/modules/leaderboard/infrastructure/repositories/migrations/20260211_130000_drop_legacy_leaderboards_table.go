@@ -3,18 +3,12 @@ package leaderboardmigrations
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/uptrace/bun"
 )
 
 func init() {
 	Migrations.MustRegister(func(ctx context.Context, db *bun.DB) error {
-		if os.Getenv("LEADERBOARD_LEGACY_DROP_CONFIRMED") != "true" {
-			fmt.Println("WARNING: Skipping legacy leaderboards table drop. Set LEADERBOARD_LEGACY_DROP_CONFIRMED=true to execute.")
-			return nil
-		}
-
 		fmt.Println("Dropping legacy leaderboards snapshot table...")
 
 		if _, err := db.NewRaw("DROP TABLE IF EXISTS leaderboards").Exec(ctx); err != nil {
