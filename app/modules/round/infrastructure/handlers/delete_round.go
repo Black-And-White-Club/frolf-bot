@@ -131,6 +131,16 @@ func (h *RoundHandlers) HandleRoundDeleteAuthorized(
 		roundevents.RoundDeleteErrorV1,
 	)
 
+	// Propagate discord_message_id to metadata if present in context
+	if discordMessageID, ok := ctx.Value("discord_message_id").(string); ok && discordMessageID != "" {
+		for i := range results {
+			if results[i].Metadata == nil {
+				results[i].Metadata = make(map[string]string)
+			}
+			results[i].Metadata["discord_message_id"] = discordMessageID
+		}
+	}
+
 	// Add both legacy GuildID and internal ClubUUID scoped versions for PWA/NATS transition
 	results = h.addParallelIdentityResults(ctx, results, roundevents.RoundDeletedV1, payload.GuildID)
 
