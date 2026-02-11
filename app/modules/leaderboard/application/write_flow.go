@@ -137,6 +137,13 @@ func (s *LeaderboardService) processRoundInTx(ctx context.Context, tx bun.Tx, cm
 			slog.String("guild_id", cmd.GuildID),
 			slog.String("round_id", cmd.RoundID.String()),
 		)
+
+		// SAFETY: Prevent tag modifications for historical rounds to avoid corrupting current state.
+		// Only allow recalculation (points only) or block entirely if too old.
+		if time.Since(existing.ProcessedAt) > 24*time.Hour {
+			return nil, fmt.Errorf("cannot recalculate round older than 24h due to tag state drift")
+		}
+
 		if err := s.rollbackPreviousRound(ctx, tx, cmd.GuildID, cmd.RoundID); err != nil {
 			return nil, fmt.Errorf("rollback previous round: %w", err)
 		}
@@ -656,7 +663,7 @@ func (s *LeaderboardService) applyTagAssignmentsInTx(
 	dedup := make(map[string]int, len(requests))
 	for _, req := range requests {
 		if req.TagNumber <= 0 {
-			continue
+			return nil, fmt.Errorf("invalid tag number %d for user %s", req.TagNumber, req.UserID)
 		}
 		dedup[string(req.UserID)] = int(req.TagNumber)
 	}

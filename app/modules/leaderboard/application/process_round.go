@@ -27,7 +27,17 @@ func (s *LeaderboardService) ProcessRound(
 		ranked := make([]PlayerResult, len(playerResults))
 		copy(ranked, playerResults)
 		slices.SortFunc(ranked, func(a, b PlayerResult) int {
-			if c := cmp.Compare(a.TagNumber, b.TagNumber); c != 0 {
+			// Treat 0 (no tag) as max int to sort to bottom
+			aTag := a.TagNumber
+			if aTag <= 0 {
+				aTag = int(^uint(0) >> 1)
+			}
+			bTag := b.TagNumber
+			if bTag <= 0 {
+				bTag = int(^uint(0) >> 1)
+			}
+
+			if c := cmp.Compare(aTag, bTag); c != 0 {
 				return c
 			}
 			return cmp.Compare(a.PlayerID, b.PlayerID)

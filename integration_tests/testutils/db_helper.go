@@ -115,7 +115,6 @@ var appTables = []string{
 	"scores",
 	"rounds",
 	"guild_configs",
-	"leaderboards",
 	"league_members",
 	"tag_history",
 	"leaderboard_round_outcomes",
@@ -192,7 +191,6 @@ func CleanLeaderboardIntegrationTables(ctx context.Context, db *bun.DB) error {
 	return TruncateTables(
 		ctx,
 		db,
-		"leaderboards",
 		"league_members",
 		"tag_history",
 		"leaderboard_round_outcomes",
@@ -216,7 +214,6 @@ func CleanAllIntegrationTables(ctx context.Context, db *bun.DB) error {
 		db,
 		"users",
 		"scores",
-		"leaderboards",
 		"league_members",
 		"tag_history",
 		"leaderboard_round_outcomes",
@@ -240,7 +237,6 @@ func ForceCleanAllTables(ctx context.Context, db *bun.DB) error {
 	sequences := []string{
 		"users_id_seq",
 		"scores_id_seq",
-		"leaderboards_id_seq",
 		"rounds_id_seq",
 	}
 

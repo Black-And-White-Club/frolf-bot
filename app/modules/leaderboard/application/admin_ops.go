@@ -8,6 +8,7 @@ import (
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
+	"github.com/google/uuid"
 	"github.com/uptrace/bun"
 )
 
@@ -54,7 +55,7 @@ func (s *LeaderboardService) AdjustPoints(
 		// 1. Save a PointHistory record with the adjustment reason
 		history := &leaderboarddb.PointHistory{
 			MemberID: memberID,
-			RoundID:  sharedtypes.RoundID{}, // Zero UUID for manual adjustments
+			RoundID:  sharedtypes.RoundID(uuid.Nil), // Zero UUID for manual adjustments
 			Points:   pointsDelta,
 			Reason:   reason,
 		}
