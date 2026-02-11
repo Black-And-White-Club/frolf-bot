@@ -8,6 +8,7 @@ import (
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
+	leaderboarddomain "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/domain"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -137,4 +138,20 @@ func (f *FakeLeaderboardService) StartNewSeason(ctx context.Context, guildID sha
 
 func (f *FakeLeaderboardService) GetSeasonStandingsForSeason(ctx context.Context, guildID sharedtypes.GuildID, seasonID string) (results.OperationResult[[]leaderboardservice.SeasonStandingEntry, error], error) {
 	return results.FailureResult[[]leaderboardservice.SeasonStandingEntry, error](errors.New("not implemented")), nil
+}
+
+func (f *FakeLeaderboardService) ProcessRoundCommand(ctx context.Context, cmd leaderboardservice.ProcessRoundCommand) (*leaderboardservice.ProcessRoundOutput, error) {
+	return nil, leaderboardservice.ErrCommandPipelineUnavailable
+}
+
+func (f *FakeLeaderboardService) ResetTagsFromQualifyingRound(
+	ctx context.Context,
+	guildID sharedtypes.GuildID,
+	finishOrder []sharedtypes.DiscordID,
+) ([]leaderboarddomain.TagChange, error) {
+	return nil, leaderboardservice.ErrCommandPipelineUnavailable
+}
+
+func (f *FakeLeaderboardService) EndSeason(ctx context.Context, guildID sharedtypes.GuildID) error {
+	return nil
 }

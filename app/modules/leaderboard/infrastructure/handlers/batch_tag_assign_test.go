@@ -14,6 +14,7 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
+	leaderboarddomain "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/domain"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 )
@@ -131,11 +132,13 @@ func TestLeaderboardHandlers_HandleRoundBasedAssignment(t *testing.T) {
 				Assignments:   []sharedevents.TagAssignmentInfoV1{{UserID: "user-1", TagNumber: 1}},
 			},
 			setupFake: func(f *FakeService) {
-				f.ProcessRoundFunc = func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, playerResults []leaderboardservice.PlayerResult, source sharedtypes.ServiceUpdateSource) (results.OperationResult[leaderboardservice.ProcessRoundResult, error], error) {
-					return results.SuccessResult[leaderboardservice.ProcessRoundResult, error](leaderboardservice.ProcessRoundResult{
-						LeaderboardData: leaderboardtypes.LeaderboardData{{UserID: "user-1", TagNumber: 1}},
-						PointsAwarded:   map[sharedtypes.DiscordID]int{"user-1": 10},
-					}), nil
+				f.ProcessRoundCommandFunc = func(ctx context.Context, cmd leaderboardservice.ProcessRoundCommand) (*leaderboardservice.ProcessRoundOutput, error) {
+					return &leaderboardservice.ProcessRoundOutput{
+						FinalParticipantTags: map[string]int{"user-1": 1},
+						PointAwards: []leaderboarddomain.PointAward{
+							{MemberID: "user-1", Points: 10},
+						},
+					}, nil
 				}
 			},
 			setupRoundLookup: func(rl *FakeRoundLookup) {
@@ -182,11 +185,13 @@ func TestLeaderboardHandlers_HandleRoundBasedAssignment(t *testing.T) {
 				Assignments:   []sharedevents.TagAssignmentInfoV1{{UserID: "user-1", TagNumber: 1}},
 			},
 			setupFake: func(f *FakeService) {
-				f.ProcessRoundFunc = func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, playerResults []leaderboardservice.PlayerResult, source sharedtypes.ServiceUpdateSource) (results.OperationResult[leaderboardservice.ProcessRoundResult, error], error) {
-					return results.SuccessResult[leaderboardservice.ProcessRoundResult, error](leaderboardservice.ProcessRoundResult{
-						LeaderboardData: leaderboardtypes.LeaderboardData{{UserID: "user-1", TagNumber: 1}},
-						PointsAwarded:   map[sharedtypes.DiscordID]int{"user-1": 10},
-					}), nil
+				f.ProcessRoundCommandFunc = func(ctx context.Context, cmd leaderboardservice.ProcessRoundCommand) (*leaderboardservice.ProcessRoundOutput, error) {
+					return &leaderboardservice.ProcessRoundOutput{
+						FinalParticipantTags: map[string]int{"user-1": 1},
+						PointAwards: []leaderboarddomain.PointAward{
+							{MemberID: "user-1", Points: 10},
+						},
+					}, nil
 				}
 			},
 			setupRoundLookup: func(rl *FakeRoundLookup) {
@@ -218,11 +223,13 @@ func TestLeaderboardHandlers_HandleRoundBasedAssignment(t *testing.T) {
 				Assignments:   []sharedevents.TagAssignmentInfoV1{{UserID: "user-1", TagNumber: 1}},
 			},
 			setupFake: func(f *FakeService) {
-				f.ProcessRoundFunc = func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, playerResults []leaderboardservice.PlayerResult, source sharedtypes.ServiceUpdateSource) (results.OperationResult[leaderboardservice.ProcessRoundResult, error], error) {
-					return results.SuccessResult[leaderboardservice.ProcessRoundResult, error](leaderboardservice.ProcessRoundResult{
-						LeaderboardData: leaderboardtypes.LeaderboardData{{UserID: "user-1", TagNumber: 1}},
-						PointsAwarded:   map[sharedtypes.DiscordID]int{"user-1": 10},
-					}), nil
+				f.ProcessRoundCommandFunc = func(ctx context.Context, cmd leaderboardservice.ProcessRoundCommand) (*leaderboardservice.ProcessRoundOutput, error) {
+					return &leaderboardservice.ProcessRoundOutput{
+						FinalParticipantTags: map[string]int{"user-1": 1},
+						PointAwards: []leaderboarddomain.PointAward{
+							{MemberID: "user-1", Points: 10},
+						},
+					}, nil
 				}
 			},
 			setupRoundLookup: nil, // This will result in h.roundLookup being nil
@@ -249,11 +256,13 @@ func TestLeaderboardHandlers_HandleRoundBasedAssignment(t *testing.T) {
 				Assignments:   []sharedevents.TagAssignmentInfoV1{{UserID: "user-1", TagNumber: 1}},
 			},
 			setupFake: func(f *FakeService) {
-				f.ProcessRoundFunc = func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, playerResults []leaderboardservice.PlayerResult, source sharedtypes.ServiceUpdateSource) (results.OperationResult[leaderboardservice.ProcessRoundResult, error], error) {
-					return results.SuccessResult[leaderboardservice.ProcessRoundResult, error](leaderboardservice.ProcessRoundResult{
-						LeaderboardData: leaderboardtypes.LeaderboardData{{UserID: "user-1", TagNumber: 1}},
-						PointsAwarded:   map[sharedtypes.DiscordID]int{"user-1": 10},
-					}), nil
+				f.ProcessRoundCommandFunc = func(ctx context.Context, cmd leaderboardservice.ProcessRoundCommand) (*leaderboardservice.ProcessRoundOutput, error) {
+					return &leaderboardservice.ProcessRoundOutput{
+						FinalParticipantTags: map[string]int{"user-1": 1},
+						PointAwards: []leaderboarddomain.PointAward{
+							{MemberID: "user-1", Points: 10},
+						},
+					}, nil
 				}
 			},
 			setupRoundLookup: func(rl *FakeRoundLookup) {

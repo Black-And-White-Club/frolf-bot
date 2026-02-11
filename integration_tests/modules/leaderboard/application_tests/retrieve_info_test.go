@@ -6,13 +6,10 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/uptrace/bun"
-
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
-	leaderboardService "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
-	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
+	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
 )
 
@@ -22,169 +19,81 @@ func TestLeaderboardReadOperations(t *testing.T) {
 
 	ctx := context.Background()
 
-	tests := []struct {
-		name      string
-		guildID   sharedtypes.GuildID
-		setupData func(t *testing.T, db *bun.DB)
-		// Changed to use the interface type leaderboardservice.Service
-		runOperation func(s leaderboardService.Service) (any, error)
-		wantErr      bool
-		validate     func(t *testing.T, result any, err error)
-	}{
-		{
-			name:    "GetLeaderboard: Success returns active leaderboard data",
-			guildID: "test_guild_1",
-			setupData: func(t *testing.T, db *bun.DB) {
-				lb := &leaderboarddb.Leaderboard{
-					GuildID: "test_guild_1", IsActive: true,
-					LeaderboardData: leaderboardtypes.LeaderboardData{
-						{UserID: "user_1", TagNumber: 1},
-					},
-				}
-				_, err := db.NewInsert().Model(lb).Exec(ctx)
-				if err != nil {
-					t.Fatalf("setup failed: %v", err)
-				}
-			},
-			runOperation: func(s leaderboardService.Service) (any, error) {
-				return s.GetLeaderboard(ctx, "test_guild_1")
-			},
-			validate: func(t *testing.T, result any, err error) {
-				opResult := result.(results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error])
-				if err != nil {
-					t.Fatalf("expected no system error, got: %v", err)
-				}
-				if opResult.Success == nil {
-					t.Fatalf("expected success payload, got nil")
-				}
-				entries := *opResult.Success
-				if len(entries) != 1 {
-					t.Errorf("expected 1 entry, got %d", len(entries))
-				}
-			},
-		},
-		{
-			name:    "GetLeaderboard: Returns error in result for missing leaderboard",
-			guildID: "empty_guild",
-			runOperation: func(s leaderboardService.Service) (any, error) {
-				return s.GetLeaderboard(ctx, "empty_guild")
-			},
-			wantErr: true,
-			validate: func(t *testing.T, result any, err error) {
-				// Missing leaderboard results in a system error from the underlying repo
-				if err == nil {
-					t.Fatalf("expected system error for missing leaderboard, got nil")
-				}
-				if !errors.Is(err, leaderboarddb.ErrNoActiveLeaderboard) {
-					t.Errorf("expected ErrNoActiveLeaderboard, got %v", err)
-				}
-			},
-		},
-		{
-			name:    "RoundGetTagByUserID: Success returns data slice",
-			guildID: "test_guild_1",
-			setupData: func(t *testing.T, db *bun.DB) {
-				lb := &leaderboarddb.Leaderboard{
-					GuildID: "test_guild_1", IsActive: true,
-					LeaderboardData: leaderboardtypes.LeaderboardData{
-						{UserID: "round_user", TagNumber: 42},
-					},
-				}
-				_, _ = db.NewInsert().Model(lb).Exec(ctx)
-			},
-			runOperation: func(s leaderboardService.Service) (any, error) {
-				return s.RoundGetTagByUserID(ctx, "test_guild_1", "round_user")
-			},
-			validate: func(t *testing.T, result any, err error) {
-				opResult := result.(results.OperationResult[sharedtypes.TagNumber, error])
-				if err != nil {
-					t.Fatalf("expected no system error, got: %v", err)
-				}
-				if opResult.Success == nil {
-					t.Fatalf("expected success payload, got nil")
-				}
-				tag := *opResult.Success
-				if tag != 42 {
-					t.Errorf("expected tag 42, got: %v", tag)
-				}
-			},
-		},
-		{
-			name:    "GetTagByUserID: Success returns raw tag",
-			guildID: "test_guild_1",
-			setupData: func(t *testing.T, db *bun.DB) {
-				lb := &leaderboarddb.Leaderboard{
-					GuildID: "test_guild_1", IsActive: true,
-					LeaderboardData: leaderboardtypes.LeaderboardData{
-						{UserID: "raw_user", TagNumber: 10},
-					},
-				}
-				_, _ = db.NewInsert().Model(lb).Exec(ctx)
-			},
-			runOperation: func(s leaderboardService.Service) (any, error) {
-				return s.GetTagByUserID(ctx, "test_guild_1", "raw_user")
-			},
-			validate: func(t *testing.T, result any, err error) {
-				opResult := result.(results.OperationResult[sharedtypes.TagNumber, error])
-				if err != nil {
-					t.Fatalf("expected no system error, got: %v", err)
-				}
-				if opResult.Success == nil {
-					t.Fatalf("expected success payload, got nil")
-				}
-				tag := *opResult.Success
-				if tag != 10 {
-					t.Errorf("expected tag 10, got %d", tag)
-				}
-			},
-		},
-		{
-			name:    "GetTagByUserID: Returns sql.ErrNoRows for missing user",
-			guildID: "test_guild_1",
-			setupData: func(t *testing.T, db *bun.DB) {
-				lb := &leaderboarddb.Leaderboard{
-					GuildID: "test_guild_1", IsActive: true,
-					LeaderboardData: leaderboardtypes.LeaderboardData{},
-				}
-				_, _ = db.NewInsert().Model(lb).Exec(ctx)
-			},
-			runOperation: func(s leaderboardService.Service) (any, error) {
-				return s.GetTagByUserID(ctx, "test_guild_1", "ghost_user")
-			},
-			wantErr: false,
-			validate: func(t *testing.T, result any, err error) {
-				if err != nil {
-					t.Fatalf("expected no system error, got %v", err)
-				}
-				opResult := result.(results.OperationResult[sharedtypes.TagNumber, error])
-				if opResult.Failure == nil {
-					t.Fatalf("expected domain failure, got nil")
-				}
-				if !errors.Is(*opResult.Failure, sql.ErrNoRows) {
-					t.Errorf("expected sql.ErrNoRows, got %v", *opResult.Failure)
-				}
-			},
-		},
-	}
+	t.Run("GetLeaderboard returns data", func(t *testing.T) {
+		_ = testutils.CleanLeaderboardIntegrationTables(ctx, deps.BunDB)
+		testutils.SetupLeaderboardWithEntries(t, deps.BunDB, leaderboardtypes.LeaderboardData{
+			{UserID: "user_1", TagNumber: 1},
+		}, true, sharedtypes.RoundID{})
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_ = testutils.CleanLeaderboardIntegrationTables(ctx, deps.BunDB)
+		res, err := deps.Service.GetLeaderboard(ctx, "test_guild")
+		if err != nil {
+			t.Fatalf("GetLeaderboard failed: %v", err)
+		}
+		if res.Success == nil || len(*res.Success) != 1 {
+			t.Fatalf("expected one leaderboard entry, got %+v", res)
+		}
+	})
 
-			if tt.setupData != nil {
-				tt.setupData(t, deps.BunDB)
-			}
+	t.Run("GetLeaderboard empty guild returns empty data", func(t *testing.T) {
+		_ = testutils.CleanLeaderboardIntegrationTables(ctx, deps.BunDB)
+		res, err := deps.Service.GetLeaderboard(ctx, "empty_guild")
+		if err != nil {
+			t.Fatalf("GetLeaderboard failed: %v", err)
+		}
+		if res.Success == nil {
+			t.Fatalf("expected success result, got %+v", res)
+		}
+		if len(*res.Success) != 0 {
+			t.Fatalf("expected empty leaderboard, got %d entries", len(*res.Success))
+		}
+	})
 
-			// deps.Service now correctly satisfies the interface signature in runOperation
-			res, err := tt.runOperation(deps.Service)
+	t.Run("RoundGetTagByUserID returns existing tag", func(t *testing.T) {
+		_ = testutils.CleanLeaderboardIntegrationTables(ctx, deps.BunDB)
+		testutils.SetupLeaderboardWithEntries(t, deps.BunDB, leaderboardtypes.LeaderboardData{
+			{UserID: "round_user", TagNumber: 42},
+		}, true, sharedtypes.RoundID{})
 
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("operation error = %v, wantErr %v", err, tt.wantErr)
-			}
+		res, err := deps.Service.RoundGetTagByUserID(ctx, "test_guild", "round_user")
+		if err != nil {
+			t.Fatalf("RoundGetTagByUserID failed: %v", err)
+		}
+		if res.Success == nil || *res.Success != 42 {
+			t.Fatalf("expected tag 42, got %+v", res)
+		}
+	})
 
-			if tt.validate != nil {
-				tt.validate(t, res, err)
-			}
-		})
-	}
+	t.Run("GetTagByUserID returns existing tag", func(t *testing.T) {
+		_ = testutils.CleanLeaderboardIntegrationTables(ctx, deps.BunDB)
+		testutils.SetupLeaderboardWithEntries(t, deps.BunDB, leaderboardtypes.LeaderboardData{
+			{UserID: "raw_user", TagNumber: 10},
+		}, true, sharedtypes.RoundID{})
+
+		res, err := deps.Service.GetTagByUserID(ctx, "test_guild", "raw_user")
+		if err != nil {
+			t.Fatalf("GetTagByUserID failed: %v", err)
+		}
+		if res.Success == nil || *res.Success != 10 {
+			t.Fatalf("expected tag 10, got %+v", res)
+		}
+	})
+
+	t.Run("GetTagByUserID missing user returns sql.ErrNoRows failure", func(t *testing.T) {
+		_ = testutils.CleanLeaderboardIntegrationTables(ctx, deps.BunDB)
+		testutils.SetupLeaderboardWithEntries(t, deps.BunDB, leaderboardtypes.LeaderboardData{}, true, sharedtypes.RoundID{})
+
+		opResult, err := deps.Service.GetTagByUserID(ctx, "test_guild", "ghost_user")
+		if err != nil {
+			t.Fatalf("expected no system error, got %v", err)
+		}
+		if opResult.Failure == nil {
+			t.Fatalf("expected domain failure, got %+v", opResult)
+		}
+		if !errors.Is(*opResult.Failure, sql.ErrNoRows) {
+			t.Fatalf("expected sql.ErrNoRows, got %v", *opResult.Failure)
+		}
+	})
 }
+
+var _ leaderboardservice.Service
+var _ results.OperationResult[sharedtypes.TagNumber, error]

@@ -37,7 +37,6 @@ func (h *LeaderboardHandlers) HandleGetLeaderboardRequest(
 			},
 		}}, nil
 	}
-
 	leaderboard := *result.Success
 
 	// Collect user IDs from leaderboard entries

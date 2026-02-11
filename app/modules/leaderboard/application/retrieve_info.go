@@ -3,14 +3,11 @@ package leaderboardservice
 import (
 	"context"
 	"database/sql"
-	"errors"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
-	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
-	"github.com/uptrace/bun"
 )
 
 // TagAvailabilityResult represents the detailed result of a tag availability check.
@@ -26,41 +23,41 @@ func (s *LeaderboardService) GetLeaderboard(
 ) (results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error], error) {
 
 	return withTelemetry(s, ctx, "GetLeaderboard", guildID, func(ctx context.Context) (results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error], error) {
-		getLeaderboardTx := func(ctx context.Context, db bun.IDB) (results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error], error) {
-			leaderboard, err := s.repo.GetActiveLeaderboard(ctx, db, guildID)
-			if err != nil {
-				return results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error]{}, err
-			}
-			if leaderboard == nil {
-				// This case might be unreachable if repo returns error for no active leaderboard, but keeping for safety
-				return results.FailureResult[[]leaderboardtypes.LeaderboardEntry, error](leaderboarddb.ErrNoActiveLeaderboard), nil
-			}
-
-			// Return a copy of entries
-			entries := make([]leaderboardtypes.LeaderboardEntry, len(leaderboard.LeaderboardData))
-			copy(entries, leaderboard.LeaderboardData)
-
-			// Enrich entries with season standings (TotalPoints, RoundsPlayed)
-			userIDs := make([]sharedtypes.DiscordID, len(entries))
-			for i, e := range entries {
-				userIDs[i] = e.UserID
-			}
-			standings, err := s.repo.GetSeasonStandings(ctx, db, "", userIDs)
-			if err != nil {
-				s.logger.ErrorContext(ctx, "failed to enrich leaderboard with season standings", attr.Error(err))
-			} else {
-				for i := range entries {
-					if st, ok := standings[entries[i].UserID]; ok {
-						entries[i].TotalPoints = st.TotalPoints
-						entries[i].RoundsPlayed = st.RoundsPlayed
-					}
-				}
-			}
-
-			return results.SuccessResult[[]leaderboardtypes.LeaderboardEntry, error](entries), nil
+		if s.commandPipeline == nil {
+			return results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error]{}, ErrCommandPipelineUnavailable
 		}
 
-		return runInTx(s, ctx, getLeaderboardTx)
+		taggedMembers, err := s.commandPipeline.GetTaggedMembers(ctx, string(guildID))
+		if err != nil {
+			return results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error]{}, err
+		}
+
+		entries := make([]leaderboardtypes.LeaderboardEntry, len(taggedMembers))
+		for i, member := range taggedMembers {
+			entries[i] = leaderboardtypes.LeaderboardEntry{
+				UserID:    sharedtypes.DiscordID(member.MemberID),
+				TagNumber: sharedtypes.TagNumber(member.Tag),
+			}
+		}
+
+		// Enrich from seasonal standings where available.
+		userIDs := make([]sharedtypes.DiscordID, len(entries))
+		for i, e := range entries {
+			userIDs[i] = e.UserID
+		}
+		standings, err := s.repo.GetSeasonStandings(ctx, s.db, string(guildID), "", userIDs)
+		if err != nil {
+			s.logger.ErrorContext(ctx, "failed to enrich normalized leaderboard with season standings", attr.Error(err))
+		} else {
+			for i := range entries {
+				if st, ok := standings[entries[i].UserID]; ok {
+					entries[i].TotalPoints = st.TotalPoints
+					entries[i].RoundsPlayed = st.RoundsPlayed
+				}
+			}
+		}
+
+		return results.SuccessResult[[]leaderboardtypes.LeaderboardEntry, error](entries), nil
 	})
 }
 
@@ -72,18 +69,18 @@ func (s *LeaderboardService) GetTagByUserID(
 ) (results.OperationResult[sharedtypes.TagNumber, error], error) {
 
 	return withTelemetry(s, ctx, "GetTagByUserID", guildID, func(ctx context.Context) (results.OperationResult[sharedtypes.TagNumber, error], error) {
-		leaderboard, err := s.repo.GetActiveLeaderboard(ctx, s.db, guildID)
+		if s.commandPipeline == nil {
+			return results.OperationResult[sharedtypes.TagNumber, error]{}, ErrCommandPipelineUnavailable
+		}
+
+		tag, found, err := s.commandPipeline.GetMemberTag(ctx, string(guildID), string(userID))
 		if err != nil {
 			return results.OperationResult[sharedtypes.TagNumber, error]{}, err
 		}
-
-		for _, entry := range leaderboard.LeaderboardData {
-			if entry.UserID == userID {
-				return results.SuccessResult[sharedtypes.TagNumber, error](entry.TagNumber), nil
-			}
+		if !found {
+			return results.FailureResult[sharedtypes.TagNumber, error](sql.ErrNoRows), nil
 		}
-
-		return results.FailureResult[sharedtypes.TagNumber, error](sql.ErrNoRows), nil
+		return results.SuccessResult[sharedtypes.TagNumber, error](sharedtypes.TagNumber(tag)), nil
 	})
 }
 
@@ -107,25 +104,14 @@ func (s *LeaderboardService) CheckTagAvailability(
 ) (results.OperationResult[TagAvailabilityResult, error], error) {
 
 	return withTelemetry(s, ctx, "CheckTagAvailability", guildID, func(ctx context.Context) (results.OperationResult[TagAvailabilityResult, error], error) {
-		leaderboard, err := s.repo.GetActiveLeaderboard(ctx, s.db, guildID)
+		if s.commandPipeline == nil {
+			return results.OperationResult[TagAvailabilityResult, error]{}, ErrCommandPipelineUnavailable
+		}
+
+		available, reason, err := s.commandPipeline.CheckTagAvailability(ctx, string(guildID), string(userID), int(tagNumber))
 		if err != nil {
-			if errors.Is(err, leaderboarddb.ErrNoActiveLeaderboard) {
-				return results.SuccessResult[TagAvailabilityResult, error](TagAvailabilityResult{Available: false, Reason: "no active leaderboard"}), nil
-			}
 			return results.OperationResult[TagAvailabilityResult, error]{}, err
 		}
-
-		available, reason := checkInternalAvailability(leaderboard, userID, tagNumber)
 		return results.SuccessResult[TagAvailabilityResult, error](TagAvailabilityResult{Available: available, Reason: reason}), nil
 	})
-}
-
-// Private helper function
-func checkInternalAvailability(l *leaderboardtypes.Leaderboard, userID sharedtypes.DiscordID, tag sharedtypes.TagNumber) (bool, string) {
-	for _, entry := range l.LeaderboardData {
-		if entry.TagNumber == tag && entry.UserID != userID {
-			return false, "tag is already taken"
-		}
-	}
-	return true, ""
 }

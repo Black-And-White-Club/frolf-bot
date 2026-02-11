@@ -12,10 +12,10 @@ import (
 // It subtracts points from SeasonStandings and deletes the PointHistory.
 // This ensures idempotency: running ProcessRound multiple times won't double-count points.
 // Returns the round's season ID when point history exists; otherwise returns an empty string.
-func (s *LeaderboardService) rollbackRoundPoints(ctx context.Context, tx bun.IDB, roundID sharedtypes.RoundID) (string, error) {
+func (s *LeaderboardService) rollbackRoundPoints(ctx context.Context, tx bun.IDB, guildID string, roundID sharedtypes.RoundID) (string, error) {
 	// 1. Fetch exactly what we awarded previously
 	//    We need the MemberID and the Points amount to reverse it accurately.
-	history, err := s.repo.GetPointHistoryForRound(ctx, tx, roundID)
+	history, err := s.repo.GetPointHistoryForRound(ctx, tx, guildID, roundID)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch point history for rollback: %w", err)
 	}
@@ -45,6 +45,7 @@ func (s *LeaderboardService) rollbackRoundPoints(ctx context.Context, tx bun.IDB
 		err := s.repo.DecrementSeasonStanding(
 			ctx,
 			tx,
+			guildID,
 			h.MemberID,
 			seasonID,
 			h.Points, // Amount to remove
@@ -56,7 +57,7 @@ func (s *LeaderboardService) rollbackRoundPoints(ctx context.Context, tx bun.IDB
 
 	// 3. Clear the history log
 	//    This ensures that when we run the "Forward" pass next, we don't duplicate history.
-	if err := s.repo.DeletePointHistoryForRound(ctx, tx, roundID); err != nil {
+	if err := s.repo.DeletePointHistoryForRound(ctx, tx, guildID, roundID); err != nil {
 		return "", fmt.Errorf("failed to delete point history for round %s: %w", roundID, err)
 	}
 

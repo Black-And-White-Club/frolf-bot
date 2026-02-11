@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"testing"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
@@ -15,91 +16,79 @@ import (
 	"github.com/uptrace/bun"
 )
 
-// InsertLeaderboard creates and inserts a leaderboard with the given data and allows custom IsActive and UpdateID.
-func InsertLeaderboard(t *testing.T, db *bun.DB, data leaderboardtypes.LeaderboardData, isActive bool, updateID sharedtypes.RoundID) (*leaderboarddb.Leaderboard, error) {
-	t.Helper()
-	leaderboard := &leaderboarddb.Leaderboard{
-		LeaderboardData: data,
-		IsActive:        isActive,
-		UpdateSource:    sharedtypes.ServiceUpdateSourceManual,
-		UpdateID:        updateID,
-		GuildID:         sharedtypes.GuildID("test_guild"),
-	}
-	_, err := db.NewInsert().Model(leaderboard).Exec(context.Background())
-	if err != nil {
-		return nil, fmt.Errorf("failed to insert leaderboard: %w", err)
-	}
-	return leaderboard, nil
-}
+const defaultTestGuildID = "test_guild"
 
-// SetupLeaderboardWithEntries inserts a leaderboard with the specified entries and returns the refreshed leaderboard.
-func SetupLeaderboardWithEntries(t *testing.T, db *bun.DB, entries []leaderboardtypes.LeaderboardEntry, isActive bool, roundID sharedtypes.RoundID) *leaderboarddb.Leaderboard {
+// SetupLeaderboardWithEntries seeds league_members for tests and returns the seeded snapshot.
+// Deprecated args are kept for compatibility with existing test call sites.
+func SetupLeaderboardWithEntries(
+	t *testing.T,
+	db *bun.DB,
+	entries []leaderboardtypes.LeaderboardEntry,
+	_ bool,
+	_ sharedtypes.RoundID,
+) leaderboardtypes.LeaderboardData {
 	t.Helper()
-	leaderboardData := make(leaderboardtypes.LeaderboardData, 0, len(entries))
+	ctx := context.Background()
+
+	if _, err := db.NewDelete().
+		Model((*leaderboarddb.LeagueMember)(nil)).
+		Where("guild_id = ?", defaultTestGuildID).
+		Exec(ctx); err != nil {
+		t.Fatalf("failed to clear league members: %v", err)
+	}
+
+	members := make([]leaderboarddb.LeagueMember, 0, len(entries))
 	for _, entry := range entries {
-		leaderboardData = append(leaderboardData, entry)
+		tag := int(entry.TagNumber)
+		members = append(members, leaderboarddb.LeagueMember{
+			GuildID:    defaultTestGuildID,
+			MemberID:   string(entry.UserID),
+			CurrentTag: &tag,
+		})
 	}
-	leaderboard, err := InsertLeaderboard(t, db, leaderboardData, isActive, roundID)
-	if err != nil {
-		t.Fatalf("Failed to insert leaderboard: %v", err)
+	if len(members) > 0 {
+		if _, err := db.NewInsert().Model(&members).Exec(ctx); err != nil {
+			t.Fatalf("failed to seed league members: %v", err)
+		}
 	}
-	updatedLeaderboard := &leaderboarddb.Leaderboard{}
-	err = db.NewSelect().
-		Model(updatedLeaderboard).
-		Where("id = ?", leaderboard.ID).
-		Scan(context.Background())
-	if err != nil {
-		t.Fatalf("Failed to refresh leaderboard from database: %v", err)
-	}
-	return updatedLeaderboard
+
+	return entries
 }
 
-// AssertLeaderboardState validates the leaderboard state in the database.
-func AssertLeaderboardState(t *testing.T, db *bun.DB, expectedLeaderboard *leaderboarddb.Leaderboard, expectedCount int, expectedActive bool) {
+// QueryLeaderboardData returns current tagged members from league_members for a guild.
+func QueryLeaderboardData(
+	t *testing.T,
+	ctx context.Context,
+	db *bun.DB,
+	guildID sharedtypes.GuildID,
+) (leaderboardtypes.LeaderboardData, error) {
 	t.Helper()
-	leaderboards, err := QueryLeaderboards(t, context.Background(), db)
-	if err != nil {
-		t.Fatalf("Failed to query leaderboards: %v", err)
-	}
-
-	activeCount := 0
-	var activeLeaderboard *leaderboarddb.Leaderboard
-	for _, lb := range leaderboards {
-		if lb.IsActive {
-			activeCount++
-			activeLeaderboard = &lb
-		}
-	}
-
-	if expectedCount > 0 && expectedActive {
-		if activeCount != expectedCount {
-			t.Errorf("Expected %d active leaderboards, got %d", expectedCount, activeCount)
-		}
-		if expectedLeaderboard != nil && activeLeaderboard != nil && expectedLeaderboard.ID != activeLeaderboard.ID {
-			t.Errorf("Active leaderboard ID mismatch: expected %d, got %d", expectedLeaderboard.ID, activeLeaderboard.ID)
-		}
-	} else if expectedActive && activeCount == 0 {
-		t.Error("Expected an active leaderboard but found none")
-	} else if !expectedActive && activeCount > 0 {
-		t.Errorf("Expected no active leaderboards but found %d", activeCount)
-	}
-}
-
-// QueryLeaderboards retrieves all leaderboards from the database
-func QueryLeaderboards(t *testing.T, ctx context.Context, db *bun.DB) ([]leaderboarddb.Leaderboard, error) {
-	t.Helper() // Mark this as a helper function
-	var leaderboards []leaderboarddb.Leaderboard
+	var members []leaderboarddb.LeagueMember
 	err := db.NewSelect().
-		Model(&leaderboards).
-		Order("id ASC").
+		Model(&members).
+		Where("guild_id = ?", string(guildID)).
+		Where("current_tag IS NOT NULL").
+		OrderExpr("current_tag ASC").
+		OrderExpr("member_id ASC").
 		Scan(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query leaderboards: %w", err)
+		return nil, fmt.Errorf("failed to query league members: %w", err)
 	}
-	return leaderboards, nil
+
+	data := make(leaderboardtypes.LeaderboardData, 0, len(members))
+	for _, m := range members {
+		if m.CurrentTag == nil || *m.CurrentTag <= 0 {
+			continue
+		}
+		data = append(data, leaderboardtypes.LeaderboardEntry{
+			UserID:    sharedtypes.DiscordID(m.MemberID),
+			TagNumber: sharedtypes.TagNumber(*m.CurrentTag),
+		})
+	}
+	return data, nil
 }
 
-// ParseRequestPayload extracts a Payload Struct from a message
+// ParsePayload extracts a payload struct from a message.
 func ParsePayload[T any](msg *message.Message) (*T, error) {
 	var payload T
 	if err := json.Unmarshal(msg.Payload, &payload); err != nil {
@@ -108,7 +97,7 @@ func ParsePayload[T any](msg *message.Message) (*T, error) {
 	return &payload, nil
 }
 
-// DebugLeaderboardData prints leaderboard data for troubleshooting
+// DebugLeaderboardData prints leaderboard data for troubleshooting.
 func DebugLeaderboardData(t *testing.T, label string, data leaderboardtypes.LeaderboardData) {
 	t.Helper()
 	t.Logf("--- %s ---", label)
@@ -122,9 +111,9 @@ func DebugLeaderboardData(t *testing.T, label string, data leaderboardtypes.Lead
 	t.Logf("------------------")
 }
 
-// ValidateSuccessResponse checks that a response has the expected properties
+// ValidateSuccessResponse checks that a response has the expected properties.
 func ValidateSuccessResponse(t *testing.T, requestPayload *sharedevents.BatchTagAssignmentRequestedPayloadV1, responsePayload *leaderboardevents.LeaderboardBatchTagAssignedPayloadV1) {
-	t.Helper() // Mark this as a helper function
+	t.Helper()
 	if responsePayload.RequestingUserID != requestPayload.RequestingUserID {
 		t.Errorf("Success payload RequestingUserID mismatch: expected %q, got %q",
 			requestPayload.RequestingUserID, responsePayload.RequestingUserID)
@@ -135,9 +124,9 @@ func ValidateSuccessResponse(t *testing.T, requestPayload *sharedevents.BatchTag
 	}
 }
 
-// ValidateLeaderboardData compares leaderboard data against expected assignments
+// ValidateLeaderboardData compares leaderboard data against expected assignments.
 func ValidateLeaderboardData(t *testing.T, expectedData map[sharedtypes.DiscordID]sharedtypes.TagNumber, actualData map[sharedtypes.DiscordID]sharedtypes.TagNumber) {
-	t.Helper() // Mark this as a helper function
+	t.Helper()
 	if len(actualData) != len(expectedData) {
 		t.Errorf("Expected %d entries in leaderboard, got %d. Actual: %+v", len(expectedData), len(actualData), actualData)
 		return
@@ -153,7 +142,7 @@ func ValidateLeaderboardData(t *testing.T, expectedData map[sharedtypes.DiscordI
 	}
 }
 
-// ExtractLeaderboardDataMap converts leaderboard data to a map for easier comparison
+// ExtractLeaderboardDataMap converts leaderboard data to a map for easier comparison.
 func ExtractLeaderboardDataMap(leaderboardData leaderboardtypes.LeaderboardData) map[sharedtypes.DiscordID]sharedtypes.TagNumber {
 	result := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber)
 	for _, entry := range leaderboardData {
@@ -164,15 +153,25 @@ func ExtractLeaderboardDataMap(leaderboardData leaderboardtypes.LeaderboardData)
 	return result
 }
 
-// MergeLeaderboardWithAssignments combines initial leaderboard data with new assignments
-func MergeLeaderboardWithAssignments(initialLeaderboard *leaderboarddb.Leaderboard, assignments []sharedevents.TagAssignmentInfoV1) map[sharedtypes.DiscordID]sharedtypes.TagNumber {
-	result := ExtractLeaderboardDataMap(initialLeaderboard.LeaderboardData)
-
+// MergeLeaderboardWithAssignments combines initial leaderboard data with new assignments.
+func MergeLeaderboardWithAssignments(initial leaderboardtypes.LeaderboardData, assignments []sharedevents.TagAssignmentInfoV1) map[sharedtypes.DiscordID]sharedtypes.TagNumber {
+	result := ExtractLeaderboardDataMap(initial)
 	for _, assignment := range assignments {
 		if assignment.TagNumber >= 0 {
 			result[assignment.UserID] = assignment.TagNumber
 		}
 	}
-
 	return result
+}
+
+// SortedLeaderboard returns a stable ordering for direct equality checks in tests.
+func SortedLeaderboard(data leaderboardtypes.LeaderboardData) leaderboardtypes.LeaderboardData {
+	out := append(leaderboardtypes.LeaderboardData(nil), data...)
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].TagNumber != out[j].TagNumber {
+			return out[i].TagNumber < out[j].TagNumber
+		}
+		return out[i].UserID < out[j].UserID
+	})
+	return out
 }

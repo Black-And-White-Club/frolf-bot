@@ -11,7 +11,6 @@ import (
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
@@ -61,9 +60,9 @@ func TestHandleBatchTagAssignmentRequested(t *testing.T) {
 	testCases := []struct {
 		name                   string
 		users                  []testutils.User
-		setupFn                func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *leaderboarddb.Leaderboard
+		setupFn                func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) leaderboardtypes.LeaderboardData
 		publishMsgFn           func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *message.Message
-		validateFn             func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard)
+		validateFn             func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard leaderboardtypes.LeaderboardData)
 		expectedOutgoingTopics []string
 		expectHandlerError     bool
 		timeout                time.Duration
@@ -71,7 +70,7 @@ func TestHandleBatchTagAssignmentRequested(t *testing.T) {
 		{
 			name:  "Success - Process Valid Batch Assignments",
 			users: generator.GenerateUsers(2),
-			setupFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *leaderboarddb.Leaderboard {
+			setupFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) leaderboardtypes.LeaderboardData {
 				initialData := leaderboardtypes.LeaderboardData{
 					{UserID: sharedtypes.DiscordID(users[0].UserID), TagNumber: 1},
 					{UserID: sharedtypes.DiscordID(users[1].UserID), TagNumber: 2},
@@ -98,7 +97,7 @@ func TestHandleBatchTagAssignmentRequested(t *testing.T) {
 				}
 				return msg
 			},
-			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
+			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard leaderboardtypes.LeaderboardData) {
 				expectedTopic := leaderboardevents.LeaderboardBatchTagAssignedV1
 				msgs := receivedMsgs[expectedTopic]
 				if len(msgs) == 0 {
@@ -137,32 +136,14 @@ func TestHandleBatchTagAssignmentRequested(t *testing.T) {
 				}
 
 				// Validate leaderboard state in database
-				leaderboards, err := testutils.QueryLeaderboards(t, context.Background(), deps.DB)
+				finalData, err := testutils.QueryLeaderboardData(t, context.Background(), deps.DB, "test_guild")
 				if err != nil {
 					t.Fatalf("%v", err)
 				}
 
-				if len(leaderboards) != 2 {
-					t.Fatalf("Expected 2 leaderboard records (old inactive, new active), got %d", len(leaderboards))
-				}
-
-				oldLeaderboard := leaderboards[0]
-				newLeaderboard := leaderboards[1]
-
-				if oldLeaderboard.ID != initialLeaderboard.ID {
-					t.Errorf("Expected old leaderboard ID %d, got %d", initialLeaderboard.ID, oldLeaderboard.ID)
-				}
-				if oldLeaderboard.IsActive {
-					t.Error("Expected old leaderboard to be inactive")
-				}
-
-				if !newLeaderboard.IsActive {
-					t.Error("Expected new leaderboard to be active")
-				}
-
 				// Instead of comparing expected merged data, directly examine the actual data
 				// and verify it contains the expected entries
-				actualData := testutils.ExtractLeaderboardDataMap(newLeaderboard.LeaderboardData)
+				actualData := testutils.ExtractLeaderboardDataMap(finalData)
 
 				// Debug logging to see what we actually got
 				t.Logf("Actual leaderboard data: %+v", actualData)
@@ -179,7 +160,7 @@ func TestHandleBatchTagAssignmentRequested(t *testing.T) {
 				}
 
 				// Check that the initial data is preserved (unless overwritten)
-				initialData := testutils.ExtractLeaderboardDataMap(initialLeaderboard.LeaderboardData)
+				initialData := testutils.ExtractLeaderboardDataMap(initialLeaderboard)
 				for userID, initialTag := range initialData {
 					// Only check users that weren't in the new assignments
 					var wasAssigned bool
@@ -213,7 +194,7 @@ func TestHandleBatchTagAssignmentRequested(t *testing.T) {
 		{
 			name:  "Success - Batch Assignment with Already Assigned Tag ",
 			users: generator.GenerateUsers(2),
-			setupFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *leaderboarddb.Leaderboard {
+			setupFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) leaderboardtypes.LeaderboardData {
 				existingUserID = sharedtypes.DiscordID(users[0].UserID)
 				newUserID = sharedtypes.DiscordID(users[1].UserID)
 				initialData := leaderboardtypes.LeaderboardData{
@@ -235,7 +216,7 @@ func TestHandleBatchTagAssignmentRequested(t *testing.T) {
 				}
 				return msg
 			},
-			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
+			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard leaderboardtypes.LeaderboardData) {
 				expectedTopic := leaderboardevents.LeaderboardBatchTagAssignedV1
 				msgs := receivedMsgs[expectedTopic]
 				if len(msgs) == 0 {
@@ -245,12 +226,12 @@ func TestHandleBatchTagAssignmentRequested(t *testing.T) {
 					// Multiple messages are possible (e.g., related side-effects). Use the first message for assertions.
 					t.Logf("Warning: received %d messages on topic %q; using the first for validation", len(msgs), expectedTopic)
 				}
-				leaderboards, err := testutils.QueryLeaderboards(t, context.Background(), deps.DB)
+				finalData, err := testutils.QueryLeaderboardData(t, context.Background(), deps.DB, "test_guild")
 				if err != nil {
 					t.Fatalf("%v", err)
 				}
-				if len(leaderboards) != 2 {
-					t.Fatalf("Expected 2 leaderboard records (old inactive, new active), got %d", len(leaderboards))
+				if len(finalData) != 2 {
+					t.Fatalf("Expected 2 assigned members, got %d", len(finalData))
 				}
 			},
 			expectedOutgoingTopics: []string{leaderboardevents.LeaderboardBatchTagAssignedV1},
@@ -259,7 +240,7 @@ func TestHandleBatchTagAssignmentRequested(t *testing.T) {
 		{
 			name:  "Failure - Invalid Message Payload (Unmarshal Error)",
 			users: generator.GenerateUsers(1),
-			setupFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *leaderboarddb.Leaderboard {
+			setupFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) leaderboardtypes.LeaderboardData {
 				entries := []leaderboardtypes.LeaderboardEntry{
 					{UserID: sharedtypes.DiscordID(users[0].UserID), TagNumber: 99},
 				}
@@ -274,7 +255,7 @@ func TestHandleBatchTagAssignmentRequested(t *testing.T) {
 				}
 				return msg
 			},
-			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
+			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard leaderboardtypes.LeaderboardData) {
 				// Check for unexpected messages
 				unexpectedSuccessTopic := leaderboardevents.LeaderboardBatchTagAssignedV1
 				if len(receivedMsgs[unexpectedSuccessTopic]) > 0 {
@@ -286,21 +267,13 @@ func TestHandleBatchTagAssignmentRequested(t *testing.T) {
 				}
 
 				// Validate leaderboard state in database
-				leaderboards, err := testutils.QueryLeaderboards(t, context.Background(), deps.DB)
+				finalData, err := testutils.QueryLeaderboardData(t, context.Background(), deps.DB, "test_guild")
 				if err != nil {
 					t.Fatalf("%v", err)
 				}
 
-				if len(leaderboards) != 1 {
-					t.Fatalf("Expected 1 leaderboard record in DB, got %d", len(leaderboards))
-				}
-
-				leaderboard := leaderboards[0]
-				if leaderboard.ID != initialLeaderboard.ID {
-					t.Errorf("Expected leaderboard ID %d, got %d", initialLeaderboard.ID, leaderboard.ID)
-				}
-				if !leaderboard.IsActive {
-					t.Error("Expected leaderboard to remain active")
+				if len(finalData) != len(initialLeaderboard) {
+					t.Fatalf("Expected leaderboard to remain unchanged")
 				}
 			},
 			expectedOutgoingTopics: []string{},
@@ -308,7 +281,7 @@ func TestHandleBatchTagAssignmentRequested(t *testing.T) {
 		},
 		{
 			name: "Failure - Service Returns Error",
-			setupFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *leaderboarddb.Leaderboard {
+			setupFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) leaderboardtypes.LeaderboardData {
 				initialLeaderboard := testutils.SetupLeaderboardWithEntries(t, deps.DB, []leaderboardtypes.LeaderboardEntry{}, true, sharedtypes.RoundID(uuid.New()))
 
 				return initialLeaderboard
@@ -331,7 +304,7 @@ func TestHandleBatchTagAssignmentRequested(t *testing.T) {
 				}
 				return msg
 			},
-			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
+			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard leaderboardtypes.LeaderboardData) {
 				// Check for unexpected messages
 				unexpectedSuccessTopic := leaderboardevents.LeaderboardBatchTagAssignedV1
 				if len(receivedMsgs[unexpectedSuccessTopic]) > 0 {
@@ -343,13 +316,12 @@ func TestHandleBatchTagAssignmentRequested(t *testing.T) {
 				}
 
 				// Validate leaderboard state in database
-				leaderboards, err := testutils.QueryLeaderboards(t, context.Background(), deps.DB)
+				finalData, err := testutils.QueryLeaderboardData(t, context.Background(), deps.DB, "test_guild")
 				if err != nil {
 					t.Fatalf("%v", err)
 				}
-
-				if len(leaderboards) < 1 {
-					t.Fatalf("Expected at least 1 leaderboard record in DB, got %d", len(leaderboards))
+				if len(finalData) < 1 {
+					t.Fatalf("Expected at least 1 leaderboard member in DB, got %d", len(finalData))
 				}
 			},
 			expectedOutgoingTopics: []string{},
@@ -373,7 +345,7 @@ func TestHandleBatchTagAssignmentRequested(t *testing.T) {
 				},
 				ExpectedTopics: tc.expectedOutgoingTopics,
 				ValidateFn: func(t *testing.T, env *testutils.TestEnvironment, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
-					tc.validateFn(t, deps, incomingMsg, receivedMsgs, initialState.(*leaderboarddb.Leaderboard))
+					tc.validateFn(t, deps, incomingMsg, receivedMsgs, initialState.(leaderboardtypes.LeaderboardData))
 				},
 				ExpectError: tc.expectHandlerError,
 			}

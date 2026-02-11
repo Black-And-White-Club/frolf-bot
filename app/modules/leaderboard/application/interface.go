@@ -6,6 +6,7 @@ import (
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
+	leaderboarddomain "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/domain"
 )
 
 // PlayerResult represents a player's performance in a round.
@@ -91,6 +92,17 @@ type Service interface {
 
 	// GetSeasonStandings retrieves standings for a specific season.
 	GetSeasonStandingsForSeason(ctx context.Context, guildID sharedtypes.GuildID, seasonID string) (results.OperationResult[[]SeasonStandingEntry, error], error)
+
+	// --- COMMAND-STYLE OPERATIONS (transport-agnostic) ---
+
+	// ProcessRoundCommand runs the normalized command flow for round processing.
+	ProcessRoundCommand(ctx context.Context, cmd ProcessRoundCommand) (*ProcessRoundOutput, error)
+
+	// ResetTagsFromQualifyingRound clears and reassigns tags based on finish order.
+	ResetTagsFromQualifyingRound(ctx context.Context, guildID sharedtypes.GuildID, finishOrder []sharedtypes.DiscordID) ([]leaderboarddomain.TagChange, error)
+
+	// EndSeason ends the active season for a guild.
+	EndSeason(ctx context.Context, guildID sharedtypes.GuildID) error
 
 	// --- INFRASTRUCTURE ---
 	EnsureGuildLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[bool, error], error)

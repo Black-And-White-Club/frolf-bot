@@ -2,17 +2,17 @@ package leaderboardhandlers
 
 import (
 	"context"
-	"errors"
-	"strconv"
+	"fmt"
 	"strings"
 	"time"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
+	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
-	"github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/saga"
+	"github.com/google/uuid"
 )
 
 // HandleLeaderboardUpdateRequested handles the LeaderboardUpdateRequested event.
@@ -21,57 +21,33 @@ func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(
 	ctx context.Context,
 	payload *leaderboardevents.LeaderboardUpdateRequestedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	requests := make([]sharedtypes.TagAssignmentRequest, 0, len(payload.SortedParticipantTags))
-	for _, tagUserPair := range payload.SortedParticipantTags {
-		parts := strings.Split(tagUserPair, ":")
-		if len(parts) != 2 {
-			continue
-		}
-		tagNum, _ := strconv.Atoi(parts[0])
-		requests = append(requests, sharedtypes.TagAssignmentRequest{
-			UserID:    sharedtypes.DiscordID(parts[1]),
-			TagNumber: sharedtypes.TagNumber(tagNum),
-		})
+	return h.handleLeaderboardUpdateWithServiceCommand(ctx, payload)
+}
+
+func (h *LeaderboardHandlers) handleLeaderboardUpdateWithServiceCommand(
+	ctx context.Context,
+	payload *leaderboardevents.LeaderboardUpdateRequestedPayloadV1,
+) ([]handlerwrapper.Result, error) {
+	participants := buildParticipantsFromUpdatePayload(payload)
+	if len(participants) == 0 {
+		return nil, fmt.Errorf("leaderboard update payload has no participants")
 	}
 
-	result, err := h.service.ExecuteBatchTagAssignment(
-		ctx,
-		payload.GuildID,
-		requests,
-		payload.RoundID,
-		sharedtypes.ServiceUpdateSourceProcessScores,
-	)
+	output, err := h.service.ProcessRoundCommand(ctx, leaderboardservice.ProcessRoundCommand{
+		GuildID:      string(payload.GuildID),
+		RoundID:      uuid.UUID(payload.RoundID),
+		Participants: participants,
+	})
 	if err != nil {
 		return nil, err
 	}
-
-	if result.IsFailure() {
-		var swapErr *leaderboardservice.TagSwapNeededError
-		if errors.As(*result.Failure, &swapErr) {
-			intentErr := h.sagaCoordinator.ProcessIntent(ctx, saga.SwapIntent{
-				UserID:     swapErr.RequestorID,
-				CurrentTag: swapErr.CurrentTag,
-				TargetTag:  swapErr.TargetTag,
-				GuildID:    payload.GuildID,
-			})
-			return []handlerwrapper.Result{}, intentErr
-		}
-		return nil, *result.Failure
+	if output == nil {
+		return nil, fmt.Errorf("process round returned nil output")
 	}
-
-	updatedData := *result.Success
-	// Build success events from returned leaderboard data
-	assignments := make([]leaderboardevents.TagAssignmentInfoV1, 0, len(updatedData))
+	updatedData := leaderboardDataFromFinalTags(output.FinalParticipantTags)
+	leaderboardData := make(map[sharedtypes.TagNumber]sharedtypes.DiscordID, len(updatedData))
+	changedTags := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber, len(updatedData))
 	for _, entry := range updatedData {
-		assignments = append(assignments, leaderboardevents.TagAssignmentInfoV1{
-			UserID:    entry.UserID,
-			TagNumber: entry.TagNumber,
-		})
-	}
-
-	leaderboardData := make(map[sharedtypes.TagNumber]sharedtypes.DiscordID, len(assignments))
-	changedTags := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber, len(assignments))
-	for _, entry := range assignments {
 		leaderboardData[entry.TagNumber] = entry.UserID
 		changedTags[entry.UserID] = entry.TagNumber
 	}
@@ -96,8 +72,102 @@ func (h *LeaderboardHandlers) HandleLeaderboardUpdateRequested(
 		},
 	}
 
-	// Add both legacy GuildID and internal ClubUUID scoped versions for PWA/NATS transition
+	if !output.PointsSkipped && len(output.PointAwards) > 0 {
+		pointsAwarded := make(map[sharedtypes.DiscordID]int, len(output.PointAwards))
+		for _, award := range output.PointAwards {
+			pointsAwarded[sharedtypes.DiscordID(award.MemberID)] = award.Points
+		}
+
+		pointsPayload := &sharedevents.PointsAwardedPayloadV1{
+			GuildID: payload.GuildID,
+			RoundID: payload.RoundID,
+			Points:  pointsAwarded,
+		}
+		if h.roundLookup != nil {
+			round, err := h.roundLookup.GetRound(ctx, payload.GuildID, payload.RoundID)
+			if err != nil {
+				h.logger.WarnContext(ctx, "failed to fetch round for points enrichment", "error", err)
+			} else if round != nil {
+				pointsPayload.EventMessageID = round.EventMessageID
+				pointsPayload.Title = round.Title
+				pointsPayload.Location = round.Location
+				pointsPayload.StartTime = round.StartTime
+
+				if round.Participants != nil {
+					pointsPayload.Participants = make([]roundtypes.Participant, len(round.Participants))
+					copy(pointsPayload.Participants, round.Participants)
+					for i := range pointsPayload.Participants {
+						if pts, ok := pointsPayload.Points[pointsPayload.Participants[i].UserID]; ok {
+							p := pts
+							pointsPayload.Participants[i].Points = &p
+						}
+					}
+				}
+				if round.Teams != nil {
+					pointsPayload.Teams = make([]roundtypes.NormalizedTeam, len(round.Teams))
+					for i, t := range round.Teams {
+						pointsPayload.Teams[i] = t
+						if t.Members != nil {
+							pointsPayload.Teams[i].Members = make([]roundtypes.TeamMember, len(t.Members))
+							copy(pointsPayload.Teams[i].Members, t.Members)
+						}
+						if t.HoleScores != nil {
+							pointsPayload.Teams[i].HoleScores = make([]int, len(t.HoleScores))
+							copy(pointsPayload.Teams[i].HoleScores, t.HoleScores)
+						}
+					}
+				}
+			}
+		}
+
+		pointsResult := handlerwrapper.Result{
+			Topic:   sharedevents.PointsAwardedV1,
+			Payload: pointsPayload,
+		}
+		if pointsPayload.EventMessageID != "" {
+			pointsResult.Metadata = map[string]string{
+				"discord_message_id": pointsPayload.EventMessageID,
+			}
+		}
+		results = append(results, pointsResult)
+	}
+
 	results = h.addParallelIdentityResults(ctx, results, leaderboardevents.LeaderboardUpdatedV1, payload.GuildID)
+	propagateCorrelationID(ctx, results)
 
 	return results, nil
+}
+
+func buildParticipantsFromUpdatePayload(payload *leaderboardevents.LeaderboardUpdateRequestedPayloadV1) []leaderboardservice.RoundParticipantInput {
+	if payload == nil {
+		return nil
+	}
+
+	if len(payload.Participants) > 0 {
+		participants := make([]leaderboardservice.RoundParticipantInput, 0, len(payload.Participants))
+		for i, participant := range payload.Participants {
+			finishRank := participant.FinishRank
+			if finishRank <= 0 {
+				finishRank = i + 1
+			}
+			participants = append(participants, leaderboardservice.RoundParticipantInput{
+				MemberID:   string(participant.MemberID),
+				FinishRank: finishRank,
+			})
+		}
+		return participants
+	}
+
+	participants := make([]leaderboardservice.RoundParticipantInput, 0, len(payload.SortedParticipantTags))
+	for i, tagUserPair := range payload.SortedParticipantTags {
+		parts := strings.Split(tagUserPair, ":")
+		if len(parts) != 2 {
+			continue
+		}
+		participants = append(participants, leaderboardservice.RoundParticipantInput{
+			MemberID:   parts[1],
+			FinishRank: i + 1,
+		})
+	}
+	return participants
 }

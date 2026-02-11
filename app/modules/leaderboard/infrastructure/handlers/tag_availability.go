@@ -2,6 +2,7 @@ package leaderboardhandlers
 
 import (
 	"context"
+	"fmt"
 
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
@@ -14,6 +15,10 @@ func (h *LeaderboardHandlers) HandleTagAvailabilityCheckRequested(
 ) ([]handlerwrapper.Result, error) {
 	h.logger.Info("HandleTagAvailabilityCheckRequested triggered", "guild_id", payload.GuildID, "user_id", payload.UserID, "tag_number", payload.TagNumber)
 
+	if payload.TagNumber == nil {
+		return nil, fmt.Errorf("tag_number is required")
+	}
+
 	result, err := h.service.CheckTagAvailability(ctx, payload.GuildID, payload.UserID, *payload.TagNumber)
 	if err != nil {
 		return nil, err
@@ -21,8 +26,8 @@ func (h *LeaderboardHandlers) HandleTagAvailabilityCheckRequested(
 	if result.IsFailure() {
 		return nil, *result.Failure
 	}
-
 	res := *result.Success
+
 	if res.Available {
 		availablePayload := &sharedevents.TagAvailablePayloadV1{
 			GuildID:   payload.GuildID,

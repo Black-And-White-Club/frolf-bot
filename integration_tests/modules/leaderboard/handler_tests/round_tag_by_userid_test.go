@@ -10,7 +10,6 @@ import (
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
@@ -55,16 +54,16 @@ func TestHandleRoundGetTagRequest(t *testing.T) {
 	testCases := []struct {
 		name                   string
 		users                  []testutils.User
-		setupFn                func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *leaderboarddb.Leaderboard
+		setupFn                func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) leaderboardtypes.LeaderboardData
 		publishMsgFn           func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *message.Message
-		validateFn             func(t *testing.T, deps LeaderboardHandlerTestDeps, incoming *message.Message, received map[string][]*message.Message, initial *leaderboarddb.Leaderboard)
+		validateFn             func(t *testing.T, deps LeaderboardHandlerTestDeps, incoming *message.Message, received map[string][]*message.Message, initial leaderboardtypes.LeaderboardData)
 		expectedOutgoingTopics []string
 		expectHandlerError     bool
 	}{
 		{
 			name:  "Success - Tag found for user on active leaderboard",
 			users: generator.GenerateUsers(1),
-			setupFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *leaderboarddb.Leaderboard {
+			setupFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) leaderboardtypes.LeaderboardData {
 				data := leaderboardtypes.LeaderboardData{{UserID: sharedtypes.DiscordID(users[0].UserID), TagNumber: 99}}
 				return testutils.SetupLeaderboardWithEntries(t, deps.DB, data, true, sharedtypes.RoundID(uuid.New()))
 			},
@@ -76,7 +75,7 @@ func TestHandleRoundGetTagRequest(t *testing.T) {
 					Response:      roundtypes.ResponseAccept,
 				})
 			},
-			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incoming *message.Message, received map[string][]*message.Message, initial *leaderboarddb.Leaderboard) {
+			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incoming *message.Message, received map[string][]*message.Message, initial leaderboardtypes.LeaderboardData) {
 				msgs := received[sharedevents.RoundTagLookupFoundV1]
 				if len(msgs) == 0 {
 					t.Fatal("Expected RoundTagLookupFoundV1 message")
@@ -90,7 +89,7 @@ func TestHandleRoundGetTagRequest(t *testing.T) {
 		{
 			name:  "Success - Tag not found (user not on leaderboard)",
 			users: generator.GenerateUsers(1),
-			setupFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *leaderboarddb.Leaderboard {
+			setupFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) leaderboardtypes.LeaderboardData {
 				data := leaderboardtypes.LeaderboardData{{UserID: "someone_else", TagNumber: 77}}
 				return testutils.SetupLeaderboardWithEntries(t, deps.DB, data, true, sharedtypes.RoundID(uuid.New()))
 			},
@@ -101,7 +100,7 @@ func TestHandleRoundGetTagRequest(t *testing.T) {
 					RoundID:       sharedtypes.RoundID(uuid.New()),
 				})
 			},
-			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incoming *message.Message, received map[string][]*message.Message, initial *leaderboarddb.Leaderboard) {
+			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incoming *message.Message, received map[string][]*message.Message, initial leaderboardtypes.LeaderboardData) {
 				// Service now returns a failure result for missing tag lookups; handler maps that to RoundTagLookupNotFoundV1
 				if len(received[sharedevents.RoundTagLookupNotFoundV1]) != 1 {
 					t.Fatalf("Expected 1 RoundTagLookupNotFound message, got %d", len(received[sharedevents.RoundTagLookupNotFoundV1]))
@@ -112,7 +111,7 @@ func TestHandleRoundGetTagRequest(t *testing.T) {
 		{
 			name:  "Failure - No active leaderboard present",
 			users: generator.GenerateUsers(1),
-			setupFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *leaderboarddb.Leaderboard {
+			setupFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) leaderboardtypes.LeaderboardData {
 				return testutils.SetupLeaderboardWithEntries(t, deps.DB, nil, false, sharedtypes.RoundID(uuid.New()))
 			},
 			publishMsgFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *message.Message {
@@ -122,7 +121,7 @@ func TestHandleRoundGetTagRequest(t *testing.T) {
 					RoundID:       sharedtypes.RoundID(uuid.New()),
 				})
 			},
-			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incoming *message.Message, received map[string][]*message.Message, initial *leaderboarddb.Leaderboard) {
+			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incoming *message.Message, received map[string][]*message.Message, initial leaderboardtypes.LeaderboardData) {
 				// If the handler returns (nil, err), the wrapper might not publish to a topic.
 				// But based on your specific requirements, if you expect a fail topic, ensure it's mapped in the router.
 				// For now, we verify that no "Found" or "NotFound" messages were sent erroneously.
@@ -136,7 +135,7 @@ func TestHandleRoundGetTagRequest(t *testing.T) {
 		{
 			name:  "Failure - Invalid payload (unmarshal error)",
 			users: generator.GenerateUsers(1),
-			setupFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *leaderboarddb.Leaderboard {
+			setupFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) leaderboardtypes.LeaderboardData {
 				return nil
 			},
 			publishMsgFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *message.Message {
@@ -144,7 +143,7 @@ func TestHandleRoundGetTagRequest(t *testing.T) {
 				testutils.PublishMessage(t, deps.EventBus, context.Background(), sharedevents.RoundTagLookupRequestedV1, msg)
 				return msg
 			},
-			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incoming *message.Message, received map[string][]*message.Message, initial *leaderboarddb.Leaderboard) {
+			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incoming *message.Message, received map[string][]*message.Message, initial leaderboardtypes.LeaderboardData) {
 				if len(received) > 0 {
 					t.Errorf("Expected no messages, got %d", len(received))
 				}
@@ -168,9 +167,9 @@ func TestHandleRoundGetTagRequest(t *testing.T) {
 				},
 				ExpectedTopics: tc.expectedOutgoingTopics,
 				ValidateFn: func(t *testing.T, env *testutils.TestEnvironment, incoming *message.Message, received map[string][]*message.Message, initialState interface{}) {
-					var initial *leaderboarddb.Leaderboard
+					var initial leaderboardtypes.LeaderboardData
 					if initialState != nil {
-						initial = initialState.(*leaderboarddb.Leaderboard)
+						initial = initialState.(leaderboardtypes.LeaderboardData)
 					}
 					tc.validateFn(t, deps, incoming, received, initial)
 				},

@@ -3,7 +3,6 @@ package leaderboardservice
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -13,19 +12,42 @@ import (
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
+	leaderboarddomain "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/domain"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	"github.com/uptrace/bun"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
 
+// CommandPipeline defines the normalized command flow contract used by the service boundary.
+type CommandPipeline interface {
+	ProcessRound(ctx context.Context, cmd ProcessRoundCommand) (*ProcessRoundOutput, error)
+	ApplyTagAssignments(
+		ctx context.Context,
+		guildID string,
+		requests []sharedtypes.TagAssignmentRequest,
+		source sharedtypes.ServiceUpdateSource,
+		updateID sharedtypes.RoundID,
+	) (leaderboardtypes.LeaderboardData, error)
+	StartSeason(ctx context.Context, guildID, seasonID, seasonName string) error
+	EndSeason(ctx context.Context, guildID string) error
+	ResetTags(ctx context.Context, guildID string, finishOrder []string) ([]leaderboarddomain.TagChange, error)
+	GetTaggedMembers(ctx context.Context, guildID string) ([]TaggedMemberView, error)
+	GetMemberTag(ctx context.Context, guildID, memberID string) (int, bool, error)
+	CheckTagAvailability(ctx context.Context, guildID, memberID string, tagNumber int) (bool, string, error)
+}
+
 // LeaderboardService implements the Service interface.
 type LeaderboardService struct {
-	repo    leaderboarddb.Repository
-	logger  *slog.Logger
-	metrics leaderboardmetrics.LeaderboardMetrics
-	tracer  trace.Tracer
-	db      *bun.DB
+	repo            leaderboarddb.Repository
+	memberRepo      leaderboarddb.LeagueMemberRepository
+	tagHistRepo     leaderboarddb.TagHistoryRepository
+	outcomeRepo     leaderboarddb.RoundOutcomeRepository
+	logger          *slog.Logger
+	metrics         leaderboardmetrics.LeaderboardMetrics
+	tracer          trace.Tracer
+	db              *bun.DB
+	commandPipeline CommandPipeline
 }
 
 // NewLeaderboardService creates a new LeaderboardService.
@@ -40,13 +62,24 @@ func NewLeaderboardService(
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &LeaderboardService{
-		repo:    repo,
-		logger:  logger,
-		metrics: metrics,
-		tracer:  tracer,
-		db:      db,
+	service := &LeaderboardService{
+		repo:        repo,
+		memberRepo:  leaderboarddb.NewLeagueMemberRepo(),
+		tagHistRepo: leaderboarddb.NewTagHistoryRepo(),
+		outcomeRepo: leaderboarddb.NewRoundOutcomeRepo(),
+		logger:      logger,
+		metrics:     metrics,
+		tracer:      tracer,
+		db:          db,
 	}
+	service.commandPipeline = &serviceCommandPipeline{service: service}
+	return service
+}
+
+// SetCommandPipeline overrides the default command flow.
+// Intended for tests and specialized wiring only.
+func (s *LeaderboardService) SetCommandPipeline(handler CommandPipeline) {
+	s.commandPipeline = handler
 }
 
 // EnsureGuildLeaderboard creates an empty active leaderboard for the guild if none exists.
@@ -65,28 +98,8 @@ func (s *LeaderboardService) EnsureGuildLeaderboard(ctx context.Context, guildID
 
 // ensureGuildLeaderboardLogic contains the core logic.
 func (s *LeaderboardService) ensureGuildLeaderboardLogic(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (results.OperationResult[bool, error], error) {
-	_, err := s.repo.GetActiveLeaderboard(ctx, db, guildID)
-	if err == nil {
-		// Already exists
-		return results.SuccessResult[bool, error](false), nil
-	}
-	if !errors.Is(err, leaderboarddb.ErrNoActiveLeaderboard) {
-		return results.OperationResult[bool, error]{}, err
-	}
-
-	s.logger.InfoContext(ctx, "Ensuring active leaderboard for guild", attr.String("guild_id", string(guildID)))
-
-	empty := &leaderboardtypes.Leaderboard{
-		LeaderboardData: leaderboardtypes.LeaderboardData{},
-		IsActive:        true,
-		UpdateSource:    sharedtypes.ServiceUpdateSourceManual,
-		GuildID:         guildID,
-	}
-
-	if err := s.repo.SaveLeaderboard(ctx, db, empty); err != nil {
-		return results.OperationResult[bool, error]{}, fmt.Errorf("failed to create empty leaderboard for guild %s: %w", guildID, err)
-	}
-	return results.SuccessResult[bool, error](true), nil
+	s.logger.InfoContext(ctx, "Guild leaderboard initialization is a no-op in normalized mode", attr.String("guild_id", string(guildID)))
+	return results.SuccessResult[bool, error](false), nil
 }
 
 // -----------------------------------------------------------------------------

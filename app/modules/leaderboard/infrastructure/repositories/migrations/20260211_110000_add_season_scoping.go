@@ -19,9 +19,9 @@ func init() {
 
 		// 2. Insert default season
 		_, err := db.NewRaw(`
-			INSERT INTO leaderboard_seasons (id, name, is_active)
-			VALUES ('default', 'Default Season', true)
-			ON CONFLICT (id) DO NOTHING
+			INSERT INTO leaderboard_seasons (guild_id, id, name, is_active)
+			VALUES ('', 'default', 'Default Season', true)
+			ON CONFLICT (guild_id, id) DO NOTHING
 		`).Exec(ctx)
 		if err != nil {
 			return fmt.Errorf("insert default season: %w", err)
