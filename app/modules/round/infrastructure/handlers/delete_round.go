@@ -82,9 +82,6 @@ func (h *RoundHandlers) HandleRoundDeleteAuthorized(
 	ctx context.Context,
 	payload *roundevents.RoundDeleteAuthorizedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	// 1. Extract the Discord Message ID from context to ensure it propagates
-	discordMessageID, _ := ctx.Value("discord_message_id").(string)
-
 	// 2. Fetch DiscordEventID before deletion (best-effort, non-blocking)
 	var discordEventID string
 	roundResult, err := h.service.GetRound(ctx, payload.GuildID, payload.RoundID)
@@ -105,9 +102,14 @@ func (h *RoundHandlers) HandleRoundDeleteAuthorized(
 	// Map to ensure correct event payload structure
 	mappedResult := result.Map(
 		func(_ bool) any {
+			// Extract Discord IDs from context if available (set by wrapper from message metadata)
+			discordMessageID, _ := ctx.Value("discord_message_id").(string)
+			channelID, _ := ctx.Value("channel_id").(string)
+
 			return &roundevents.RoundDeletedPayloadV1{
 				GuildID:        payload.GuildID,
 				RoundID:        payload.RoundID,
+				ChannelID:      channelID,
 				EventMessageID: discordMessageID,
 				DiscordEventID: discordEventID,
 			}
@@ -128,14 +130,6 @@ func (h *RoundHandlers) HandleRoundDeleteAuthorized(
 		roundevents.RoundDeletedV1,
 		roundevents.RoundDeleteErrorV1,
 	)
-
-	// 2. If we have a message ID, promote it to metadata so the Discord
-	// handler knows which embed to delete.
-	if discordMessageID != "" && len(results) > 0 {
-		results[0].Metadata = map[string]string{
-			"discord_message_id": discordMessageID,
-		}
-	}
 
 	// Add both legacy GuildID and internal ClubUUID scoped versions for PWA/NATS transition
 	results = h.addParallelIdentityResults(ctx, results, roundevents.RoundDeletedV1, payload.GuildID)

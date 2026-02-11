@@ -61,7 +61,7 @@ func mapOperationResult[S any, F any](
 // addGuildScopedResult appends a guild-scoped version of the event for PWA permission scoping.
 // This enables PWA consumers to subscribe with patterns like "round.created.v1.{guild_id}".
 // Maintains backward compatibility by keeping the original non-scoped event.
-func addGuildScopedResult(results []handlerwrapper.Result, baseTopic string, guildID any) []handlerwrapper.Result {
+func addGuildScopedResult(originalResults []handlerwrapper.Result, baseTopic string, guildID any) []handlerwrapper.Result {
 	// Convert guildID to string
 	var guildIDStr string
 	switch v := guildID.(type) {
@@ -74,11 +74,11 @@ func addGuildScopedResult(results []handlerwrapper.Result, baseTopic string, gui
 	}
 
 	if guildIDStr == "" {
-		return results
+		return originalResults
 	}
 
 	// Find the result with the matching base topic and duplicate it with guild suffix
-	for _, r := range results {
+	for _, r := range originalResults {
 		if r.Topic == baseTopic {
 			guildScopedTopic := fmt.Sprintf("%s.%s", baseTopic, guildIDStr)
 			guildScopedResult := handlerwrapper.Result{
@@ -86,28 +86,28 @@ func addGuildScopedResult(results []handlerwrapper.Result, baseTopic string, gui
 				Payload:  r.Payload,
 				Metadata: r.Metadata,
 			}
-			return append(results, guildScopedResult)
+			return append(originalResults, guildScopedResult)
 		}
 	}
 
-	return results
+	return originalResults
 }
 
 // addParallelIdentityResults appends both legacy GuildID and internal ClubUUID scoped versions of the event.
 // This allows the PWA to transition to UUIDs while the Discord bot continues using GuildIDs.
-func (h *RoundHandlers) addParallelIdentityResults(ctx context.Context, results []handlerwrapper.Result, baseTopic string, guildID sharedtypes.GuildID) []handlerwrapper.Result {
+func (h *RoundHandlers) addParallelIdentityResults(ctx context.Context, originalResults []handlerwrapper.Result, baseTopic string, guildID sharedtypes.GuildID) []handlerwrapper.Result {
 	// 1. Add legacy GuildID scoped result
-	results = addGuildScopedResult(results, baseTopic, guildID)
+	currentResults := addGuildScopedResult(originalResults, baseTopic, guildID)
 
 	// 2. Add internal ClubUUID scoped result
 	if guildID != "" {
 		clubUUID, err := h.userService.GetClubUUIDByDiscordGuildID(ctx, guildID)
 		if err == nil && clubUUID != uuid.Nil {
-			results = addGuildScopedResult(results, baseTopic, clubUUID)
+			currentResults = addGuildScopedResult(currentResults, baseTopic, clubUUID)
 		}
 	}
 
-	return results
+	return currentResults
 }
 
 // extractAnchorClock builds an AnchorClock from context if a timestamp is provided; falls back to RealClock.

@@ -121,7 +121,7 @@ func (h *RoundHandlers) HandleRoundEntityCreated(
 }
 
 // HandleRoundEventMessageIDUpdate updates the round with the Discord message ID.
-// compatibility with the Discord module on Main.
+// Compatibility with the Discord module on Main.
 func (h *RoundHandlers) HandleRoundEventMessageIDUpdate(
 	ctx context.Context,
 	payload *roundevents.RoundMessageIDUpdatePayloadV1,

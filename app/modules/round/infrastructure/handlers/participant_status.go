@@ -30,7 +30,7 @@ func (h *RoundHandlers) HandleParticipantJoinRequest(
 	}
 
 	if result.Failure != nil {
-		return []handlerwrapper.Result{
+		results := []handlerwrapper.Result{
 			{
 				Topic: roundevents.RoundParticipantStatusCheckErrorV1,
 				Payload: &roundevents.ParticipantStatusCheckErrorPayloadV1{
@@ -40,13 +40,15 @@ func (h *RoundHandlers) HandleParticipantJoinRequest(
 					Error:   (*result.Failure).Error(),
 				},
 			},
-		}, nil
+		}
+		return results, nil
 	}
 
 	checkResult := result.Success
+	var results []handlerwrapper.Result
 	switch (*checkResult).Action {
 	case "VALIDATE":
-		return []handlerwrapper.Result{
+		results = []handlerwrapper.Result{
 			{
 				Topic: roundevents.RoundParticipantJoinValidationRequestedV1,
 				Payload: &roundevents.ParticipantJoinValidationRequestPayloadV1{
@@ -56,9 +58,9 @@ func (h *RoundHandlers) HandleParticipantJoinRequest(
 					Response: (*checkResult).Response,
 				},
 			},
-		}, nil
+		}
 	case "REMOVE":
-		return []handlerwrapper.Result{
+		results = []handlerwrapper.Result{
 			{
 				Topic: roundevents.RoundParticipantRemovalRequestedV1,
 				Payload: &roundevents.ParticipantRemovalRequestPayloadV1{
@@ -67,10 +69,11 @@ func (h *RoundHandlers) HandleParticipantJoinRequest(
 					UserID:  (*checkResult).UserID,
 				},
 			},
-		}, nil
+		}
 	default:
 		return nil, sharedtypes.ValidationError{Message: "unexpected action from CheckParticipantStatus: " + (*checkResult).Action}
 	}
+	return results, nil
 }
 
 // HandleParticipantJoinValidationRequest validates if a user is allowed to join (e.g. check if round is full).
@@ -91,7 +94,7 @@ func (h *RoundHandlers) HandleParticipantJoinValidationRequest(
 	}
 
 	if result.Failure != nil {
-		return []handlerwrapper.Result{
+		results := []handlerwrapper.Result{
 			{
 				Topic: roundevents.RoundParticipantJoinErrorV1,
 				Payload: &roundevents.RoundParticipantJoinErrorPayloadV1{
@@ -99,7 +102,8 @@ func (h *RoundHandlers) HandleParticipantJoinValidationRequest(
 					Error:   (*result.Failure).Error(),
 				},
 			},
-		}, nil
+		}
+		return results, nil
 	}
 
 	validatedReq := result.Success
@@ -114,9 +118,10 @@ func (h *RoundHandlers) HandleParticipantJoinValidationRequest(
 			TagNumber:  (*validatedReq).TagNumber,
 			JoinedLate: (*validatedReq).JoinedLate,
 		}
-		return []handlerwrapper.Result{
+		results := []handlerwrapper.Result{
 			{Topic: roundevents.RoundParticipantStatusUpdateRequestedV1, Payload: updateRequest},
-		}, nil
+		}
+		return results, nil
 	}
 
 	// If Accept/Tentative, request a tag lookup from the leaderboard service.
@@ -131,9 +136,11 @@ func (h *RoundHandlers) HandleParticipantJoinValidationRequest(
 		JoinedLate:       (*validatedReq).JoinedLate,
 	}
 
-	return []handlerwrapper.Result{
+	results := []handlerwrapper.Result{
 		{Topic: sharedevents.RoundTagLookupRequestedV1, Payload: tagLookupRequest},
-	}, nil
+	}
+
+	return results, nil
 }
 
 // HandleParticipantStatusUpdateRequest applies the final participant state to the database.
@@ -156,7 +163,7 @@ func (h *RoundHandlers) HandleParticipantStatusUpdateRequest(
 	}
 
 	if result.Failure != nil {
-		return []handlerwrapper.Result{
+		results := []handlerwrapper.Result{
 			{
 				Topic: roundevents.RoundParticipantJoinErrorV1,
 				Payload: &roundevents.RoundParticipantJoinErrorPayloadV1{
@@ -165,7 +172,8 @@ func (h *RoundHandlers) HandleParticipantStatusUpdateRequest(
 					ParticipantJoinRequest: payload,
 				},
 			},
-		}, nil
+		}
+		return results, nil
 	}
 
 	round := result.Success
@@ -198,7 +206,7 @@ func (h *RoundHandlers) HandleParticipantRemovalRequest(
 	}
 
 	if result.Failure != nil {
-		return []handlerwrapper.Result{
+		results := []handlerwrapper.Result{
 			{
 				Topic: roundevents.RoundParticipantRemovalErrorV1,
 				Payload: &roundevents.ParticipantRemovalErrorPayloadV1{
@@ -208,7 +216,8 @@ func (h *RoundHandlers) HandleParticipantRemovalRequest(
 					Error:   (*result.Failure).Error(),
 				},
 			},
-		}, nil
+		}
+		return results, nil
 	}
 
 	round := result.Success
@@ -220,9 +229,10 @@ func (h *RoundHandlers) HandleParticipantRemovalRequest(
 	}
 	removedPayload.AcceptedParticipants, removedPayload.DeclinedParticipants, removedPayload.TentativeParticipants = h.splitParticipants((*round).Participants)
 
-	return []handlerwrapper.Result{
+	results := []handlerwrapper.Result{
 		{Topic: roundevents.RoundParticipantRemovedV1, Payload: removedPayload},
-	}, nil
+	}
+	return results, nil
 }
 
 // HandleTagNumberFound processes a successful tag lookup and proceeds to update status.
