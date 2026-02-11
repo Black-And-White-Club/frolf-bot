@@ -45,7 +45,7 @@ func (s *LeaderboardService) GetLeaderboard(
 			for i, e := range entries {
 				userIDs[i] = e.UserID
 			}
-			standings, err := s.repo.GetSeasonStandings(ctx, db, userIDs)
+			standings, err := s.repo.GetSeasonStandings(ctx, db, "", userIDs)
 			if err != nil {
 				s.logger.ErrorContext(ctx, "failed to enrich leaderboard with season standings", attr.Error(err))
 			} else {

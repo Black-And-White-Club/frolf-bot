@@ -22,16 +22,20 @@ type FakeLeaderboardRepo struct {
 
 	// Points & Standings Stubs
 	SavePointHistoryFunc     func(ctx context.Context, db bun.IDB, history *leaderboarddb.PointHistory) error
-	UpsertSeasonStandingFunc func(ctx context.Context, db bun.IDB, standing *leaderboarddb.SeasonStanding) error
-	GetSeasonStandingFunc    func(ctx context.Context, db bun.IDB, memberID sharedtypes.DiscordID) (*leaderboarddb.SeasonStanding, error)
-	GetSeasonBestTagsFunc    func(ctx context.Context, db bun.IDB, memberIDs []sharedtypes.DiscordID) (map[sharedtypes.DiscordID]int, error)
-	CountSeasonMembersFunc   func(ctx context.Context, db bun.IDB) (int, error)
-	GetSeasonStandingsFunc   func(ctx context.Context, db bun.IDB, memberIDs []sharedtypes.DiscordID) (map[sharedtypes.DiscordID]*leaderboarddb.SeasonStanding, error)
+	BulkSavePointHistoryFunc func(ctx context.Context, db bun.IDB, histories []*leaderboarddb.PointHistory) error
+
+	UpsertSeasonStandingFunc      func(ctx context.Context, db bun.IDB, standing *leaderboarddb.SeasonStanding) error
+	BulkUpsertSeasonStandingsFunc func(ctx context.Context, db bun.IDB, standings []*leaderboarddb.SeasonStanding) error
+
+	GetSeasonStandingFunc  func(ctx context.Context, db bun.IDB, memberID sharedtypes.DiscordID) (*leaderboarddb.SeasonStanding, error)
+	GetSeasonBestTagsFunc  func(ctx context.Context, db bun.IDB, seasonID string, memberIDs []sharedtypes.DiscordID) (map[sharedtypes.DiscordID]int, error)
+	CountSeasonMembersFunc func(ctx context.Context, db bun.IDB, seasonID string) (int, error)
+	GetSeasonStandingsFunc func(ctx context.Context, db bun.IDB, seasonID string, memberIDs []sharedtypes.DiscordID) (map[sharedtypes.DiscordID]*leaderboarddb.SeasonStanding, error)
 
 	// Rollback Stubs
 	GetPointHistoryForRoundFunc    func(ctx context.Context, db bun.IDB, roundID sharedtypes.RoundID) ([]leaderboarddb.PointHistory, error)
 	DeletePointHistoryForRoundFunc func(ctx context.Context, db bun.IDB, roundID sharedtypes.RoundID) error
-	DecrementSeasonStandingFunc    func(ctx context.Context, db bun.IDB, memberID sharedtypes.DiscordID, pointsToRemove int) error
+	DecrementSeasonStandingFunc    func(ctx context.Context, db bun.IDB, memberID sharedtypes.DiscordID, seasonID string, pointsToRemove int) error
 }
 
 func NewFakeLeaderboardRepo() *FakeLeaderboardRepo {
@@ -79,10 +83,26 @@ func (f *FakeLeaderboardRepo) SavePointHistory(ctx context.Context, db bun.IDB, 
 	return nil
 }
 
+func (f *FakeLeaderboardRepo) BulkSavePointHistory(ctx context.Context, db bun.IDB, histories []*leaderboarddb.PointHistory) error {
+	f.record("BulkSavePointHistory")
+	if f.BulkSavePointHistoryFunc != nil {
+		return f.BulkSavePointHistoryFunc(ctx, db, histories)
+	}
+	return nil
+}
+
 func (f *FakeLeaderboardRepo) UpsertSeasonStanding(ctx context.Context, db bun.IDB, standing *leaderboarddb.SeasonStanding) error {
 	f.record("UpsertSeasonStanding")
 	if f.UpsertSeasonStandingFunc != nil {
 		return f.UpsertSeasonStandingFunc(ctx, db, standing)
+	}
+	return nil
+}
+
+func (f *FakeLeaderboardRepo) BulkUpsertSeasonStandings(ctx context.Context, db bun.IDB, standings []*leaderboarddb.SeasonStanding) error {
+	f.record("BulkUpsertSeasonStandings")
+	if f.BulkUpsertSeasonStandingsFunc != nil {
+		return f.BulkUpsertSeasonStandingsFunc(ctx, db, standings)
 	}
 	return nil
 }
@@ -95,26 +115,26 @@ func (f *FakeLeaderboardRepo) GetSeasonStanding(ctx context.Context, db bun.IDB,
 	return nil, nil // Default to no standing
 }
 
-func (f *FakeLeaderboardRepo) GetSeasonBestTags(ctx context.Context, db bun.IDB, memberIDs []sharedtypes.DiscordID) (map[sharedtypes.DiscordID]int, error) {
+func (f *FakeLeaderboardRepo) GetSeasonBestTags(ctx context.Context, db bun.IDB, seasonID string, memberIDs []sharedtypes.DiscordID) (map[sharedtypes.DiscordID]int, error) {
 	f.record("GetSeasonBestTags")
 	if f.GetSeasonBestTagsFunc != nil {
-		return f.GetSeasonBestTagsFunc(ctx, db, memberIDs)
+		return f.GetSeasonBestTagsFunc(ctx, db, seasonID, memberIDs)
 	}
 	return make(map[sharedtypes.DiscordID]int), nil
 }
 
-func (f *FakeLeaderboardRepo) CountSeasonMembers(ctx context.Context, db bun.IDB) (int, error) {
+func (f *FakeLeaderboardRepo) CountSeasonMembers(ctx context.Context, db bun.IDB, seasonID string) (int, error) {
 	f.record("CountSeasonMembers")
 	if f.CountSeasonMembersFunc != nil {
-		return f.CountSeasonMembersFunc(ctx, db)
+		return f.CountSeasonMembersFunc(ctx, db, seasonID)
 	}
 	return 0, nil
 }
 
-func (f *FakeLeaderboardRepo) GetSeasonStandings(ctx context.Context, db bun.IDB, memberIDs []sharedtypes.DiscordID) (map[sharedtypes.DiscordID]*leaderboarddb.SeasonStanding, error) {
+func (f *FakeLeaderboardRepo) GetSeasonStandings(ctx context.Context, db bun.IDB, seasonID string, memberIDs []sharedtypes.DiscordID) (map[sharedtypes.DiscordID]*leaderboarddb.SeasonStanding, error) {
 	f.record("GetSeasonStandings")
 	if f.GetSeasonStandingsFunc != nil {
-		return f.GetSeasonStandingsFunc(ctx, db, memberIDs)
+		return f.GetSeasonStandingsFunc(ctx, db, seasonID, memberIDs)
 	}
 	return make(map[sharedtypes.DiscordID]*leaderboarddb.SeasonStanding), nil
 }
@@ -135,12 +155,39 @@ func (f *FakeLeaderboardRepo) DeletePointHistoryForRound(ctx context.Context, db
 	return nil
 }
 
-func (f *FakeLeaderboardRepo) DecrementSeasonStanding(ctx context.Context, db bun.IDB, memberID sharedtypes.DiscordID, pointsToRemove int) error {
+func (f *FakeLeaderboardRepo) DecrementSeasonStanding(ctx context.Context, db bun.IDB, memberID sharedtypes.DiscordID, seasonID string, pointsToRemove int) error {
 	f.record("DecrementSeasonStanding")
 	if f.DecrementSeasonStandingFunc != nil {
-		return f.DecrementSeasonStandingFunc(ctx, db, memberID, pointsToRemove)
+		return f.DecrementSeasonStandingFunc(ctx, db, memberID, seasonID, pointsToRemove)
 	}
 	return nil
+}
+
+// --- Season Management ---
+
+func (f *FakeLeaderboardRepo) GetActiveSeason(ctx context.Context, db bun.IDB) (*leaderboarddb.Season, error) {
+	f.record("GetActiveSeason")
+	return &leaderboarddb.Season{ID: "default", Name: "Default Season", IsActive: true}, nil
+}
+
+func (f *FakeLeaderboardRepo) CreateSeason(ctx context.Context, db bun.IDB, season *leaderboarddb.Season) error {
+	f.record("CreateSeason")
+	return nil
+}
+
+func (f *FakeLeaderboardRepo) DeactivateAllSeasons(ctx context.Context, db bun.IDB) error {
+	f.record("DeactivateAllSeasons")
+	return nil
+}
+
+func (f *FakeLeaderboardRepo) GetPointHistoryForMember(ctx context.Context, db bun.IDB, memberID sharedtypes.DiscordID, limit int) ([]leaderboarddb.PointHistory, error) {
+	f.record("GetPointHistoryForMember")
+	return nil, nil
+}
+
+func (f *FakeLeaderboardRepo) GetSeasonStandingsBySeasonID(ctx context.Context, db bun.IDB, seasonID string) ([]leaderboarddb.SeasonStanding, error) {
+	f.record("GetSeasonStandingsBySeasonID")
+	return nil, nil
 }
 
 // --- Accessors for assertions ---

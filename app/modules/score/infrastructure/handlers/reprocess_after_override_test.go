@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func TestScoreHandlers_HandleReprocessAfterScoreUpdate(t *testing.T) {
+func TestScoreHandlers_HandleReprocessAfterBulkScoreUpdate(t *testing.T) {
 	testGuildID := sharedtypes.GuildID("guild-1234")
 	testRoundID := sharedtypes.RoundID(uuid.New())
 	userID1 := sharedtypes.DiscordID("user-1")
@@ -23,7 +23,7 @@ func TestScoreHandlers_HandleReprocessAfterScoreUpdate(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		payload        interface{}
+		payload        *sharedevents.ScoreBulkUpdatedPayloadV1
 		setupFake      func(*FakeScoreService)
 		wantErr        bool
 		expectedErrMsg string
@@ -65,30 +65,11 @@ func TestScoreHandlers_HandleReprocessAfterScoreUpdate(t *testing.T) {
 			payload: &sharedevents.ScoreBulkUpdatedPayloadV1{
 				AppliedCount: 0,
 			},
-			setupFake: nil, // No service calls should happen
+			setupFake: nil,
 			wantErr:   false,
 			checkResults: func(t *testing.T, results []handlerwrapper.Result) {
 				if len(results) != 0 {
 					t.Fatalf("expected 0 results, got %d", len(results))
-				}
-			},
-		},
-		{
-			name: "Single success not part of bulk - trigger reprocess",
-			payload: &sharedevents.ScoreUpdatedPayloadV1{
-				GuildID: testGuildID,
-				RoundID: testRoundID,
-				UserID:  userID1,
-			},
-			setupFake: func(f *FakeScoreService) {
-				f.GetScoresForRoundFunc = func(ctx context.Context, gID sharedtypes.GuildID, rID sharedtypes.RoundID) ([]sharedtypes.ScoreInfo, error) {
-					return []sharedtypes.ScoreInfo{{UserID: userID1, Score: score1}}, nil
-				}
-			},
-			wantErr: false,
-			checkResults: func(t *testing.T, results []handlerwrapper.Result) {
-				if len(results) != 1 {
-					t.Fatalf("expected 1 result, got %d", len(results))
 				}
 			},
 		},
@@ -132,11 +113,111 @@ func TestScoreHandlers_HandleReprocessAfterScoreUpdate(t *testing.T) {
 				}
 			},
 		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fakeSvc := NewFakeScoreService()
+			if tt.setupFake != nil {
+				tt.setupFake(fakeSvc)
+			}
+
+			h := &ScoreHandlers{
+				service: fakeSvc,
+				helpers: nil,
+			}
+
+			got, err := h.HandleReprocessAfterBulkScoreUpdate(context.Background(), tt.payload)
+
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("HandleReprocessAfterBulkScoreUpdate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr && err != nil && err.Error() != tt.expectedErrMsg {
+				t.Errorf("HandleReprocessAfterBulkScoreUpdate() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
+			}
+
+			if !tt.wantErr && tt.checkResults != nil {
+				tt.checkResults(t, got)
+			}
+		})
+	}
+}
+
+func TestScoreHandlers_HandleReprocessAfterSingleScoreUpdate(t *testing.T) {
+	testGuildID := sharedtypes.GuildID("guild-1234")
+	testRoundID := sharedtypes.RoundID(uuid.New())
+	userID1 := sharedtypes.DiscordID("user-1")
+	score1 := sharedtypes.Score(10)
+
+	tests := []struct {
+		name           string
+		payload        *sharedevents.ScoreUpdatedPayloadV1
+		setupFake      func(*FakeScoreService)
+		wantErr        bool
+		expectedErrMsg string
+		checkResults   func(t *testing.T, results []handlerwrapper.Result)
+	}{
 		{
-			name:           "Unexpected payload type",
-			payload:        "not a struct",
+			name: "Single score update triggers reprocess",
+			payload: &sharedevents.ScoreUpdatedPayloadV1{
+				GuildID: testGuildID,
+				RoundID: testRoundID,
+				UserID:  userID1,
+			},
+			setupFake: func(f *FakeScoreService) {
+				f.GetScoresForRoundFunc = func(ctx context.Context, gID sharedtypes.GuildID, rID sharedtypes.RoundID) ([]sharedtypes.ScoreInfo, error) {
+					return []sharedtypes.ScoreInfo{{UserID: userID1, Score: score1}}, nil
+				}
+			},
+			wantErr: false,
+			checkResults: func(t *testing.T, results []handlerwrapper.Result) {
+				if len(results) != 1 {
+					t.Fatalf("expected 1 result, got %d", len(results))
+				}
+				if results[0].Topic != sharedevents.ProcessRoundScoresRequestedV1 {
+					t.Errorf("expected topic %s, got %s", sharedevents.ProcessRoundScoresRequestedV1, results[0].Topic)
+				}
+			},
+		},
+		{
+			name:           "Nil payload",
+			payload:        nil,
 			wantErr:        true,
-			expectedErrMsg: "unexpected payload type",
+			expectedErrMsg: "payload is nil",
+		},
+		{
+			name: "GetScoresForRound fails",
+			payload: &sharedevents.ScoreUpdatedPayloadV1{
+				GuildID: testGuildID,
+				RoundID: testRoundID,
+				UserID:  userID1,
+			},
+			setupFake: func(f *FakeScoreService) {
+				f.GetScoresForRoundFunc = func(ctx context.Context, gID sharedtypes.GuildID, rID sharedtypes.RoundID) ([]sharedtypes.ScoreInfo, error) {
+					return nil, errors.New("db error")
+				}
+			},
+			wantErr:        true,
+			expectedErrMsg: "failed to load stored scores for reprocess",
+		},
+		{
+			name: "Empty scores - skip reprocess",
+			payload: &sharedevents.ScoreUpdatedPayloadV1{
+				GuildID: testGuildID,
+				RoundID: testRoundID,
+				UserID:  userID1,
+			},
+			setupFake: func(f *FakeScoreService) {
+				f.GetScoresForRoundFunc = func(ctx context.Context, gID sharedtypes.GuildID, rID sharedtypes.RoundID) ([]sharedtypes.ScoreInfo, error) {
+					return []sharedtypes.ScoreInfo{}, nil
+				}
+			},
+			wantErr: false,
+			checkResults: func(t *testing.T, results []handlerwrapper.Result) {
+				if len(results) != 0 {
+					t.Errorf("expected 0 results, got %d", len(results))
+				}
+			},
 		},
 	}
 
@@ -152,13 +233,13 @@ func TestScoreHandlers_HandleReprocessAfterScoreUpdate(t *testing.T) {
 				helpers: nil,
 			}
 
-			got, err := h.HandleReprocessAfterScoreUpdate(context.Background(), tt.payload)
+			got, err := h.HandleReprocessAfterSingleScoreUpdate(context.Background(), tt.payload)
 
 			if (err != nil) != tt.wantErr {
-				t.Fatalf("HandleReprocessAfterScoreUpdate() error = %v, wantErr %v", err, tt.wantErr)
+				t.Fatalf("HandleReprocessAfterSingleScoreUpdate() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if tt.wantErr && err != nil && err.Error() != tt.expectedErrMsg {
-				t.Errorf("HandleReprocessAfterScoreUpdate() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
+				t.Errorf("HandleReprocessAfterSingleScoreUpdate() error = %v, expectedErrMsg %v", err, tt.expectedErrMsg)
 			}
 
 			if !tt.wantErr && tt.checkResults != nil {

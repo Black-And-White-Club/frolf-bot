@@ -118,3 +118,23 @@ func (f *FakeLeaderboardService) ProcessRound(
 ) (results.OperationResult[leaderboardservice.ProcessRoundResult, error], error) {
 	return results.FailureResult[leaderboardservice.ProcessRoundResult, error](errors.New("not implemented")), nil
 }
+
+func (f *FakeLeaderboardService) GetPointHistoryForMember(ctx context.Context, guildID sharedtypes.GuildID, memberID sharedtypes.DiscordID, limit int) (results.OperationResult[[]leaderboardservice.PointHistoryEntry, error], error) {
+	return results.FailureResult[[]leaderboardservice.PointHistoryEntry, error](errors.New("not implemented")), nil
+}
+
+func (f *FakeLeaderboardService) AdjustPoints(ctx context.Context, guildID sharedtypes.GuildID, memberID sharedtypes.DiscordID, pointsDelta int, reason string) (results.OperationResult[bool, error], error) {
+	return results.FailureResult[bool, error](errors.New("not implemented")), nil
+}
+
+func (f *FakeLeaderboardService) RecalculateRound(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (results.OperationResult[leaderboardservice.ProcessRoundResult, error], error) {
+	return results.FailureResult[leaderboardservice.ProcessRoundResult, error](errors.New("not implemented")), nil
+}
+
+func (f *FakeLeaderboardService) StartNewSeason(ctx context.Context, guildID sharedtypes.GuildID, seasonID string, seasonName string) (results.OperationResult[bool, error], error) {
+	return results.FailureResult[bool, error](errors.New("not implemented")), nil
+}
+
+func (f *FakeLeaderboardService) GetSeasonStandingsForSeason(ctx context.Context, guildID sharedtypes.GuildID, seasonID string) (results.OperationResult[[]leaderboardservice.SeasonStandingEntry, error], error) {
+	return results.FailureResult[[]leaderboardservice.SeasonStandingEntry, error](errors.New("not implemented")), nil
+}

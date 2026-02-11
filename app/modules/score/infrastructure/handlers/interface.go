@@ -12,5 +12,6 @@ type Handlers interface {
 	HandleProcessRoundScoresRequest(ctx context.Context, payload *sharedevents.ProcessRoundScoresRequestedPayloadV1) ([]handlerwrapper.Result, error)
 	HandleCorrectScoreRequest(ctx context.Context, payload *sharedevents.ScoreUpdateRequestedPayloadV1) ([]handlerwrapper.Result, error)
 	HandleBulkCorrectScoreRequest(ctx context.Context, payload *sharedevents.ScoreBulkUpdateRequestedPayloadV1) ([]handlerwrapper.Result, error)
-	HandleReprocessAfterScoreUpdate(ctx context.Context, payload interface{}) ([]handlerwrapper.Result, error)
+	HandleReprocessAfterBulkScoreUpdate(ctx context.Context, payload *sharedevents.ScoreBulkUpdatedPayloadV1) ([]handlerwrapper.Result, error)
+	HandleReprocessAfterSingleScoreUpdate(ctx context.Context, payload *sharedevents.ScoreUpdatedPayloadV1) ([]handlerwrapper.Result, error)
 }

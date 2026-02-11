@@ -74,6 +74,46 @@ type Service interface {
 		tagNumber sharedtypes.TagNumber,
 	) (results.OperationResult[TagAvailabilityResult, error], error)
 
+	// --- ADMIN OPERATIONS ---
+
+	// GetPointHistoryForMember returns the point history for a given member.
+	GetPointHistoryForMember(ctx context.Context, guildID sharedtypes.GuildID, memberID sharedtypes.DiscordID, limit int) (results.OperationResult[[]PointHistoryEntry, error], error)
+
+	// AdjustPoints manually adjusts a member's points with a reason.
+	// Does NOT recalculate tiers (tiers only change on round processing).
+	AdjustPoints(ctx context.Context, guildID sharedtypes.GuildID, memberID sharedtypes.DiscordID, pointsDelta int, reason string) (results.OperationResult[bool, error], error)
+
+	// RecalculateRound re-triggers ProcessRound for a given round using stored participant data.
+	RecalculateRound(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (results.OperationResult[ProcessRoundResult, error], error)
+
+	// StartNewSeason creates a new season record, deactivates the old one.
+	StartNewSeason(ctx context.Context, guildID sharedtypes.GuildID, seasonID string, seasonName string) (results.OperationResult[bool, error], error)
+
+	// GetSeasonStandings retrieves standings for a specific season.
+	GetSeasonStandingsForSeason(ctx context.Context, guildID sharedtypes.GuildID, seasonID string) (results.OperationResult[[]SeasonStandingEntry, error], error)
+
 	// --- INFRASTRUCTURE ---
 	EnsureGuildLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[bool, error], error)
+}
+
+// PointHistoryEntry is a read model for point history.
+type PointHistoryEntry struct {
+	MemberID  sharedtypes.DiscordID
+	RoundID   sharedtypes.RoundID
+	SeasonID  string
+	Points    int
+	Reason    string
+	Tier      string
+	Opponents int
+	CreatedAt string // ISO 8601
+}
+
+// SeasonStandingEntry is a read model for season standings.
+type SeasonStandingEntry struct {
+	MemberID      sharedtypes.DiscordID
+	SeasonID      string
+	TotalPoints   int
+	CurrentTier   string
+	SeasonBestTag int
+	RoundsPlayed  int
 }

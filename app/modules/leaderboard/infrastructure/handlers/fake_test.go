@@ -30,6 +30,12 @@ type FakeService struct {
 	CheckTagAvailabilityFunc   func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tagNumber sharedtypes.TagNumber) (results.OperationResult[leaderboardservice.TagAvailabilityResult, error], error)
 	EnsureGuildLeaderboardFunc func(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[bool, error], error)
 	ProcessRoundFunc           func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, playerResults []leaderboardservice.PlayerResult, source sharedtypes.ServiceUpdateSource) (results.OperationResult[leaderboardservice.ProcessRoundResult, error], error)
+
+	// Admin Operations
+	GetPointHistoryForMemberFunc     func(ctx context.Context, guildID sharedtypes.GuildID, memberID sharedtypes.DiscordID, limit int) (results.OperationResult[[]leaderboardservice.PointHistoryEntry, error], error)
+	AdjustPointsFunc                 func(ctx context.Context, guildID sharedtypes.GuildID, memberID sharedtypes.DiscordID, pointsDelta int, reason string) (results.OperationResult[bool, error], error)
+	StartNewSeasonFunc               func(ctx context.Context, guildID sharedtypes.GuildID, seasonID string, seasonName string) (results.OperationResult[bool, error], error)
+	GetSeasonStandingsForSeasonFunc  func(ctx context.Context, guildID sharedtypes.GuildID, seasonID string) (results.OperationResult[[]leaderboardservice.SeasonStandingEntry, error], error)
 }
 
 func NewFakeService() *FakeService {
@@ -156,6 +162,45 @@ func (f *FakeService) EnsureGuildLeaderboard(ctx context.Context, guildID shared
 		return f.EnsureGuildLeaderboardFunc(ctx, guildID)
 	}
 	return results.OperationResult[bool, error]{}, nil
+}
+
+// --- Admin Operations ---
+
+func (f *FakeService) GetPointHistoryForMember(ctx context.Context, guildID sharedtypes.GuildID, memberID sharedtypes.DiscordID, limit int) (results.OperationResult[[]leaderboardservice.PointHistoryEntry, error], error) {
+	f.record("GetPointHistoryForMember")
+	if f.GetPointHistoryForMemberFunc != nil {
+		return f.GetPointHistoryForMemberFunc(ctx, guildID, memberID, limit)
+	}
+	return results.OperationResult[[]leaderboardservice.PointHistoryEntry, error]{}, nil
+}
+
+func (f *FakeService) AdjustPoints(ctx context.Context, guildID sharedtypes.GuildID, memberID sharedtypes.DiscordID, pointsDelta int, reason string) (results.OperationResult[bool, error], error) {
+	f.record("AdjustPoints")
+	if f.AdjustPointsFunc != nil {
+		return f.AdjustPointsFunc(ctx, guildID, memberID, pointsDelta, reason)
+	}
+	return results.OperationResult[bool, error]{}, nil
+}
+
+func (f *FakeService) RecalculateRound(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (results.OperationResult[leaderboardservice.ProcessRoundResult, error], error) {
+	f.record("RecalculateRound")
+	return results.OperationResult[leaderboardservice.ProcessRoundResult, error]{}, nil
+}
+
+func (f *FakeService) StartNewSeason(ctx context.Context, guildID sharedtypes.GuildID, seasonID string, seasonName string) (results.OperationResult[bool, error], error) {
+	f.record("StartNewSeason")
+	if f.StartNewSeasonFunc != nil {
+		return f.StartNewSeasonFunc(ctx, guildID, seasonID, seasonName)
+	}
+	return results.OperationResult[bool, error]{}, nil
+}
+
+func (f *FakeService) GetSeasonStandingsForSeason(ctx context.Context, guildID sharedtypes.GuildID, seasonID string) (results.OperationResult[[]leaderboardservice.SeasonStandingEntry, error], error) {
+	f.record("GetSeasonStandingsForSeason")
+	if f.GetSeasonStandingsForSeasonFunc != nil {
+		return f.GetSeasonStandingsForSeasonFunc(ctx, guildID, seasonID)
+	}
+	return results.OperationResult[[]leaderboardservice.SeasonStandingEntry, error]{}, nil
 }
 
 // Ensure interface compliance

@@ -2,6 +2,7 @@ package leaderboardservice
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"testing"
@@ -49,12 +50,12 @@ func TestLeaderboardService_ProcessRound(t *testing.T) {
 				}
 
 				// Mock Season Standings (Empty initially)
-				f.GetSeasonStandingsFunc = func(ctx context.Context, db bun.IDB, memberIDs []sharedtypes.DiscordID) (map[sharedtypes.DiscordID]*leaderboarddb.SeasonStanding, error) {
+				f.GetSeasonStandingsFunc = func(ctx context.Context, db bun.IDB, seasonID string, memberIDs []sharedtypes.DiscordID) (map[sharedtypes.DiscordID]*leaderboarddb.SeasonStanding, error) {
 					return make(map[sharedtypes.DiscordID]*leaderboarddb.SeasonStanding), nil
 				}
 
 				// Mock Season Best Tags
-				f.GetSeasonBestTagsFunc = func(ctx context.Context, db bun.IDB, memberIDs []sharedtypes.DiscordID) (map[sharedtypes.DiscordID]int, error) {
+				f.GetSeasonBestTagsFunc = func(ctx context.Context, db bun.IDB, seasonID string, memberIDs []sharedtypes.DiscordID) (map[sharedtypes.DiscordID]int, error) {
 					return map[sharedtypes.DiscordID]int{
 						"winner": 2,
 						"loser":  1,
@@ -62,7 +63,7 @@ func TestLeaderboardService_ProcessRound(t *testing.T) {
 				}
 
 				// Mock Count Season Members
-				f.CountSeasonMembersFunc = func(ctx context.Context, db bun.IDB) (int, error) {
+				f.CountSeasonMembersFunc = func(ctx context.Context, db bun.IDB, seasonID string) (int, error) {
 					return 2, nil
 				}
 			},
@@ -98,19 +99,23 @@ func TestLeaderboardService_ProcessRound(t *testing.T) {
 				{"p1", 1},
 			},
 			setupFake: func(f *FakeLeaderboardRepo) {
+				expectedSeasonID := "season-2025"
 				f.GetActiveLeaderboardFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID) (*leaderboardtypes.Leaderboard, error) {
 					return &leaderboardtypes.Leaderboard{}, nil
 				}
 				// Ensure GetPointHistoryForRound is called
 				f.GetPointHistoryForRoundFunc = func(ctx context.Context, db bun.IDB, roundID sharedtypes.RoundID) ([]leaderboarddb.PointHistory, error) {
 					f.record("GetPointHistoryForRoundCalled")
-					return []leaderboarddb.PointHistory{{ID: 1, Points: 50, MemberID: "p1"}}, nil
+					return []leaderboarddb.PointHistory{{ID: 1, Points: 50, MemberID: "p1", SeasonID: expectedSeasonID}}, nil
 				}
 				f.DeletePointHistoryForRoundFunc = func(ctx context.Context, db bun.IDB, roundID sharedtypes.RoundID) error {
 					f.record("DeletePointHistoryForRoundCalled")
 					return nil
 				}
-				f.DecrementSeasonStandingFunc = func(ctx context.Context, db bun.IDB, memberID sharedtypes.DiscordID, pointsToRemove int) error {
+				f.DecrementSeasonStandingFunc = func(ctx context.Context, db bun.IDB, memberID sharedtypes.DiscordID, seasonID string, pointsToRemove int) error {
+					if seasonID != expectedSeasonID {
+						return fmt.Errorf("unexpected season on decrement: %s", seasonID)
+					}
 					f.record("DecrementSeasonStandingCalled")
 					return nil
 				}
@@ -119,13 +124,22 @@ func TestLeaderboardService_ProcessRound(t *testing.T) {
 					f.record("SaveLeaderboard")
 					return nil
 				}
-				f.CountSeasonMembersFunc = func(ctx context.Context, db bun.IDB) (int, error) {
+				f.CountSeasonMembersFunc = func(ctx context.Context, db bun.IDB, seasonID string) (int, error) {
+					if seasonID != expectedSeasonID {
+						return 0, fmt.Errorf("unexpected season on count: %s", seasonID)
+					}
 					return 1, nil
 				}
-				f.GetSeasonBestTagsFunc = func(ctx context.Context, db bun.IDB, memberIDs []sharedtypes.DiscordID) (map[sharedtypes.DiscordID]int, error) {
+				f.GetSeasonBestTagsFunc = func(ctx context.Context, db bun.IDB, seasonID string, memberIDs []sharedtypes.DiscordID) (map[sharedtypes.DiscordID]int, error) {
+					if seasonID != expectedSeasonID {
+						return nil, fmt.Errorf("unexpected season on best tags: %s", seasonID)
+					}
 					return map[sharedtypes.DiscordID]int{"p1": 1}, nil
 				}
-				f.GetSeasonStandingsFunc = func(ctx context.Context, db bun.IDB, memberIDs []sharedtypes.DiscordID) (map[sharedtypes.DiscordID]*leaderboarddb.SeasonStanding, error) {
+				f.GetSeasonStandingsFunc = func(ctx context.Context, db bun.IDB, seasonID string, memberIDs []sharedtypes.DiscordID) (map[sharedtypes.DiscordID]*leaderboarddb.SeasonStanding, error) {
+					if seasonID != expectedSeasonID {
+						return nil, fmt.Errorf("unexpected season on standings: %s", seasonID)
+					}
 					return make(map[sharedtypes.DiscordID]*leaderboarddb.SeasonStanding), nil
 				}
 				f.SavePointHistoryFunc = func(ctx context.Context, db bun.IDB, history *leaderboarddb.PointHistory) error {

@@ -38,6 +38,23 @@ type Handlers interface {
 	// HandleTagAvailabilityCheckRequested checks whether a tag is available for a user.
 	HandleTagAvailabilityCheckRequested(ctx context.Context, payload *sharedevents.TagAvailabilityCheckRequestedPayloadV1) ([]handlerwrapper.Result, error)
 
+	// --- ADMIN OPERATIONS ---
+
+	// HandlePointHistoryRequested returns point history for a member.
+	HandlePointHistoryRequested(ctx context.Context, payload *PointHistoryRequestedPayloadV1) ([]handlerwrapper.Result, error)
+
+	// HandleManualPointAdjustment processes a manual point adjustment.
+	HandleManualPointAdjustment(ctx context.Context, payload *ManualPointAdjustmentPayloadV1) ([]handlerwrapper.Result, error)
+
+	// HandleRecalculateRound triggers recalculation for a round.
+	HandleRecalculateRound(ctx context.Context, payload *RecalculateRoundPayloadV1) ([]handlerwrapper.Result, error)
+
+	// HandleStartNewSeason creates a new season.
+	HandleStartNewSeason(ctx context.Context, payload *StartNewSeasonPayloadV1) ([]handlerwrapper.Result, error)
+
+	// HandleGetSeasonStandings returns standings for a specific season.
+	HandleGetSeasonStandings(ctx context.Context, payload *GetSeasonStandingsPayloadV1) ([]handlerwrapper.Result, error)
+
 	// --- INFRASTRUCTURE ---
 
 	// HandleGuildConfigCreated ensures a leaderboard exists when a new guild is configured.
