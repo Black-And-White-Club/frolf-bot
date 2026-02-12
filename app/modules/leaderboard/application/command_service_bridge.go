@@ -43,3 +43,28 @@ func (s *LeaderboardService) EndSeason(ctx context.Context, guildID sharedtypes.
 	}
 	return s.commandPipeline.EndSeason(ctx, string(guildID))
 }
+
+// GetTagHistory returns tag history for a member or all members.
+func (s *LeaderboardService) GetTagHistory(ctx context.Context, guildID sharedtypes.GuildID, memberID string, limit int) ([]TagHistoryView, error) {
+	if s.commandPipeline == nil {
+		return nil, ErrCommandPipelineUnavailable
+	}
+	return s.commandPipeline.GetTagHistory(ctx, string(guildID), memberID, limit)
+}
+
+// GetTagList returns the master tag list for a guild.
+// Delegates to GetTaggedMembers — same underlying data, distinct semantic name for the PWA.
+func (s *LeaderboardService) GetTagList(ctx context.Context, guildID sharedtypes.GuildID) ([]TaggedMemberView, error) {
+	if s.commandPipeline == nil {
+		return nil, ErrCommandPipelineUnavailable
+	}
+	return s.commandPipeline.GetTaggedMembers(ctx, string(guildID))
+}
+
+// GenerateTagGraphPNG generates a PNG chart of a member's tag history.
+func (s *LeaderboardService) GenerateTagGraphPNG(ctx context.Context, guildID sharedtypes.GuildID, memberID string) ([]byte, error) {
+	if s.commandPipeline == nil {
+		return nil, ErrCommandPipelineUnavailable
+	}
+	return s.commandPipeline.GenerateTagGraphPNG(ctx, string(guildID), memberID)
+}

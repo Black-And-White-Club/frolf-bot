@@ -35,6 +35,11 @@ type FakeService struct {
 	ResetTagsFromQualifyingRoundFunc func(ctx context.Context, guildID sharedtypes.GuildID, finishOrder []sharedtypes.DiscordID) ([]leaderboarddomain.TagChange, error)
 	EndSeasonFunc                    func(ctx context.Context, guildID sharedtypes.GuildID) error
 
+	// Tag History
+	GetTagHistoryFunc       func(ctx context.Context, guildID sharedtypes.GuildID, memberID string, limit int) ([]leaderboardservice.TagHistoryView, error)
+	GetTagListFunc          func(ctx context.Context, guildID sharedtypes.GuildID) ([]leaderboardservice.TaggedMemberView, error)
+	GenerateTagGraphPNGFunc func(ctx context.Context, guildID sharedtypes.GuildID, memberID string) ([]byte, error)
+
 	// Admin Operations
 	GetPointHistoryForMemberFunc    func(ctx context.Context, guildID sharedtypes.GuildID, memberID sharedtypes.DiscordID, limit int) (results.OperationResult[[]leaderboardservice.PointHistoryEntry, error], error)
 	AdjustPointsFunc                func(ctx context.Context, guildID sharedtypes.GuildID, memberID sharedtypes.DiscordID, pointsDelta int, reason string) (results.OperationResult[bool, error], error)
@@ -191,6 +196,30 @@ func (f *FakeService) EndSeason(ctx context.Context, guildID sharedtypes.GuildID
 		return f.EndSeasonFunc(ctx, guildID)
 	}
 	return nil
+}
+
+func (f *FakeService) GetTagHistory(ctx context.Context, guildID sharedtypes.GuildID, memberID string, limit int) ([]leaderboardservice.TagHistoryView, error) {
+	f.record("GetTagHistory")
+	if f.GetTagHistoryFunc != nil {
+		return f.GetTagHistoryFunc(ctx, guildID, memberID, limit)
+	}
+	return nil, nil
+}
+
+func (f *FakeService) GetTagList(ctx context.Context, guildID sharedtypes.GuildID) ([]leaderboardservice.TaggedMemberView, error) {
+	f.record("GetTagList")
+	if f.GetTagListFunc != nil {
+		return f.GetTagListFunc(ctx, guildID)
+	}
+	return nil, nil
+}
+
+func (f *FakeService) GenerateTagGraphPNG(ctx context.Context, guildID sharedtypes.GuildID, memberID string) ([]byte, error) {
+	f.record("GenerateTagGraphPNG")
+	if f.GenerateTagGraphPNGFunc != nil {
+		return f.GenerateTagGraphPNGFunc(ctx, guildID, memberID)
+	}
+	return nil, nil
 }
 
 func (f *FakeService) EnsureGuildLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[bool, error], error) {

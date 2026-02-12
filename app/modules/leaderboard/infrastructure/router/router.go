@@ -230,6 +230,11 @@ func (r *LeaderboardRouter) RegisterHandlers(ctx context.Context, handlers leade
 	registerHandler(deps, "leaderboard.seasons.list.request.v1.>", handlers.HandleListSeasonsRequest)
 	registerHandler(deps, "leaderboard.season.standings.request.v1.>", handlers.HandleSeasonStandingsRequest)
 
+	// TAG HISTORY REQUEST-REPLY
+	registerHandler(deps, leaderboardevents.LeaderboardTagHistoryRequestedV1, handlers.HandleTagHistoryRequest)
+	registerHandler(deps, leaderboardevents.LeaderboardTagGraphRequestedV1, handlers.HandleTagGraphRequest)
+	registerHandler(deps, leaderboardevents.LeaderboardTagListRequestedV1, handlers.HandleTagListRequest)
+
 	// INFRASTRUCTURE
 	registerHandler(deps, guildevents.GuildConfigCreatedV1, handlers.HandleGuildConfigCreated)
 

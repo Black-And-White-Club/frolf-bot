@@ -152,6 +152,21 @@ func (f *FakeLeaderboardService) EndSeason(ctx context.Context, guildID sharedty
 	return nil
 }
 
+func (f *FakeLeaderboardService) GetTagHistory(ctx context.Context, guildID sharedtypes.GuildID, memberID string, limit int) ([]leaderboardservice.TagHistoryView, error) {
+	f.trace = append(f.trace, "GetTagHistory")
+	return nil, nil
+}
+
+func (f *FakeLeaderboardService) GetTagList(ctx context.Context, guildID sharedtypes.GuildID) ([]leaderboardservice.TaggedMemberView, error) {
+	f.trace = append(f.trace, "GetTagList")
+	return nil, nil
+}
+
+func (f *FakeLeaderboardService) GenerateTagGraphPNG(ctx context.Context, guildID sharedtypes.GuildID, memberID string) ([]byte, error) {
+	f.trace = append(f.trace, "GenerateTagGraphPNG")
+	return nil, nil
+}
+
 func (f *FakeLeaderboardService) ListSeasons(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[[]leaderboardservice.SeasonInfo, error], error) {
 	return results.FailureResult[[]leaderboardservice.SeasonInfo, error](errors.New("not implemented")), nil
 }

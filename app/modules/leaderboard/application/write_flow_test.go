@@ -112,6 +112,14 @@ func (f *fakeTagHistoryRepo) GetLatestTagHistory(ctx context.Context, db bun.IDB
 	return nil, nil
 }
 
+func (f *fakeTagHistoryRepo) GetTagHistoryForGuild(ctx context.Context, db bun.IDB, guildID string, since time.Time) ([]leaderboarddb.TagHistoryEntry, error) {
+	return nil, nil
+}
+
+func (f *fakeTagHistoryRepo) GetTagHistoryForTag(ctx context.Context, db bun.IDB, guildID string, tag int, limit int) ([]leaderboarddb.TagHistoryEntry, error) {
+	return nil, nil
+}
+
 type fakeRoundOutcomeRepo struct {
 	getOutcomeFunc    func(ctx context.Context, db bun.IDB, guildID string, roundID uuid.UUID) (*leaderboarddb.RoundOutcome, error)
 	upsertOutcomeFunc func(ctx context.Context, db bun.IDB, outcome *leaderboarddb.RoundOutcome) error
