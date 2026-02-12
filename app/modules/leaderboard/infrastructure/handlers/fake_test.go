@@ -217,11 +217,6 @@ func (f *FakeService) AdjustPoints(ctx context.Context, guildID sharedtypes.Guil
 	return results.OperationResult[bool, error]{}, nil
 }
 
-func (f *FakeService) RecalculateRound(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (results.OperationResult[leaderboardservice.ProcessRoundResult, error], error) {
-	f.record("RecalculateRound")
-	return results.OperationResult[leaderboardservice.ProcessRoundResult, error]{}, nil
-}
-
 func (f *FakeService) StartNewSeason(ctx context.Context, guildID sharedtypes.GuildID, seasonID string, seasonName string) (results.OperationResult[bool, error], error) {
 	f.record("StartNewSeason")
 	if f.StartNewSeasonFunc != nil {

@@ -37,7 +37,15 @@ func CalculateRoundPoints(participants []RoundParticipant) []PointAward {
 	copy(sorted, participants)
 
 	slices.SortFunc(sorted, func(a, b RoundParticipant) int {
-		if c := cmp.Compare(a.TagNumber, b.TagNumber); c != 0 {
+		aTag, bTag := a.TagNumber, b.TagNumber
+		if aTag <= 0 {
+			aTag = int(^uint(0) >> 1)
+		}
+		if bTag <= 0 {
+			bTag = int(^uint(0) >> 1)
+		}
+
+		if c := cmp.Compare(aTag, bTag); c != 0 {
 			return c
 		}
 		return cmp.Compare(a.MemberID, b.MemberID)

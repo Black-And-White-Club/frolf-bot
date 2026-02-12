@@ -46,250 +46,502 @@ type TaggedMemberView struct {
 	Tag      int
 }
 
+const RecalculationWindow = 24 * time.Hour
+
+
+
 // ProcessRound executes the spec's full ProcessRound workflow:
+
 //  1. Acquire guild advisory lock
+
 //  2. Compute processing hash + idempotency check
+
 //  3. Load current tag state from league_members
+
 //  4. Stream 1: Tag allocation (closed pool)
+
 //  5. Persist tag changes to league_members + tag_history
+
 //  6. Stream 2: Points calculation (if active season)
+
 //  7. Persist points to season_standings + point_history
+
 //  8. Record round outcome
+
 func (s *LeaderboardService) processRoundCommandCore(ctx context.Context, cmd ProcessRoundCommand) (*ProcessRoundOutput, error) {
+
 	var output *ProcessRoundOutput
 
+
+
 	err := s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+
 		var txErr error
+
 		output, txErr = s.processRoundInTx(ctx, tx, cmd)
+
 		return txErr
+
 	})
+
 	if err != nil {
+
 		return nil, fmt.Errorf("LeaderboardService.ProcessRound: %w", err)
+
 	}
+
 	return output, nil
+
 }
 
+
+
 func (s *LeaderboardService) processRoundInTx(ctx context.Context, tx bun.Tx, cmd ProcessRoundCommand) (*ProcessRoundOutput, error) {
+
 	// 1. Acquire per-guild transactional lock
+
 	if err := s.memberRepo.AcquireGuildLock(ctx, tx, cmd.GuildID); err != nil {
+
 		return nil, fmt.Errorf("acquire guild lock: %w", err)
+
 	}
+
+
 
 	// 2. Compute processing hash for idempotency
+
 	hashInputs := make([]leaderboarddomain.RoundInput, len(cmd.Participants))
+
 	for i, p := range cmd.Participants {
+
 		hashInputs[i] = leaderboarddomain.RoundInput{
+
 			MemberID:   p.MemberID,
+
 			FinishRank: p.FinishRank,
+
 		}
+
 	}
+
 	processingHash := leaderboarddomain.ComputeProcessingHash(hashInputs)
 
+
+
 	// Check existing outcome
+
 	existing, err := s.outcomeRepo.GetRoundOutcome(ctx, tx, cmd.GuildID, cmd.RoundID)
+
 	if err != nil {
+
 		return nil, fmt.Errorf("check existing outcome: %w", err)
+
 	}
+
+
 
 	if existing != nil && existing.ProcessingHash == processingHash {
+
 		// Same data already processed - idempotent no-op
+
 		s.logger.InfoContext(ctx, "Round already processed with same data (idempotent no-op)",
+
 			slog.String("guild_id", cmd.GuildID),
+
 			slog.String("round_id", cmd.RoundID.String()),
+
 		)
+
+
 
 		memberIDs := make([]string, len(cmd.Participants))
+
 		for i, participant := range cmd.Participants {
+
 			memberIDs[i] = participant.MemberID
+
 		}
+
 		members, err := s.memberRepo.GetMembersByIDs(ctx, tx, cmd.GuildID, memberIDs)
+
 		if err != nil {
+
 			return nil, fmt.Errorf("load idempotent participant tags: %w", err)
+
 		}
+
+
 
 		finalParticipantTags := make(map[string]int, len(members))
+
 		for _, member := range members {
+
 			if member.CurrentTag == nil || *member.CurrentTag <= 0 {
+
 				continue
+
 			}
+
 			finalParticipantTags[member.MemberID] = *member.CurrentTag
+
 		}
+
+
 
 		seasonID := ""
+
 		pointsSkipped := true
+
 		if existing.SeasonID != nil && *existing.SeasonID != "" {
+
 			seasonID = *existing.SeasonID
+
 			pointsSkipped = false
+
 		}
+
+
 
 		return &ProcessRoundOutput{
+
 			FinalParticipantTags: finalParticipantTags,
+
 			SeasonID:             seasonID,
+
 			PointsSkipped:        pointsSkipped,
+
 			WasIdempotent:        true,
+
 		}, nil
+
 	}
+
+
 
 	if existing != nil && existing.ProcessingHash != processingHash {
+
 		// Different data for same round - this is a recalculation
+
 		// Rollback previous points before reprocessing
+
 		s.logger.InfoContext(ctx, "Round data changed, triggering recalculation",
+
 			slog.String("guild_id", cmd.GuildID),
+
 			slog.String("round_id", cmd.RoundID.String()),
+
 		)
 
+
+
 		// SAFETY: Prevent tag modifications for historical rounds to avoid corrupting current state.
+
 		// Only allow recalculation (points only) or block entirely if too old.
-		if time.Since(existing.ProcessedAt) > 24*time.Hour {
-			return nil, fmt.Errorf("cannot recalculate round older than 24h due to tag state drift")
+
+		if time.Since(existing.ProcessedAt) > RecalculationWindow {
+
+			return nil, fmt.Errorf("cannot recalculate round older than %v due to tag state drift", RecalculationWindow)
+
 		}
+
+
 
 		if err := s.rollbackPreviousRound(ctx, tx, cmd.GuildID, cmd.RoundID); err != nil {
+
 			return nil, fmt.Errorf("rollback previous round: %w", err)
+
 		}
+
 	}
+
+
 
 	// 3. Load current tag state for participants
+
 	memberIDs := make([]string, len(cmd.Participants))
+
 	for i, p := range cmd.Participants {
+
 		memberIDs[i] = p.MemberID
+
 	}
+
+
 
 	members, err := s.memberRepo.GetMembersByIDs(ctx, tx, cmd.GuildID, memberIDs)
+
 	if err != nil {
+
 		return nil, fmt.Errorf("load member tag state: %w", err)
+
 	}
+
+
 
 	memberTagMap := make(map[string]int, len(members))
+
 	for _, m := range members {
+
 		if m.CurrentTag != nil {
+
 			memberTagMap[m.MemberID] = *m.CurrentTag
+
 		}
+
 	}
 
+
+
 	// 4. Stream 1: Tag allocation (closed pool)
+
 	tagInputs := make([]leaderboarddomain.TagAllocationInput, len(cmd.Participants))
+
 	for i, p := range cmd.Participants {
+
 		tagInputs[i] = leaderboarddomain.TagAllocationInput{
+
 			MemberID:   p.MemberID,
+
 			FinishRank: p.FinishRank,
+
 			CurrentTag: memberTagMap[p.MemberID], // 0 if no tag
+
 		}
+
 	}
+
+
+
+	// SAFETY: We checked RecalculationWindow above, so we allow tag allocation to correct
+
+	// tags if the finish order changed.
 
 	tagChanges := leaderboarddomain.AllocateTagsClosedPool(tagInputs)
 
+
+
 	// 5. Persist tag changes
+
 	if len(tagChanges) > 0 {
+
 		if err := s.persistTagChanges(ctx, tx, cmd.GuildID, &cmd.RoundID, tagChanges, "round_swap"); err != nil {
+
 			return nil, fmt.Errorf("persist tag changes: %w", err)
+
 		}
+
 	}
+
+
 
 	// Ensure all participants have a league_members row (even if no tag change)
+
 	if err := s.ensureParticipantMembers(ctx, tx, cmd.GuildID, cmd.Participants, memberTagMap, tagChanges); err != nil {
+
 		return nil, fmt.Errorf("ensure participant members: %w", err)
+
 	}
+
+
 
 	// 6. Resolve active season
+
 	rollbackSeasonID := ""
+
 	if existing != nil && existing.SeasonID != nil {
+
 		rollbackSeasonID = *existing.SeasonID
+
 	}
+
 	season, err := s.resolveActiveSeason(ctx, tx, cmd.GuildID, rollbackSeasonID)
+
 	if err != nil {
+
 		return nil, fmt.Errorf("resolve season: %w", err)
+
 	}
+
+
 
 	output := &ProcessRoundOutput{
+
 		TagChanges: tagChanges,
+
 	}
+
+
 
 	// Build final participant tag state using domain function.
+
 	assignments := leaderboarddomain.ComputeFinalTagState(memberTagMap, tagChanges)
+
 	finalParticipantTags := make(map[string]int, len(assignments))
+
 	for _, a := range assignments {
+
 		finalParticipantTags[a.MemberID] = a.Tag
+
 	}
+
 	output.FinalParticipantTags = finalParticipantTags
 
+
+
 	// 7. Stream 2: Points calculation
+
 	if !leaderboarddomain.ShouldAwardPoints(season) {
+
 		output.PointsSkipped = true
+
 		s.logger.InfoContext(ctx, "Points skipped (no active season)",
+
 			slog.String("guild_id", cmd.GuildID),
+
 		)
+
 	} else {
+
 		output.SeasonID = season.SeasonID
 
+
+
 		awards, err := s.calculateAndPersistPoints(ctx, tx, cmd, memberTagMap, tagChanges, season.SeasonID)
+
 		if err != nil {
+
 			return nil, fmt.Errorf("calculate and persist points: %w", err)
+
 		}
+
 		output.PointAwards = awards
+
 	}
+
+
 
 	// 8. Record round outcome for idempotency
+
 	seasonIDPtr := &output.SeasonID
+
 	if output.PointsSkipped {
+
 		seasonIDPtr = nil
+
 	}
+
 	if err := s.outcomeRepo.UpsertRoundOutcome(ctx, tx, &leaderboarddb.RoundOutcome{
+
 		GuildID:        cmd.GuildID,
+
 		RoundID:        cmd.RoundID,
+
 		SeasonID:       seasonIDPtr,
+
 		ProcessingHash: processingHash,
+
 		ProcessedAt:    time.Now().UTC(),
+
 	}); err != nil {
+
 		return nil, fmt.Errorf("record round outcome: %w", err)
+
 	}
+
+
 
 	return output, nil
+
 }
 
+
+
 // persistTagChanges updates league_members and writes tag_history entries.
+
 func (s *LeaderboardService) persistTagChanges(
+
 	ctx context.Context,
+
 	tx bun.Tx,
+
 	guildID string,
+
 	roundID *uuid.UUID,
+
 	changes []leaderboarddomain.TagChange,
+
 	reason string,
+
 ) error {
+
 	// Build bulk upsert for league_members
+
 	membersToUpdate := make([]leaderboarddb.LeagueMember, len(changes))
+
 	for i, ch := range changes {
+
 		tag := ch.TagNumber
+
 		membersToUpdate[i] = leaderboarddb.LeagueMember{
+
 			GuildID:    guildID,
+
 			MemberID:   ch.NewMemberID,
+
 			CurrentTag: &tag,
+
 		}
+
 	}
+
+
 
 	if err := s.memberRepo.BulkUpsertMembers(ctx, tx, membersToUpdate); err != nil {
+
 		return fmt.Errorf("bulk upsert members: %w", err)
+
 	}
+
+
 
 	// Write tag history entries
+
 	histEntries := make([]leaderboarddb.TagHistoryEntry, len(changes))
+
 	for i, ch := range changes {
+
 		var oldMember *string
+
 		if ch.OldMemberID != "" {
+
 			oldMember = &ch.OldMemberID
+
 		}
+
 		histEntries[i] = leaderboarddb.TagHistoryEntry{
+
 			GuildID:     guildID,
+
 			RoundID:     roundID,
+
 			TagNumber:   ch.TagNumber,
+
 			OldMemberID: oldMember,
+
 			NewMemberID: ch.NewMemberID,
+
 			Reason:      reason,
+
 			Metadata:    "{}",
+
 		}
+
 	}
 
+
+
 	return s.tagHistRepo.BulkInsertTagHistory(ctx, tx, histEntries)
+
 }
 
 // ensureParticipantMembers ensures all round participants exist in league_members.
@@ -604,18 +856,13 @@ func (s *LeaderboardService) checkTagAvailabilityCore(ctx context.Context, guild
 		return false, "tag_number_must_be_positive", nil
 	}
 
-	members, err := s.memberRepo.GetMembersByGuild(ctx, s.db, guildID)
+	holder, err := s.memberRepo.GetMemberByTag(ctx, s.db, guildID, tagNumber)
 	if err != nil {
 		return false, "", fmt.Errorf("LeaderboardService.CheckTagAvailability: %w", err)
 	}
 
-	for _, member := range members {
-		if member.CurrentTag == nil || *member.CurrentTag != tagNumber {
-			continue
-		}
-		if member.MemberID != memberID {
-			return false, "tag is already taken", nil
-		}
+	if holder != nil && holder.MemberID != memberID {
+		return false, "tag is already taken", nil
 	}
 
 	return true, "", nil
@@ -685,27 +932,50 @@ func (s *LeaderboardService) applyTagAssignmentsInTx(
 
 	requestedUsers := make(map[string]struct{}, len(assignments))
 	requestedTags := make(map[int]string, len(assignments))
+	
+	// Collect IDs and Tags for targeted fetching
+	uniqueMemberIDs := make([]string, 0, len(assignments))
+	uniqueTags := make([]int, 0, len(assignments))
+
 	for _, assignment := range assignments {
 		requestedUsers[assignment.memberID] = struct{}{}
 		if otherUser, exists := requestedTags[assignment.tag]; exists && otherUser != assignment.memberID {
 			return nil, fmt.Errorf("duplicate requested tag %d for users %s and %s", assignment.tag, otherUser, assignment.memberID)
 		}
 		requestedTags[assignment.tag] = assignment.memberID
+		
+		uniqueMemberIDs = append(uniqueMemberIDs, assignment.memberID)
+		uniqueTags = append(uniqueTags, assignment.tag)
 	}
 
-	members, err := s.memberRepo.GetMembersByGuild(ctx, tx, guildID)
+	// Fetch current state of requestors
+	requestors, err := s.memberRepo.GetMembersByIDs(ctx, tx, guildID, uniqueMemberIDs)
 	if err != nil {
-		return nil, fmt.Errorf("load members: %w", err)
+		return nil, fmt.Errorf("load requestors: %w", err)
 	}
 
-	currentUserTag := make(map[string]int, len(members))
-	currentTagUser := make(map[int]string, len(members))
-	for _, member := range members {
-		if member.CurrentTag == nil || *member.CurrentTag <= 0 {
-			continue
+	// Fetch current holders of requested tags
+	holders, err := s.memberRepo.GetMembersByTags(ctx, tx, guildID, uniqueTags)
+	if err != nil {
+		return nil, fmt.Errorf("load tag holders: %w", err)
+	}
+
+	currentUserTag := make(map[string]int)
+	currentTagUser := make(map[int]string)
+
+	// Consolidate state
+	addMemberState := func(m leaderboarddb.LeagueMember) {
+		if m.CurrentTag != nil && *m.CurrentTag > 0 {
+			currentUserTag[m.MemberID] = *m.CurrentTag
+			currentTagUser[*m.CurrentTag] = m.MemberID
 		}
-		currentUserTag[member.MemberID] = *member.CurrentTag
-		currentTagUser[*member.CurrentTag] = member.MemberID
+	}
+
+	for _, m := range requestors {
+		addMemberState(m)
+	}
+	for _, m := range holders {
+		addMemberState(m)
 	}
 
 	for _, assignment := range assignments {
@@ -787,8 +1057,7 @@ func (s *LeaderboardService) applyTagAssignmentsInTx(
 
 		var oldPtr *string
 		if hadOld {
-			oldCopy := oldMemberID
-			oldPtr = &oldCopy
+			oldPtr = &oldMemberID
 		}
 
 		historyEntries = append(historyEntries, leaderboarddb.TagHistoryEntry{

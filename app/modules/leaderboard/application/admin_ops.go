@@ -92,23 +92,6 @@ func (s *LeaderboardService) AdjustPoints(
 	})
 }
 
-// RecalculateRound re-triggers ProcessRound for a given round.
-// The caller must provide the round's participant data via the RoundLookup adapter.
-// This method is a thin wrapper that delegates to ProcessRound, which handles idempotency via rollback.
-func (s *LeaderboardService) RecalculateRound(
-	ctx context.Context,
-	guildID sharedtypes.GuildID,
-	roundID sharedtypes.RoundID,
-) (results.OperationResult[ProcessRoundResult, error], error) {
-	// RecalculateRound needs participant data to call ProcessRound.
-	// Since the service layer doesn't have direct access to RoundLookup,
-	// the handler layer must fetch the participant data and call ProcessRound directly.
-	// This method exists as a placeholder for the service interface.
-	// The handler will call ProcessRound with the fetched player results.
-	err := fmt.Errorf("RecalculateRound must be called through the handler layer which provides participant data")
-	return results.OperationResult[ProcessRoundResult, error]{}, err
-}
-
 // StartNewSeason creates a new season, deactivating the old one. Existing data is preserved under the old season_id.
 func (s *LeaderboardService) StartNewSeason(
 	ctx context.Context,

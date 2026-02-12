@@ -84,9 +84,6 @@ type Service interface {
 	// Does NOT recalculate tiers (tiers only change on round processing).
 	AdjustPoints(ctx context.Context, guildID sharedtypes.GuildID, memberID sharedtypes.DiscordID, pointsDelta int, reason string) (results.OperationResult[bool, error], error)
 
-	// RecalculateRound re-triggers ProcessRound for a given round using stored participant data.
-	RecalculateRound(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (results.OperationResult[ProcessRoundResult, error], error)
-
 	// StartNewSeason creates a new season record, deactivates the old one.
 	StartNewSeason(ctx context.Context, guildID sharedtypes.GuildID, seasonID string, seasonName string) (results.OperationResult[bool, error], error)
 

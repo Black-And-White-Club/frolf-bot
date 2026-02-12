@@ -21,6 +21,12 @@ type LeagueMemberRepository interface {
 	// GetMemberByID retrieves a single member.
 	GetMemberByID(ctx context.Context, db bun.IDB, guildID, memberID string) (*LeagueMember, error)
 
+	// GetMemberByTag retrieves the member holding a specific tag in a guild.
+	GetMemberByTag(ctx context.Context, db bun.IDB, guildID string, tag int) (*LeagueMember, error)
+
+	// GetMembersByTags retrieves members holding specific tags in a guild.
+	GetMembersByTags(ctx context.Context, db bun.IDB, guildID string, tags []int) ([]LeagueMember, error)
+
 	// UpsertMember creates or updates a league member.
 	UpsertMember(ctx context.Context, db bun.IDB, member *LeagueMember) error
 
@@ -87,6 +93,38 @@ func (r *LeagueMemberRepo) GetMemberByID(ctx context.Context, db bun.IDB, guildI
 	return member, nil
 }
 
+func (r *LeagueMemberRepo) GetMemberByTag(ctx context.Context, db bun.IDB, guildID string, tag int) (*LeagueMember, error) {
+	member := new(LeagueMember)
+	err := db.NewSelect().
+		Model(member).
+		Where("guild_id = ?", guildID).
+		Where("current_tag = ?", tag).
+		Scan(ctx)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("leaguemember.GetMemberByTag: %w", err)
+	}
+	return member, nil
+}
+
+func (r *LeagueMemberRepo) GetMembersByTags(ctx context.Context, db bun.IDB, guildID string, tags []int) ([]LeagueMember, error) {
+	if len(tags) == 0 {
+		return nil, nil
+	}
+	var members []LeagueMember
+	err := db.NewSelect().
+		Model(&members).
+		Where("guild_id = ?", guildID).
+		Where("current_tag IN (?)", bun.In(tags)).
+		Scan(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("leaguemember.GetMembersByTags: %w", err)
+	}
+	return members, nil
+}
+
 func (r *LeagueMemberRepo) UpsertMember(ctx context.Context, db bun.IDB, member *LeagueMember) error {
 	now := time.Now().UTC()
 	member.UpdatedAt = now
@@ -143,8 +181,9 @@ func (r *LeagueMemberRepo) ClearAllTags(ctx context.Context, db bun.IDB, guildID
 }
 
 func (r *LeagueMemberRepo) AcquireGuildLock(ctx context.Context, db bun.IDB, guildID string) error {
-	// Use hashtext() for a stable int8 from the guild_id string
-	_, err := db.NewRaw("SELECT pg_advisory_xact_lock(hashtext(?))", guildID).Exec(ctx)
+	// Use a 64-bit hash (MD5 prefix) to minimize collision probability.
+	// pg_advisory_xact_lock(bigint)
+	_, err := db.NewRaw("SELECT pg_advisory_xact_lock(('x' || substr(md5(?), 1, 16))::bit(64)::bigint)", guildID).Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("leaguemember.AcquireGuildLock: %w", err)
 	}

@@ -62,20 +62,35 @@ func init() {
 			return fmt.Errorf("create tag_history: %w", err)
 		}
 
-		_, err = db.NewRaw(`
-			CREATE INDEX IF NOT EXISTS idx_tag_history_guild_round
-			ON tag_history (guild_id, round_id)
-		`).Exec(ctx)
-		if err != nil {
-			return fmt.Errorf("create idx_tag_history_guild_round: %w", err)
-		}
-
-		_, err = db.NewRaw(`
-			CREATE INDEX IF NOT EXISTS idx_tag_history_guild_tag_created
-			ON tag_history (guild_id, tag_number, created_at DESC)
-		`).Exec(ctx)
-		if err != nil {
-			return fmt.Errorf("create idx_tag_history_guild_tag_created: %w", err)
+		               _, err = db.NewRaw(`
+		                        CREATE INDEX IF NOT EXISTS idx_tag_history_guild_round
+		                        ON tag_history (guild_id, round_id)
+		                `).Exec(ctx)
+		                if err != nil {
+		                        return fmt.Errorf("create idx_tag_history_guild_round: %w", err)
+		                }
+		
+		                _, err = db.NewRaw(`
+		                        CREATE INDEX IF NOT EXISTS idx_tag_history_guild_new_member
+		                        ON tag_history (guild_id, new_member_id)
+		                `).Exec(ctx)
+		                if err != nil {
+		                        return fmt.Errorf("create idx_tag_history_guild_new_member: %w", err)
+		                }
+		
+		                _, err = db.NewRaw(`
+		                        CREATE INDEX IF NOT EXISTS idx_tag_history_guild_old_member
+		                        ON tag_history (guild_id, old_member_id)
+		                `).Exec(ctx)
+		                if err != nil {
+		                        return fmt.Errorf("create idx_tag_history_guild_old_member: %w", err)
+		                }
+		
+		                                _, err = db.NewRaw(`
+		                                        CREATE INDEX IF NOT EXISTS idx_tag_history_guild_tag_created
+		                                        ON tag_history (guild_id, tag_number, created_at DESC)
+		                                `).Exec(ctx)
+		                                if err != nil {			return fmt.Errorf("create idx_tag_history_guild_tag_created: %w", err)
 		}
 
 		// 3. Add guild_id to leaderboard_seasons (tenant scoping)

@@ -44,16 +44,18 @@ func (h *LeaderboardHandlers) handleLeaderboardUpdateWithServiceCommand(
 	if output == nil {
 		return nil, fmt.Errorf("process round returned nil output")
 	}
-	updatedData := leaderboardDataFromFinalTags(output.FinalParticipantTags)
-	leaderboardData := make(map[sharedtypes.TagNumber]sharedtypes.DiscordID, len(updatedData))
-	changedTags := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber, len(updatedData))
-	for _, entry := range updatedData {
-		leaderboardData[entry.TagNumber] = entry.UserID
-		changedTags[entry.UserID] = entry.TagNumber
-	}
-
-	results := []handlerwrapper.Result{
-		{
+	       updatedData := leaderboardDataFromFinalTags(output.FinalParticipantTags)
+	        leaderboardData := make(map[sharedtypes.TagNumber]sharedtypes.DiscordID, len(updatedData))
+	        for _, entry := range updatedData {
+	                leaderboardData[entry.TagNumber] = entry.UserID
+	        }
+	
+	        changedTags := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber, len(output.TagChanges))
+	        for _, change := range output.TagChanges {
+	                changedTags[sharedtypes.DiscordID(change.NewMemberID)] = sharedtypes.TagNumber(change.TagNumber)
+	        }
+	
+	        results := []handlerwrapper.Result{		{
 			Topic: leaderboardevents.LeaderboardUpdatedV1,
 			Payload: &leaderboardevents.LeaderboardUpdatedPayloadV1{
 				GuildID:         payload.GuildID,
@@ -148,6 +150,8 @@ func buildParticipantsFromUpdatePayload(payload *leaderboardevents.LeaderboardUp
 		for i, participant := range payload.Participants {
 			finishRank := participant.FinishRank
 			if finishRank <= 0 {
+				// Fallback to index-based rank if explicit rank is missing,
+				// assuming the participants list is sorted by finish order.
 				finishRank = i + 1
 			}
 			participants = append(participants, leaderboardservice.RoundParticipantInput{
@@ -164,6 +168,8 @@ func buildParticipantsFromUpdatePayload(payload *leaderboardevents.LeaderboardUp
 		if len(parts) != 2 {
 			continue
 		}
+		// Note: Implicitly deriving FinishRank from the list index (i + 1).
+		// We assume 'SortedParticipantTags' is ordered by rank (best to worst).
 		participants = append(participants, leaderboardservice.RoundParticipantInput{
 			MemberID:   parts[1],
 			FinishRank: i + 1,

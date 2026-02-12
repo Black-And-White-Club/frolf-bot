@@ -128,10 +128,6 @@ func (f *FakeLeaderboardService) AdjustPoints(ctx context.Context, guildID share
 	return results.FailureResult[bool, error](errors.New("not implemented")), nil
 }
 
-func (f *FakeLeaderboardService) RecalculateRound(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (results.OperationResult[leaderboardservice.ProcessRoundResult, error], error) {
-	return results.FailureResult[leaderboardservice.ProcessRoundResult, error](errors.New("not implemented")), nil
-}
-
 func (f *FakeLeaderboardService) StartNewSeason(ctx context.Context, guildID sharedtypes.GuildID, seasonID string, seasonName string) (results.OperationResult[bool, error], error) {
 	return results.FailureResult[bool, error](errors.New("not implemented")), nil
 }
