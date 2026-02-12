@@ -18,7 +18,6 @@ func (h *LeaderboardHandlers) HandleTagSwapRequested(
 	payload *leaderboardevents.TagSwapRequestedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
 	// 1. We still need to know WHAT tag the Target currently holds.
-	// The service helper 'GetTagByUserID' is perfect for this.
 	targetTagResult, err := h.service.GetTagByUserID(ctx, payload.GuildID, payload.TargetID)
 	if err != nil {
 		return nil, err

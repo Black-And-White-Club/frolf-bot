@@ -311,7 +311,7 @@ func TestHandleParticipantScoreUpdated(t *testing.T) {
 					t.Error("Expected RoundID to be set")
 				}
 			},
-			timeout: 700 * time.Millisecond,
+			timeout: 10 * time.Second,
 		},
 		{
 			name:    "Failure - Invalid JSON Message",

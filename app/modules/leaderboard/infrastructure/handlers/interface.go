@@ -38,6 +38,31 @@ type Handlers interface {
 	// HandleTagAvailabilityCheckRequested checks whether a tag is available for a user.
 	HandleTagAvailabilityCheckRequested(ctx context.Context, payload *sharedevents.TagAvailabilityCheckRequestedPayloadV1) ([]handlerwrapper.Result, error)
 
+	// --- ADMIN OPERATIONS ---
+
+	// HandlePointHistoryRequested returns point history for a member.
+	HandlePointHistoryRequested(ctx context.Context, payload *leaderboardevents.PointHistoryRequestedPayloadV1) ([]handlerwrapper.Result, error)
+
+	// HandleManualPointAdjustment processes a manual point adjustment.
+	HandleManualPointAdjustment(ctx context.Context, payload *leaderboardevents.ManualPointAdjustmentPayloadV1) ([]handlerwrapper.Result, error)
+
+	// HandleRecalculateRound triggers recalculation for a round.
+	HandleRecalculateRound(ctx context.Context, payload *leaderboardevents.RecalculateRoundPayloadV1) ([]handlerwrapper.Result, error)
+
+	// HandleStartNewSeason creates a new season.
+	HandleStartNewSeason(ctx context.Context, payload *leaderboardevents.StartNewSeasonPayloadV1) ([]handlerwrapper.Result, error)
+
+	// HandleGetSeasonStandings returns standings for a specific season.
+	HandleGetSeasonStandings(ctx context.Context, payload *leaderboardevents.GetSeasonStandingsPayloadV1) ([]handlerwrapper.Result, error)
+
+	// --- REQUEST-REPLY (PWA) ---
+
+	// HandleListSeasonsRequest returns all seasons for a guild via request-reply.
+	HandleListSeasonsRequest(ctx context.Context, payload *leaderboardevents.ListSeasonsRequestPayloadV1) ([]handlerwrapper.Result, error)
+
+	// HandleSeasonStandingsRequest returns standings for a season via request-reply.
+	HandleSeasonStandingsRequest(ctx context.Context, payload *leaderboardevents.SeasonStandingsRequestPayloadV1) ([]handlerwrapper.Result, error)
+
 	// --- INFRASTRUCTURE ---
 
 	// HandleGuildConfigCreated ensures a leaderboard exists when a new guild is configured.

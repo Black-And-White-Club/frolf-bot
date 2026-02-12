@@ -16,70 +16,69 @@ import (
 )
 
 func TestLeaderboardService_GetLeaderboard(t *testing.T) {
-	tag1, tag2 := sharedtypes.TagNumber(1), sharedtypes.TagNumber(2)
 	guildID := sharedtypes.GuildID("test-guild")
 
 	tests := []struct {
-		name      string
-		setupFake func(*FakeLeaderboardRepo)
-		wantErr   error
-		wantLen   int
+		name          string
+		setupPipeline func(*FakeCommandPipeline)
+		wantErr       bool
+		wantLen       int
 	}{
 		{
 			name: "Successfully retrieves leaderboard",
-			setupFake: func(f *FakeLeaderboardRepo) {
-				f.GetActiveLeaderboardFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID) (*leaderboardtypes.Leaderboard, error) {
-					return &leaderboardtypes.Leaderboard{
-						LeaderboardData: []leaderboardtypes.LeaderboardEntry{
-							{TagNumber: tag1, UserID: "user1"},
-							{TagNumber: tag2, UserID: "user2"},
-						},
-						GuildID: g,
+			setupPipeline: func(p *FakeCommandPipeline) {
+				p.GetTaggedFunc = func(ctx context.Context, guildID string) ([]TaggedMemberView, error) {
+					return []TaggedMemberView{
+						{MemberID: "user1", Tag: 1},
+						{MemberID: "user2", Tag: 2},
 					}, nil
 				}
 			},
 			wantLen: 2,
 		},
 		{
-			name: "Handles no active leaderboard",
-			setupFake: func(f *FakeLeaderboardRepo) {
-				f.GetActiveLeaderboardFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID) (*leaderboardtypes.Leaderboard, error) {
-					return nil, leaderboarddb.ErrNoActiveLeaderboard
+			name: "Pipeline failure bubbles up",
+			setupPipeline: func(p *FakeCommandPipeline) {
+				p.GetTaggedFunc = func(ctx context.Context, guildID string) ([]TaggedMemberView, error) {
+					return nil, errors.New("lookup failed")
 				}
 			},
-			wantErr: leaderboarddb.ErrNoActiveLeaderboard,
+			wantErr: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fakeRepo := NewFakeLeaderboardRepo()
-			tt.setupFake(fakeRepo)
+			pipeline := &FakeCommandPipeline{}
+			if tt.setupPipeline != nil {
+				tt.setupPipeline(pipeline)
+			}
+
 			s := &LeaderboardService{
 				repo:    fakeRepo,
 				logger:  loggerfrolfbot.NoOpLogger,
 				metrics: &leaderboardmetrics.NoOpMetrics{},
 				tracer:  noop.NewTracerProvider().Tracer("test"),
 			}
+			s.SetCommandPipeline(pipeline)
 
-			res, err := s.GetLeaderboard(context.Background(), guildID)
+			res, err := s.GetLeaderboard(context.Background(), guildID, "")
 
-			if tt.wantErr != nil {
-				if !errors.Is(err, tt.wantErr) {
-					t.Errorf("expected error %v, got %v", tt.wantErr, err)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
 				}
 				return
 			}
-
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			if !res.IsSuccess() {
 				t.Fatalf("expected success, got failure: %v", res.Failure)
 			}
-			got := *res.Success
-			if len(got) != tt.wantLen {
-				t.Errorf("expected %d entries, got %d", tt.wantLen, len(got))
+			if len(*res.Success) != tt.wantLen {
+				t.Errorf("expected %d entries, got %d", tt.wantLen, len(*res.Success))
 			}
 		})
 	}
@@ -90,28 +89,26 @@ func TestLeaderboardService_GetTagByUserID(t *testing.T) {
 	userID := sharedtypes.DiscordID("user1")
 
 	tests := []struct {
-		name        string
-		setupFake   func(*FakeLeaderboardRepo)
-		expectedTag sharedtypes.TagNumber
-		wantErr     error
-		expectFail  bool
+		name          string
+		setupPipeline func(*FakeCommandPipeline)
+		expectedTag   sharedtypes.TagNumber
+		expectFail    bool
+		wantErr       error
 	}{
 		{
 			name: "Successfully retrieves tag number",
-			setupFake: func(f *FakeLeaderboardRepo) {
-				f.GetActiveLeaderboardFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID) (*leaderboardtypes.Leaderboard, error) {
-					return &leaderboardtypes.Leaderboard{
-						LeaderboardData: []leaderboardtypes.LeaderboardEntry{{UserID: userID, TagNumber: 5}},
-					}, nil
+			setupPipeline: func(p *FakeCommandPipeline) {
+				p.GetMemberTagFunc = func(ctx context.Context, guildID, memberID string) (int, bool, error) {
+					return 5, true, nil
 				}
 			},
 			expectedTag: 5,
 		},
 		{
 			name: "User ID not found in leaderboard",
-			setupFake: func(f *FakeLeaderboardRepo) {
-				f.GetActiveLeaderboardFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID) (*leaderboardtypes.Leaderboard, error) {
-					return &leaderboardtypes.Leaderboard{LeaderboardData: []leaderboardtypes.LeaderboardEntry{}}, nil
+			setupPipeline: func(p *FakeCommandPipeline) {
+				p.GetMemberTagFunc = func(ctx context.Context, guildID, memberID string) (int, bool, error) {
+					return 0, false, nil
 				}
 			},
 			expectFail: true,
@@ -121,16 +118,21 @@ func TestLeaderboardService_GetTagByUserID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			fakeRepo := NewFakeLeaderboardRepo()
-			tt.setupFake(fakeRepo)
 			s := &LeaderboardService{
-				repo:    fakeRepo,
+				repo:    NewFakeLeaderboardRepo(),
 				logger:  loggerfrolfbot.NoOpLogger,
 				metrics: &leaderboardmetrics.NoOpMetrics{},
 				tracer:  noop.NewTracerProvider().Tracer("test"),
 			}
+			pipeline := &FakeCommandPipeline{}
+			tt.setupPipeline(pipeline)
+			s.SetCommandPipeline(pipeline)
 
 			res, err := s.GetTagByUserID(context.Background(), guildID, userID)
+
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 
 			if tt.expectFail {
 				if !res.IsFailure() {
@@ -142,15 +144,11 @@ func TestLeaderboardService_GetTagByUserID(t *testing.T) {
 				return
 			}
 
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
 			if !res.IsSuccess() {
 				t.Fatalf("expected success, got failure: %v", res.Failure)
 			}
-			tag := *res.Success
-			if tag != tt.expectedTag {
-				t.Errorf("expected tag %v, got %v", tt.expectedTag, tag)
+			if *res.Success != tt.expectedTag {
+				t.Errorf("expected tag %v, got %v", tt.expectedTag, *res.Success)
 			}
 		})
 	}
@@ -164,49 +162,35 @@ func TestLeaderboardService_CheckTagAvailability(t *testing.T) {
 
 	tests := []struct {
 		name            string
-		setupFake       func(*FakeLeaderboardRepo)
+		setupPipeline   func(*FakeCommandPipeline)
 		expectAvailable bool
 		expectReason    string
 		expectErr       bool
 	}{
 		{
 			name: "tag available",
-			setupFake: func(f *FakeLeaderboardRepo) {
-				f.GetActiveLeaderboardFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID) (*leaderboardtypes.Leaderboard, error) {
-					return &leaderboardtypes.Leaderboard{
-						LeaderboardData: []leaderboardtypes.LeaderboardEntry{{UserID: "other", TagNumber: 1}},
-					}, nil
+			setupPipeline: func(p *FakeCommandPipeline) {
+				p.CheckTagFunc = func(ctx context.Context, guildID, memberID string, tagNumber int) (bool, string, error) {
+					return true, "", nil
 				}
 			},
 			expectAvailable: true,
 		},
 		{
 			name: "tag unavailable (already taken)",
-			setupFake: func(f *FakeLeaderboardRepo) {
-				f.GetActiveLeaderboardFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID) (*leaderboardtypes.Leaderboard, error) {
-					return &leaderboardtypes.Leaderboard{
-						LeaderboardData: []leaderboardtypes.LeaderboardEntry{{UserID: "someone-else", TagNumber: 42}},
-					}, nil
+			setupPipeline: func(p *FakeCommandPipeline) {
+				p.CheckTagFunc = func(ctx context.Context, guildID, memberID string, tagNumber int) (bool, string, error) {
+					return false, "tag is already taken", nil
 				}
 			},
 			expectAvailable: false,
 			expectReason:    "tag is already taken",
 		},
 		{
-			name: "no active leaderboard",
-			setupFake: func(f *FakeLeaderboardRepo) {
-				f.GetActiveLeaderboardFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID) (*leaderboardtypes.Leaderboard, error) {
-					return nil, leaderboarddb.ErrNoActiveLeaderboard
-				}
-			},
-			expectAvailable: false,
-			expectReason:    "no active leaderboard",
-		},
-		{
-			name: "database error bubbles up",
-			setupFake: func(f *FakeLeaderboardRepo) {
-				f.GetActiveLeaderboardFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID) (*leaderboardtypes.Leaderboard, error) {
-					return nil, errors.New("connection failed")
+			name: "command pipeline error bubbles up",
+			setupPipeline: func(p *FakeCommandPipeline) {
+				p.CheckTagFunc = func(ctx context.Context, guildID, memberID string, tagNumber int) (bool, string, error) {
+					return false, "", errors.New("connection failed")
 				}
 			},
 			expectErr: true,
@@ -215,15 +199,15 @@ func TestLeaderboardService_CheckTagAvailability(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			fakeRepo := NewFakeLeaderboardRepo()
-			tt.setupFake(fakeRepo)
-
 			s := &LeaderboardService{
-				repo:    fakeRepo,
+				repo:    NewFakeLeaderboardRepo(),
 				logger:  loggerfrolfbot.NoOpLogger,
 				metrics: &leaderboardmetrics.NoOpMetrics{},
 				tracer:  noop.NewTracerProvider().Tracer("test"),
 			}
+			pipeline := &FakeCommandPipeline{}
+			tt.setupPipeline(pipeline)
+			s.SetCommandPipeline(pipeline)
 
 			res, err := s.CheckTagAvailability(ctx, guildID, userID, tagNumber)
 
@@ -248,5 +232,27 @@ func TestLeaderboardService_CheckTagAvailability(t *testing.T) {
 				t.Errorf("expected reason %q, got %q", tt.expectReason, result.Reason)
 			}
 		})
+	}
+}
+
+func TestLeaderboardService_enrichWithSeasonData_RepoErrorDoesNotFail(t *testing.T) {
+	repo := NewFakeLeaderboardRepo()
+	repo.GetSeasonStandingsFunc = func(ctx context.Context, db bun.IDB, guildID string, seasonID string, memberIDs []sharedtypes.DiscordID) (map[sharedtypes.DiscordID]*leaderboarddb.SeasonStanding, error) {
+		return nil, errors.New("season standings unavailable")
+	}
+
+	s := &LeaderboardService{
+		repo:    repo,
+		logger:  loggerfrolfbot.NoOpLogger,
+		metrics: &leaderboardmetrics.NoOpMetrics{},
+		tracer:  noop.NewTracerProvider().Tracer("test"),
+	}
+
+	entries := []leaderboardtypes.LeaderboardEntry{
+		{UserID: "user1", TagNumber: 1},
+	}
+	err := s.enrichWithSeasonData(context.Background(), nil, sharedtypes.GuildID("guild-1"), "season-1", entries)
+	if err != nil {
+		t.Fatalf("expected nil error when enrichment fails, got %v", err)
 	}
 }

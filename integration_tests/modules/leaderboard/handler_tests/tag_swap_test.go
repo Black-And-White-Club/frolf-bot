@@ -10,7 +10,6 @@ import (
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
@@ -41,15 +40,15 @@ func TestHandleTagSwapRequested(t *testing.T) {
 	testCases := []struct {
 		name                   string
 		users                  []testutils.User
-		setupFn                func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *leaderboarddb.Leaderboard
+		setupFn                func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) leaderboardtypes.LeaderboardData
 		publishMsgFn           func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *message.Message
-		validateFn             func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initial *leaderboarddb.Leaderboard)
+		validateFn             func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initial leaderboardtypes.LeaderboardData)
 		expectedOutgoingTopics []string
 	}{
 		{
 			name:  "Success - Immediate Swap (Both users on leaderboard)",
 			users: generator.GenerateUsers(2),
-			setupFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *leaderboarddb.Leaderboard {
+			setupFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) leaderboardtypes.LeaderboardData {
 				initialData := leaderboardtypes.LeaderboardData{
 					{UserID: sharedtypes.DiscordID(users[0].UserID), TagNumber: 10},
 					{UserID: sharedtypes.DiscordID(users[1].UserID), TagNumber: 20},
@@ -61,7 +60,7 @@ func TestHandleTagSwapRequested(t *testing.T) {
 				testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.TagSwapRequestedV1, msg)
 				return msg
 			},
-			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initial *leaderboarddb.Leaderboard) {
+			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initial leaderboardtypes.LeaderboardData) {
 				// We expect TagSwapProcessedV1 as returned by Step 4 or 5 of the handler
 				msgs := receivedMsgs[leaderboardevents.TagSwapProcessedV1]
 				if len(msgs) == 0 {
@@ -80,7 +79,7 @@ func TestHandleTagSwapRequested(t *testing.T) {
 		{
 			name:  "Failure - Target user has no tag",
 			users: generator.GenerateUsers(2),
-			setupFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *leaderboarddb.Leaderboard {
+			setupFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) leaderboardtypes.LeaderboardData {
 				// Only Requestor has a tag
 				initialData := leaderboardtypes.LeaderboardData{
 					{UserID: sharedtypes.DiscordID(users[0].UserID), TagNumber: 10},
@@ -92,7 +91,7 @@ func TestHandleTagSwapRequested(t *testing.T) {
 				testutils.PublishMessage(t, deps.EventBus, context.Background(), leaderboardevents.TagSwapRequestedV1, msg)
 				return msg
 			},
-			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initial *leaderboarddb.Leaderboard) {
+			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initial leaderboardtypes.LeaderboardData) {
 				msgs := receivedMsgs[leaderboardevents.TagSwapFailedV1]
 				if len(msgs) == 0 {
 					t.Fatalf("Expected message on topic %s", leaderboardevents.TagSwapFailedV1)
@@ -124,7 +123,7 @@ func TestHandleTagSwapRequested(t *testing.T) {
 				},
 				ExpectedTopics: tc.expectedOutgoingTopics,
 				ValidateFn: func(t *testing.T, env *testutils.TestEnvironment, incoming *message.Message, received map[string][]*message.Message, initialState interface{}) {
-					tc.validateFn(t, deps, incoming, received, initialState.(*leaderboarddb.Leaderboard))
+					tc.validateFn(t, deps, incoming, received, initialState.(leaderboardtypes.LeaderboardData))
 				},
 			}, deps.TestEnvironment)
 		})

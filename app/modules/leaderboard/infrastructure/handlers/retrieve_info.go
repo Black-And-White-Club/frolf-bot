@@ -18,7 +18,7 @@ func (h *LeaderboardHandlers) HandleGetLeaderboardRequest(
 	ctx context.Context,
 	payload *leaderboardevents.GetLeaderboardRequestedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	result, err := h.service.GetLeaderboard(ctx, payload.GuildID)
+	result, err := h.service.GetLeaderboard(ctx, payload.GuildID, payload.SeasonID)
 	if err != nil {
 		return []handlerwrapper.Result{{
 			Topic: leaderboardevents.GetLeaderboardFailedV1,
@@ -37,7 +37,6 @@ func (h *LeaderboardHandlers) HandleGetLeaderboardRequest(
 			},
 		}}, nil
 	}
-
 	leaderboard := *result.Success
 
 	// Collect user IDs from leaderboard entries

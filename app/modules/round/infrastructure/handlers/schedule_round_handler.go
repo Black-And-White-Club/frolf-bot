@@ -45,7 +45,7 @@ func (h *RoundHandlers) HandleDiscordMessageIDUpdated(
 	if result.Failure != nil {
 		h.logger.WarnContext(ctx, "round events scheduling failed in service",
 			attr.RoundID("round_id", payload.RoundID),
-			attr.Any("failure", result.Failure),
+			attr.Any("failure", *result.Failure),
 		)
 		return []handlerwrapper.Result{}, nil
 	}

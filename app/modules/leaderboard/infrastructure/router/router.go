@@ -219,6 +219,17 @@ func (r *LeaderboardRouter) RegisterHandlers(ctx context.Context, handlers leade
 	registerHandler(deps, sharedevents.RoundTagLookupRequestedV1, handlers.HandleRoundGetTagRequest)
 	registerHandler(deps, sharedevents.TagAvailabilityCheckRequestedV1, handlers.HandleTagAvailabilityCheckRequested)
 
+	// ADMIN OPERATIONS
+	registerHandler(deps, leaderboardevents.LeaderboardPointHistoryRequestedV1, handlers.HandlePointHistoryRequested)
+	registerHandler(deps, leaderboardevents.LeaderboardManualPointAdjustmentV1, handlers.HandleManualPointAdjustment)
+	registerHandler(deps, leaderboardevents.LeaderboardRecalculateRoundV1, handlers.HandleRecalculateRound)
+	registerHandler(deps, leaderboardevents.LeaderboardStartNewSeasonV1, handlers.HandleStartNewSeason)
+	registerHandler(deps, leaderboardevents.LeaderboardGetSeasonStandingsV1, handlers.HandleGetSeasonStandings)
+
+	// PWA REQUEST-REPLY ENDPOINTS
+	registerHandler(deps, "leaderboard.seasons.list.request.v1.>", handlers.HandleListSeasonsRequest)
+	registerHandler(deps, "leaderboard.season.standings.request.v1.>", handlers.HandleSeasonStandingsRequest)
+
 	// INFRASTRUCTURE
 	registerHandler(deps, guildevents.GuildConfigCreatedV1, handlers.HandleGuildConfigCreated)
 

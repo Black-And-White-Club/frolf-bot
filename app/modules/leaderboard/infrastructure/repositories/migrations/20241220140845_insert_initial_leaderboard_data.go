@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	"github.com/uptrace/bun"
 )
 
@@ -12,7 +11,17 @@ func init() {
 	Migrations.MustRegister(func(ctx context.Context, db *bun.DB) error {
 		fmt.Println("Creating leaderboard table...")
 
-		if _, err := db.NewCreateTable().Model((*leaderboarddb.Leaderboard)(nil)).IfNotExists().Exec(ctx); err != nil {
+		_, err := db.NewRaw(`
+			CREATE TABLE IF NOT EXISTS leaderboards (
+				id              bigserial    PRIMARY KEY,
+				leaderboard_data jsonb       NOT NULL,
+				is_active       boolean      NOT NULL DEFAULT true,
+				update_source   text         NULL,
+				update_id       uuid         NULL,
+				guild_id        text         NOT NULL
+			)
+		`).Exec(ctx)
+		if err != nil {
 			return err
 		}
 
@@ -21,7 +30,7 @@ func init() {
 	}, func(ctx context.Context, db *bun.DB) error {
 		fmt.Println("Dropping leaderboard table...")
 
-		if _, err := db.NewDropTable().Model((*leaderboarddb.Leaderboard)(nil)).IfExists().Exec(ctx); err != nil {
+		if _, err := db.NewRaw("DROP TABLE IF EXISTS leaderboards").Exec(ctx); err != nil {
 			return err
 		}
 

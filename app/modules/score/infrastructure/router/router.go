@@ -164,8 +164,22 @@ func (r *ScoreRouter) RegisterHandlers(ctx context.Context, handlers scorehandle
 		handlers.HandleBulkCorrectScoreRequest,
 	)
 
+	// Register reprocess handlers for score overrides
+	// These close the loop: score correction → scores update → reprocess → ProcessRound re-runs
+	registerHandler(
+		deps,
+		sharedevents.ScoreUpdatedV1,
+		handlers.HandleReprocessAfterSingleScoreUpdate,
+	)
+
+	registerHandler(
+		deps,
+		sharedevents.ScoreBulkUpdatedV1,
+		handlers.HandleReprocessAfterBulkScoreUpdate,
+	)
+
 	r.logger.Info("Registered score handlers",
-		attr.Int("handlers", 3),
+		attr.Int("handlers", 5),
 	)
 
 	return nil

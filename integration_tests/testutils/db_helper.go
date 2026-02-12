@@ -109,7 +109,19 @@ func runModuleMigrations(ctx context.Context, db *bun.DB, migrations *migrate.Mi
 }
 
 // Known application tables (cached to avoid querying information_schema every time)
-var appTables = []string{"guild_memberships", "users", "scores", "leaderboards", "rounds", "guild_configs"}
+var appTables = []string{
+	"guild_memberships",
+	"users",
+	"scores",
+	"rounds",
+	"guild_configs",
+	"league_members",
+	"tag_history",
+	"leaderboard_round_outcomes",
+	"leaderboard_point_history",
+	"leaderboard_season_standings",
+	"leaderboard_seasons",
+}
 
 // CleanupRiverJobs deletes all jobs from the River queue
 func CleanupRiverJobs(ctx context.Context, db *bun.DB) error {
@@ -176,7 +188,16 @@ func CleanScoreIntegrationTables(ctx context.Context, db *bun.DB) error {
 
 // CleanLeaderboardIntegrationTables truncates leaderboard-related tables
 func CleanLeaderboardIntegrationTables(ctx context.Context, db *bun.DB) error {
-	return TruncateTables(ctx, db, "leaderboards")
+	return TruncateTables(
+		ctx,
+		db,
+		"league_members",
+		"tag_history",
+		"leaderboard_round_outcomes",
+		"leaderboard_point_history",
+		"leaderboard_season_standings",
+		"leaderboard_seasons",
+	)
 }
 
 // CleanRoundIntegrationTables truncates round-related tables
@@ -188,7 +209,19 @@ func CleanRoundIntegrationTables(ctx context.Context, db *bun.DB) error {
 // CleanAllIntegrationTables truncates all tables for complete isolation between tests
 func CleanAllIntegrationTables(ctx context.Context, db *bun.DB) error {
 	// Truncate all tables in the correct order to avoid foreign key issues
-	return TruncateTables(ctx, db, "users", "scores", "leaderboards", "rounds")
+	return TruncateTables(
+		ctx,
+		db,
+		"users",
+		"scores",
+		"league_members",
+		"tag_history",
+		"leaderboard_round_outcomes",
+		"leaderboard_point_history",
+		"leaderboard_season_standings",
+		"leaderboard_seasons",
+		"rounds",
+	)
 }
 
 // ForceCleanAllTables performs aggressive cleanup including sequences and constraints
@@ -204,7 +237,6 @@ func ForceCleanAllTables(ctx context.Context, db *bun.DB) error {
 	sequences := []string{
 		"users_id_seq",
 		"scores_id_seq",
-		"leaderboards_id_seq",
 		"rounds_id_seq",
 	}
 

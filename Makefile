@@ -446,50 +446,11 @@ clean-coverage:
 	-rm -rf ./bin/*-instrumented
 
 # --- Mock Generation Targets ---
-MOCKGEN := mockgen
-USER_DIR := ./app/modules/user
-LB_DIR := ./app/modules/leaderboard
-ROUND_DIR := ./app/modules/round
-EVENTBUS_DIR := ./app/eventbus
-SCORE_DIR := ./app/modules/score
+# No more mocks - using Fakes
+# See modules/leaderboard/application/fake_test.go, etc.
 
-mocks-user:
-	$(MOCKGEN) -source=$(USER_DIR)/application/interface.go -destination=$(USER_DIR)/application/mocks/mock_service.go -package=mocks
-	$(MOCKGEN) -source=$(USER_DIR)/infrastructure/handlers/interface.go -destination=$(USER_DIR)/infrastructure/handlers/mocks/mock_handlers.go -package=mocks
-	$(MOCKGEN) -source=$(USER_DIR)/infrastructure/router/interface.go -destination=$(USER_DIR)/infrastructure/router/mocks/mock_router.go -package=mocks
-	$(MOCKGEN) -source=$(USER_DIR)/infrastructure/repositories/interface.go -destination=$(USER_DIR)/infrastructure/repositories/mocks/mock_db.go -package=mocks
-
-mocks-leaderboard:
-	$(MOCKGEN) -source=$(LB_DIR)/application/interface.go -destination=$(LB_DIR)/application/mocks/mock_service.go -package=mocks
-	$(MOCKGEN) -source=$(LB_DIR)/infrastructure/handlers/interface.go -destination=$(LB_DIR)/infrastructure/handlers/mocks/mock_handlers.go -package=mocks
-	$(MOCKGEN) -source=$(LB_DIR)/infrastructure/router/interface.go -destination=$(LB_DIR)/infrastructure/router/mocks/mock_router.go -package=mocks
-	$(MOCKGEN) -source=$(LB_DIR)/infrastructure/repositories/interface.go -destination=$(LB_DIR)/infrastructure/repositories/mocks/mock_db.go -package=mocks
-	$(MOCKGEN) -source=$(LB_DIR)/infrastructure/saga/coordinator.go -destination=$(LB_DIR)/infrastructure/saga/mocks/mock_handlers.go -package=mocks
-
-mocks-round:
-	$(MOCKGEN) -source=$(ROUND_DIR)/application/interface.go -destination=$(ROUND_DIR)/application/mocks/mock_service.go -package=mocks
-	$(MOCKGEN) -source=$(ROUND_DIR)/infrastructure/handlers/interface.go -destination=$(ROUND_DIR)/infrastructure/handlers/mocks/mock_handlers.go -package=mocks
-	$(MOCKGEN) -source=$(ROUND_DIR)/infrastructure/repositories/interface.go -destination=$(ROUND_DIR)/infrastructure/repositories/mocks/mock_db.go -package=mocks
-	$(MOCKGEN) -source=$(ROUND_DIR)/infrastructure/queue/service.go -destination=$(ROUND_DIR)/infrastructure/queue/mocks/mock_queue.go -package=mocks
-	$(MOCKGEN) -source=$(ROUND_DIR)/utils/clock.go -destination=$(ROUND_DIR)/mocks/mock_clock.go -package=mocks
-	$(MOCKGEN) -source=$(ROUND_DIR)/time_utils/time_conversion.go -destination=$(ROUND_DIR)/mocks/mock_conversion.go -package=mocks
-	$(MOCKGEN) -source=$(ROUND_DIR)/utils/validator.go -destination=$(ROUND_DIR)/mocks/mock_validator.go -package=mocks
-
-mocks-score:
-	$(MOCKGEN) -source=$(SCORE_DIR)/application/interface.go -destination=$(SCORE_DIR)/application/mocks/mock_service.go -package=mocks
-	$(MOCKGEN) -source=$(SCORE_DIR)/infrastructure/handlers/interface.go -destination=$(SCORE_DIR)/infrastructure/handlers/mocks/mock_handlers.go -package=mocks
-	$(MOCKGEN) -source=$(SCORE_DIR)/infrastructure/router/interface.go -destination=$(SCORE_DIR)/infrastructure/router/mocks/mock_router.go -package=mocks
-	$(MOCKGEN) -source=$(SCORE_DIR)/infrastructure/repositories/interface.go -destination=$(SCORE_DIR)/infrastructure/repositories/mocks/mock_db.go -package=mocks
-
-mocks-eventbus:
-	$(MOCKGEN) -source=../frolf-bot-shared/eventbus/eventbus.go -destination=$(EVENTBUS_DIR)/mocks/mock_eventbus.go -package=mocks
-
-mocks-guild:
-	$(MOCKGEN) -source=./app/modules/guild/application/interface.go -destination=./app/modules/guild/application/mocks/mock_service.go -package=mocks
-	$(MOCKGEN) -source=./app/modules/guild/infrastructure/handlers/interface.go -destination=./app/modules/guild/infrastructure/handlers/mocks/mock_handlers.go -package=mocks
-	$(MOCKGEN) -source=./app/modules/guild/infrastructure/repositories/interface.go -destination=./app/modules/guild/infrastructure/repositories/mocks/mock_db.go -package=mocks
-
-mocks-all: mocks-user mocks-eventbus mocks-leaderboard mocks-round mocks-score mocks-guild
+mocks-all:
+	@echo "Mocks no longer used - using Fakes."
 
 build_version_ldflags := -X 'main.Version=$(shell git describe --tags --always)'
 

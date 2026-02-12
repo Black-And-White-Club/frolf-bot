@@ -8,6 +8,7 @@ import (
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
+	leaderboarddomain "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/domain"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -92,7 +93,7 @@ func (f *FakeLeaderboardService) ExecuteBatchTagAssignment(ctx context.Context, 
 func (f *FakeLeaderboardService) TagSwapRequested(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, targetTag sharedtypes.TagNumber) (results.OperationResult[leaderboardtypes.LeaderboardData, error], error) {
 	return results.FailureResult[leaderboardtypes.LeaderboardData, error](errors.New("not implemented")), nil
 }
-func (f *FakeLeaderboardService) GetLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error], error) {
+func (f *FakeLeaderboardService) GetLeaderboard(ctx context.Context, guildID sharedtypes.GuildID, seasonID string) (results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error], error) {
 	return results.FailureResult[[]leaderboardtypes.LeaderboardEntry, error](errors.New("not implemented")), nil
 }
 func (f *FakeLeaderboardService) GetTagByUserID(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (results.OperationResult[sharedtypes.TagNumber, error], error) {
@@ -117,4 +118,44 @@ func (f *FakeLeaderboardService) ProcessRound(
 	source sharedtypes.ServiceUpdateSource,
 ) (results.OperationResult[leaderboardservice.ProcessRoundResult, error], error) {
 	return results.FailureResult[leaderboardservice.ProcessRoundResult, error](errors.New("not implemented")), nil
+}
+
+func (f *FakeLeaderboardService) GetPointHistoryForMember(ctx context.Context, guildID sharedtypes.GuildID, memberID sharedtypes.DiscordID, limit int) (results.OperationResult[[]leaderboardservice.PointHistoryEntry, error], error) {
+	return results.FailureResult[[]leaderboardservice.PointHistoryEntry, error](errors.New("not implemented")), nil
+}
+
+func (f *FakeLeaderboardService) AdjustPoints(ctx context.Context, guildID sharedtypes.GuildID, memberID sharedtypes.DiscordID, pointsDelta int, reason string) (results.OperationResult[bool, error], error) {
+	return results.FailureResult[bool, error](errors.New("not implemented")), nil
+}
+
+func (f *FakeLeaderboardService) StartNewSeason(ctx context.Context, guildID sharedtypes.GuildID, seasonID string, seasonName string) (results.OperationResult[bool, error], error) {
+	return results.FailureResult[bool, error](errors.New("not implemented")), nil
+}
+
+func (f *FakeLeaderboardService) GetSeasonStandingsForSeason(ctx context.Context, guildID sharedtypes.GuildID, seasonID string) (results.OperationResult[[]leaderboardservice.SeasonStandingEntry, error], error) {
+	return results.FailureResult[[]leaderboardservice.SeasonStandingEntry, error](errors.New("not implemented")), nil
+}
+
+func (f *FakeLeaderboardService) ProcessRoundCommand(ctx context.Context, cmd leaderboardservice.ProcessRoundCommand) (*leaderboardservice.ProcessRoundOutput, error) {
+	return nil, leaderboardservice.ErrCommandPipelineUnavailable
+}
+
+func (f *FakeLeaderboardService) ResetTagsFromQualifyingRound(
+	ctx context.Context,
+	guildID sharedtypes.GuildID,
+	finishOrder []sharedtypes.DiscordID,
+) ([]leaderboarddomain.TagChange, error) {
+	return nil, leaderboardservice.ErrCommandPipelineUnavailable
+}
+
+func (f *FakeLeaderboardService) EndSeason(ctx context.Context, guildID sharedtypes.GuildID) error {
+	return nil
+}
+
+func (f *FakeLeaderboardService) ListSeasons(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[[]leaderboardservice.SeasonInfo, error], error) {
+	return results.FailureResult[[]leaderboardservice.SeasonInfo, error](errors.New("not implemented")), nil
+}
+
+func (f *FakeLeaderboardService) GetSeasonName(ctx context.Context, guildID sharedtypes.GuildID, seasonID string) (string, error) {
+	return "", errors.New("not implemented")
 }

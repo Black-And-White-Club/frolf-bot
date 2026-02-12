@@ -58,33 +58,12 @@ func (h *ScoreHandlers) HandleCorrectScoreRequest(ctx context.Context, payload *
 			Score:   result.Success.Score,
 		}
 
-		results := []handlerwrapper.Result{
+		return []handlerwrapper.Result{
 			{
 				Topic:   sharedevents.ScoreUpdatedV1,
 				Payload: successPayload,
 			},
-		}
-
-		// 5. Trigger reprocessing
-		scores, err := h.service.GetScoresForRound(ctx, successPayload.GuildID, successPayload.RoundID)
-		if err != nil {
-			// Infrastructure error during fetch - we still return the success of the update
-			return results, nil
-		}
-
-		if len(scores) > 0 {
-			reprocessPayload := &sharedevents.ProcessRoundScoresRequestedPayloadV1{
-				GuildID: successPayload.GuildID,
-				RoundID: successPayload.RoundID,
-				Scores:  scores,
-			}
-			results = append(results, handlerwrapper.Result{
-				Topic:   sharedevents.ProcessRoundScoresRequestedV1,
-				Payload: reprocessPayload,
-			})
-		}
-
-		return results, nil
+		}, nil
 	}
 
 	return nil, errors.New("unexpected result from service: neither success nor failure")

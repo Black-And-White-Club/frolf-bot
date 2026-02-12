@@ -10,7 +10,6 @@ import (
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
@@ -37,9 +36,9 @@ func TestHandleGetLeaderboardRequested(t *testing.T) {
 	testCases := []struct {
 		name                   string
 		users                  []testutils.User
-		setupFn                func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *leaderboarddb.Leaderboard
+		setupFn                func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) leaderboardtypes.LeaderboardData
 		publishMsgFn           func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *message.Message
-		validateFn             func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard)
+		validateFn             func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard leaderboardtypes.LeaderboardData)
 		expectedOutgoingTopics []string
 		expectHandlerError     bool
 		timeout                time.Duration
@@ -47,7 +46,7 @@ func TestHandleGetLeaderboardRequested(t *testing.T) {
 		{
 			name:  "Success - Get Leaderboard With Data",
 			users: generator.GenerateUsers(3),
-			setupFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *leaderboarddb.Leaderboard {
+			setupFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) leaderboardtypes.LeaderboardData {
 				initialData := leaderboardtypes.LeaderboardData{
 					{UserID: sharedtypes.DiscordID(users[0].UserID), TagNumber: 1},
 					{UserID: sharedtypes.DiscordID(users[1].UserID), TagNumber: 2},
@@ -67,7 +66,7 @@ func TestHandleGetLeaderboardRequested(t *testing.T) {
 				}
 				return msg
 			},
-			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
+			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard leaderboardtypes.LeaderboardData) {
 				expectedTopic := leaderboardevents.GetLeaderboardResponseV1
 				msgs := receivedMsgs[expectedTopic]
 				if len(msgs) == 0 {
@@ -83,7 +82,7 @@ func TestHandleGetLeaderboardRequested(t *testing.T) {
 				}
 
 				// Use the helper to compare leaderboard data maps
-				expectedMap := testutils.ExtractLeaderboardDataMap(initialLeaderboard.LeaderboardData)
+				expectedMap := testutils.ExtractLeaderboardDataMap(initialLeaderboard)
 				actualMap := testutils.ExtractLeaderboardDataMap(responsePayload.Leaderboard)
 				testutils.ValidateLeaderboardData(t, expectedMap, actualMap)
 
@@ -105,7 +104,7 @@ func TestHandleGetLeaderboardRequested(t *testing.T) {
 		},
 		{
 			name: "Success - Get Empty Leaderboard",
-			setupFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *leaderboarddb.Leaderboard {
+			setupFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) leaderboardtypes.LeaderboardData {
 				// Create an empty leaderboard
 				initialData := leaderboardtypes.LeaderboardData{}
 				return testutils.SetupLeaderboardWithEntries(t, deps.DB, initialData, true, sharedtypes.RoundID(uuid.New()))
@@ -121,7 +120,7 @@ func TestHandleGetLeaderboardRequested(t *testing.T) {
 				}
 				return msg
 			},
-			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
+			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard leaderboardtypes.LeaderboardData) {
 				expectedTopic := leaderboardevents.GetLeaderboardResponseV1
 				msgs := receivedMsgs[expectedTopic]
 				if len(msgs) == 0 {
@@ -144,7 +143,7 @@ func TestHandleGetLeaderboardRequested(t *testing.T) {
 		{
 			name:  "Failure - Invalid Message Payload",
 			users: generator.GenerateUsers(1),
-			setupFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *leaderboarddb.Leaderboard {
+			setupFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) leaderboardtypes.LeaderboardData {
 				entries := []leaderboardtypes.LeaderboardEntry{
 					{UserID: sharedtypes.DiscordID(users[0].UserID), TagNumber: 99},
 				}
@@ -159,7 +158,7 @@ func TestHandleGetLeaderboardRequested(t *testing.T) {
 				}
 				return msg
 			},
-			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
+			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard leaderboardtypes.LeaderboardData) {
 				// Check for unexpected success messages
 				unexpectedSuccessTopic := leaderboardevents.GetLeaderboardResponseV1
 				if len(receivedMsgs[unexpectedSuccessTopic]) > 0 {
@@ -178,7 +177,7 @@ func TestHandleGetLeaderboardRequested(t *testing.T) {
 		{
 			name:  "Failure - No Active Leaderboard",
 			users: generator.GenerateUsers(1),
-			setupFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *leaderboarddb.Leaderboard {
+			setupFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) leaderboardtypes.LeaderboardData {
 				return testutils.SetupLeaderboardWithEntries(t, deps.DB, []leaderboardtypes.LeaderboardEntry{}, false, sharedtypes.RoundID(uuid.New()))
 			},
 			publishMsgFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, users []testutils.User) *message.Message {
@@ -192,7 +191,7 @@ func TestHandleGetLeaderboardRequested(t *testing.T) {
 				}
 				return msg
 			},
-			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard *leaderboarddb.Leaderboard) {
+			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard leaderboardtypes.LeaderboardData) {
 				// No success messages should be sent
 				unexpectedSuccessTopic := leaderboardevents.GetLeaderboardResponseV1
 				if len(receivedMsgs[unexpectedSuccessTopic]) > 0 {
@@ -226,7 +225,7 @@ func TestHandleGetLeaderboardRequested(t *testing.T) {
 				},
 				ExpectedTopics: tc.expectedOutgoingTopics,
 				ValidateFn: func(t *testing.T, env *testutils.TestEnvironment, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
-					tc.validateFn(t, deps, incomingMsg, receivedMsgs, initialState.(*leaderboarddb.Leaderboard))
+					tc.validateFn(t, deps, incomingMsg, receivedMsgs, initialState.(leaderboardtypes.LeaderboardData))
 				},
 				ExpectError: tc.expectHandlerError,
 			}

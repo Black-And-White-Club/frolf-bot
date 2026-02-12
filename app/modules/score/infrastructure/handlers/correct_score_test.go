@@ -43,21 +43,15 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 						Success: &sharedtypes.ScoreInfo{UserID: uID, Score: s, TagNumber: tag},
 					}, nil
 				}
-				f.GetScoresForRoundFunc = func(ctx context.Context, gID sharedtypes.GuildID, rID sharedtypes.RoundID) ([]sharedtypes.ScoreInfo, error) {
-					return []sharedtypes.ScoreInfo{{UserID: testUserID, Score: testScore, TagNumber: &testTagNumber}}, nil
-				}
 			},
 			payload: testPayload,
 			wantErr: false,
 			checkResults: func(t *testing.T, results []handlerwrapper.Result) {
-				if len(results) != 2 {
-					t.Fatalf("expected 2 results, got %d", len(results))
+				if len(results) != 1 {
+					t.Fatalf("expected 1 result, got %d", len(results))
 				}
 				if results[0].Topic != sharedevents.ScoreUpdatedV1 {
 					t.Errorf("expected topic %s, got %s", sharedevents.ScoreUpdatedV1, results[0].Topic)
-				}
-				if results[1].Topic != sharedevents.ProcessRoundScoresRequestedV1 {
-					t.Errorf("expected topic %s, got %s", sharedevents.ProcessRoundScoresRequestedV1, results[1].Topic)
 				}
 			},
 		},
@@ -103,29 +97,6 @@ func TestScoreHandlers_HandleCorrectScoreRequest(t *testing.T) {
 			payload:        testPayload,
 			wantErr:        true,
 			expectedErrMsg: "service error",
-		},
-		{
-			name: "GetScoresForRound fails - returns only success result",
-			setupFake: func(f *FakeScoreService) {
-				f.CorrectScoreFunc = func(ctx context.Context, gID sharedtypes.GuildID, rID sharedtypes.RoundID, uID sharedtypes.DiscordID, s sharedtypes.Score, tag *sharedtypes.TagNumber) (scoreservice.ScoreOperationResult, error) {
-					return scoreservice.ScoreOperationResult{
-						Success: &sharedtypes.ScoreInfo{UserID: uID, Score: s},
-					}, nil
-				}
-				f.GetScoresForRoundFunc = func(ctx context.Context, gID sharedtypes.GuildID, rID sharedtypes.RoundID) ([]sharedtypes.ScoreInfo, error) {
-					return nil, fmt.Errorf("db error")
-				}
-			},
-			payload: testPayload,
-			wantErr: false,
-			checkResults: func(t *testing.T, results []handlerwrapper.Result) {
-				if len(results) != 1 {
-					t.Fatalf("expected 1 result (no reprocess due to error), got %d", len(results))
-				}
-				if results[0].Topic != sharedevents.ScoreUpdatedV1 {
-					t.Errorf("expected topic %s, got %s", sharedevents.ScoreUpdatedV1, results[0].Topic)
-				}
-			},
 		},
 		{
 			name: "Unknown result from CorrectScore",

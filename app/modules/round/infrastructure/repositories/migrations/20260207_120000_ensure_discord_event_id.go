@@ -38,10 +38,10 @@ func init() {
 		})
 	}, func(ctx context.Context, db *bun.DB) error {
 		fmt.Println("Rolling back ensure_discord_event_id (reverting to VARCHAR if possible, or dropping)...")
-		
-		// Note: We can't easily know if we should revert to VARCHAR or drop it entirely 
-		// without complex logic. For safety, we will just revert the type to VARCHAR 
-		// which matches the previous migration's state. 
+
+		// Note: We can't easily know if we should revert to VARCHAR or drop it entirely
+		// without complex logic. For safety, we will just revert the type to VARCHAR
+		// which matches the previous migration's state.
 		// If this migration added the column, this rollback leaves it as VARCHAR (which the prev migration expects).
 
 		return db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {

@@ -241,7 +241,7 @@ func (h *RoundHandlers) HandleParticipantScoreUpdated(
 	}
 
 	if result.Failure != nil {
-		h.logger.WarnContext(ctx, "CheckAllScoresSubmitted returned failure", attr.Any("failure", result.Failure))
+		h.logger.WarnContext(ctx, "CheckAllScoresSubmitted returned failure", attr.Any("failure", *result.Failure))
 	}
 
 	// 2. Business failure
@@ -250,7 +250,7 @@ func (h *RoundHandlers) HandleParticipantScoreUpdated(
 		failurePayload := &roundevents.RoundFinalizationFailedPayloadV1{
 			GuildID: payload.GuildID,
 			RoundID: payload.RoundID,
-			Error:   fmt.Sprintf("%v", result.Failure),
+			Error:   fmt.Sprintf("%v", *result.Failure),
 		}
 		return []handlerwrapper.Result{
 			{

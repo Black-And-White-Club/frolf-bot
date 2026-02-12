@@ -48,13 +48,13 @@ func (h *RoundHandlers) HandleRoundReminder(
 	// Handle functional failures (e.g., round no longer exists or is cancelled).
 	if result.Failure != nil {
 		h.logger.WarnContext(ctx, "round reminder processing failed in service",
-			attr.Any("failure", result.Failure),
+			attr.Any("failure", *result.Failure),
 		)
 		// Map domain failure to event payload manually to ensure context fields are present
 		failurePayload := &roundevents.RoundReminderFailedPayloadV1{
 			GuildID: payload.GuildID,
 			RoundID: payload.RoundID,
-			Error:   fmt.Sprintf("%v", result.Failure),
+			Error:   fmt.Sprintf("%v", *result.Failure),
 		}
 		return []handlerwrapper.Result{
 			{Topic: roundevents.RoundReminderFailedV1, Payload: failurePayload},

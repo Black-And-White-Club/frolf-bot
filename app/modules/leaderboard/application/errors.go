@@ -22,6 +22,9 @@ var (
 
 	// ErrTagNotAvailable indicates the requested tag is not available.
 	ErrTagNotAvailable = errors.New("tag not available")
+
+	// ErrCommandPipelineUnavailable indicates command-optimized orchestration is not configured.
+	ErrCommandPipelineUnavailable = errors.New("command pipeline unavailable")
 )
 
 // TagSwapNeededError is returned when a requested tag is currently held by someone else.

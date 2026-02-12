@@ -9,10 +9,8 @@ import (
 
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
-	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
-	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
 	"github.com/uptrace/bun"
 	"go.opentelemetry.io/otel/trace/noop"
 )
@@ -158,62 +156,23 @@ func TestLeaderboardService_EnsureGuildLeaderboard(t *testing.T) {
 	ctx := context.Background()
 	guildID := sharedtypes.GuildID("test-guild")
 
-	tests := []struct {
-		name          string
-		setupFake     func(*FakeLeaderboardRepo)
-		wantErr       bool
-		expectedSteps []string
-	}{
-		{
-			name: "Leaderboard exists - do nothing",
-			setupFake: func(f *FakeLeaderboardRepo) {
-				f.GetActiveLeaderboardFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID) (*leaderboardtypes.Leaderboard, error) {
-					return &leaderboardtypes.Leaderboard{}, nil
-				}
-			},
-			wantErr:       false,
-			expectedSteps: []string{"GetActiveLeaderboard"},
-		},
-		{
-			name: "Leaderboard missing - create it",
-			setupFake: func(f *FakeLeaderboardRepo) {
-				f.GetActiveLeaderboardFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID) (*leaderboardtypes.Leaderboard, error) {
-					return nil, leaderboarddb.ErrNoActiveLeaderboard
-				}
-				f.SaveLeaderboardFunc = func(ctx context.Context, db bun.IDB, lb *leaderboardtypes.Leaderboard) error {
-					return nil
-				}
-			},
-			wantErr:       false,
-			expectedSteps: []string{"GetActiveLeaderboard", "SaveLeaderboard"},
-		},
+	fakeRepo := NewFakeLeaderboardRepo()
+	s := &LeaderboardService{
+		repo:    fakeRepo,
+		logger:  loggerfrolfbot.NoOpLogger,
+		metrics: &leaderboardmetrics.NoOpMetrics{},
+		tracer:  noop.NewTracerProvider().Tracer("test"),
+		db:      nil,
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			fakeRepo := NewFakeLeaderboardRepo()
-			tt.setupFake(fakeRepo)
-			s := &LeaderboardService{
-				repo:    fakeRepo,
-				logger:  loggerfrolfbot.NoOpLogger,
-				metrics: &leaderboardmetrics.NoOpMetrics{},
-				tracer:  noop.NewTracerProvider().Tracer("test"),
-				db:      nil,
-			}
-
-			// Expect Success Result now
-			res, err := s.EnsureGuildLeaderboard(ctx, guildID)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("EnsureGuildLeaderboard() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if !tt.wantErr && !res.IsSuccess() {
-				t.Errorf("expected success result")
-			}
-
-			trace := fakeRepo.Trace()
-			if len(trace) != len(tt.expectedSteps) {
-				t.Errorf("expected %d steps, got %d: %v", len(tt.expectedSteps), len(trace), trace)
-			}
-		})
+	res, err := s.EnsureGuildLeaderboard(ctx, guildID)
+	if err != nil {
+		t.Fatalf("EnsureGuildLeaderboard() unexpected error: %v", err)
+	}
+	if !res.IsSuccess() {
+		t.Fatalf("expected success result")
+	}
+	if *res.Success {
+		t.Fatalf("expected normalized no-op initialization to return false")
 	}
 }
