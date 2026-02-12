@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"testing"
 
+	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
@@ -20,14 +21,14 @@ func TestLeaderboardHandlers_HandlePointHistoryRequested(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		payload   *PointHistoryRequestedPayloadV1
+		payload   *leaderboardevents.PointHistoryRequestedPayloadV1
 		setupFake func(*FakeService)
 		wantTopic string
 		wantErr   bool
 	}{
 		{
 			name:    "success returns history",
-			payload: &PointHistoryRequestedPayloadV1{GuildID: guildID, MemberID: memberID, Limit: 10},
+			payload: &leaderboardevents.PointHistoryRequestedPayloadV1{GuildID: guildID, MemberID: memberID, Limit: 10},
 			setupFake: func(f *FakeService) {
 				f.GetPointHistoryForMemberFunc = func(ctx context.Context, g sharedtypes.GuildID, m sharedtypes.DiscordID, limit int) (results.OperationResult[[]leaderboardservice.PointHistoryEntry, error], error) {
 					return results.SuccessResult[[]leaderboardservice.PointHistoryEntry, error]([]leaderboardservice.PointHistoryEntry{
@@ -35,17 +36,17 @@ func TestLeaderboardHandlers_HandlePointHistoryRequested(t *testing.T) {
 					}), nil
 				}
 			},
-			wantTopic: LeaderboardPointHistoryResponseV1,
+			wantTopic: leaderboardevents.LeaderboardPointHistoryResponseV1,
 		},
 		{
 			name:    "service error returns failure",
-			payload: &PointHistoryRequestedPayloadV1{GuildID: guildID, MemberID: memberID},
+			payload: &leaderboardevents.PointHistoryRequestedPayloadV1{GuildID: guildID, MemberID: memberID},
 			setupFake: func(f *FakeService) {
 				f.GetPointHistoryForMemberFunc = func(ctx context.Context, g sharedtypes.GuildID, m sharedtypes.DiscordID, limit int) (results.OperationResult[[]leaderboardservice.PointHistoryEntry, error], error) {
 					return results.OperationResult[[]leaderboardservice.PointHistoryEntry, error]{}, errors.New("db error")
 				}
 			},
-			wantTopic: LeaderboardPointHistoryFailedV1,
+			wantTopic: leaderboardevents.LeaderboardPointHistoryFailedV1,
 		},
 	}
 
@@ -78,13 +79,13 @@ func TestLeaderboardHandlers_HandleManualPointAdjustment(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		payload   *ManualPointAdjustmentPayloadV1
+		payload   *leaderboardevents.ManualPointAdjustmentPayloadV1
 		setupFake func(*FakeService)
 		wantTopic string
 	}{
 		{
 			name: "success adjustment",
-			payload: &ManualPointAdjustmentPayloadV1{
+			payload: &leaderboardevents.ManualPointAdjustmentPayloadV1{
 				GuildID: guildID, MemberID: memberID, PointsDelta: 50, Reason: "scorecard error", AdminID: "admin-1",
 			},
 			setupFake: func(f *FakeService) {
@@ -92,11 +93,11 @@ func TestLeaderboardHandlers_HandleManualPointAdjustment(t *testing.T) {
 					return results.SuccessResult[bool, error](true), nil
 				}
 			},
-			wantTopic: LeaderboardManualPointAdjustmentSuccessV1,
+			wantTopic: leaderboardevents.LeaderboardManualPointAdjustmentSuccessV1,
 		},
 		{
 			name: "service error",
-			payload: &ManualPointAdjustmentPayloadV1{
+			payload: &leaderboardevents.ManualPointAdjustmentPayloadV1{
 				GuildID: guildID, MemberID: memberID, PointsDelta: 50, Reason: "test",
 			},
 			setupFake: func(f *FakeService) {
@@ -104,7 +105,7 @@ func TestLeaderboardHandlers_HandleManualPointAdjustment(t *testing.T) {
 					return results.OperationResult[bool, error]{}, errors.New("db error")
 				}
 			},
-			wantTopic: LeaderboardManualPointAdjustmentFailedV1,
+			wantTopic: leaderboardevents.LeaderboardManualPointAdjustmentFailedV1,
 		},
 	}
 
@@ -135,14 +136,14 @@ func TestLeaderboardHandlers_HandleRecalculateRound(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		payload     *RecalculateRoundPayloadV1
+		payload     *leaderboardevents.RecalculateRoundPayloadV1
 		setupFake   func(*FakeService)
 		roundLookup RoundLookup
 		wantTopic   string
 	}{
 		{
 			name:    "success recalculation",
-			payload: &RecalculateRoundPayloadV1{GuildID: guildID, RoundID: roundID},
+			payload: &leaderboardevents.RecalculateRoundPayloadV1{GuildID: guildID, RoundID: roundID},
 			roundLookup: &FakeRoundLookup{
 				GetRoundFunc: func(ctx context.Context, g sharedtypes.GuildID, r sharedtypes.RoundID) (*roundtypes.Round, error) {
 					return &roundtypes.Round{
@@ -161,23 +162,23 @@ func TestLeaderboardHandlers_HandleRecalculateRound(t *testing.T) {
 					}), nil
 				}
 			},
-			wantTopic: LeaderboardRecalculateRoundSuccessV1,
+			wantTopic: leaderboardevents.LeaderboardRecalculateRoundSuccessV1,
 		},
 		{
 			name:        "nil round lookup",
-			payload:     &RecalculateRoundPayloadV1{GuildID: guildID, RoundID: roundID},
+			payload:     &leaderboardevents.RecalculateRoundPayloadV1{GuildID: guildID, RoundID: roundID},
 			roundLookup: nil,
-			wantTopic:   LeaderboardRecalculateRoundFailedV1,
+			wantTopic:   leaderboardevents.LeaderboardRecalculateRoundFailedV1,
 		},
 		{
 			name:    "round not found",
-			payload: &RecalculateRoundPayloadV1{GuildID: guildID, RoundID: roundID},
+			payload: &leaderboardevents.RecalculateRoundPayloadV1{GuildID: guildID, RoundID: roundID},
 			roundLookup: &FakeRoundLookup{
 				GetRoundFunc: func(ctx context.Context, g sharedtypes.GuildID, r sharedtypes.RoundID) (*roundtypes.Round, error) {
 					return nil, nil
 				},
 			},
-			wantTopic: LeaderboardRecalculateRoundFailedV1,
+			wantTopic: leaderboardevents.LeaderboardRecalculateRoundFailedV1,
 		},
 	}
 
@@ -210,29 +211,29 @@ func TestLeaderboardHandlers_HandleStartNewSeason(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		payload   *StartNewSeasonPayloadV1
+		payload   *leaderboardevents.StartNewSeasonPayloadV1
 		setupFake func(*FakeService)
 		wantTopic string
 	}{
 		{
 			name:    "success",
-			payload: &StartNewSeasonPayloadV1{GuildID: guildID, SeasonID: "2026-spring", SeasonName: "Spring 2026"},
+			payload: &leaderboardevents.StartNewSeasonPayloadV1{GuildID: guildID, SeasonID: "2026-spring", SeasonName: "Spring 2026"},
 			setupFake: func(f *FakeService) {
 				f.StartNewSeasonFunc = func(ctx context.Context, g sharedtypes.GuildID, sid, sname string) (results.OperationResult[bool, error], error) {
 					return results.SuccessResult[bool, error](true), nil
 				}
 			},
-			wantTopic: LeaderboardStartNewSeasonSuccessV1,
+			wantTopic: leaderboardevents.LeaderboardStartNewSeasonSuccessV1,
 		},
 		{
 			name:    "failure",
-			payload: &StartNewSeasonPayloadV1{GuildID: guildID, SeasonID: "2026-spring", SeasonName: "Spring 2026"},
+			payload: &leaderboardevents.StartNewSeasonPayloadV1{GuildID: guildID, SeasonID: "2026-spring", SeasonName: "Spring 2026"},
 			setupFake: func(f *FakeService) {
 				f.StartNewSeasonFunc = func(ctx context.Context, g sharedtypes.GuildID, sid, sname string) (results.OperationResult[bool, error], error) {
 					return results.OperationResult[bool, error]{}, errors.New("duplicate season")
 				}
 			},
-			wantTopic: LeaderboardStartNewSeasonFailedV1,
+			wantTopic: leaderboardevents.LeaderboardStartNewSeasonFailedV1,
 		},
 	}
 
@@ -260,13 +261,13 @@ func TestLeaderboardHandlers_HandleGetSeasonStandings(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		payload   *GetSeasonStandingsPayloadV1
+		payload   *leaderboardevents.GetSeasonStandingsPayloadV1
 		setupFake func(*FakeService)
 		wantTopic string
 	}{
 		{
 			name:    "success",
-			payload: &GetSeasonStandingsPayloadV1{GuildID: guildID, SeasonID: "default"},
+			payload: &leaderboardevents.GetSeasonStandingsPayloadV1{GuildID: guildID, SeasonID: "default"},
 			setupFake: func(f *FakeService) {
 				f.GetSeasonStandingsForSeasonFunc = func(ctx context.Context, g sharedtypes.GuildID, sid string) (results.OperationResult[[]leaderboardservice.SeasonStandingEntry, error], error) {
 					return results.SuccessResult[[]leaderboardservice.SeasonStandingEntry, error]([]leaderboardservice.SeasonStandingEntry{
@@ -274,17 +275,17 @@ func TestLeaderboardHandlers_HandleGetSeasonStandings(t *testing.T) {
 					}), nil
 				}
 			},
-			wantTopic: LeaderboardGetSeasonStandingsResponseV1,
+			wantTopic: leaderboardevents.LeaderboardGetSeasonStandingsResponseV1,
 		},
 		{
 			name:    "failure",
-			payload: &GetSeasonStandingsPayloadV1{GuildID: guildID, SeasonID: "invalid"},
+			payload: &leaderboardevents.GetSeasonStandingsPayloadV1{GuildID: guildID, SeasonID: "invalid"},
 			setupFake: func(f *FakeService) {
 				f.GetSeasonStandingsForSeasonFunc = func(ctx context.Context, g sharedtypes.GuildID, sid string) (results.OperationResult[[]leaderboardservice.SeasonStandingEntry, error], error) {
 					return results.OperationResult[[]leaderboardservice.SeasonStandingEntry, error]{}, errors.New("not found")
 				}
 			},
-			wantTopic: LeaderboardGetSeasonStandingsFailedV1,
+			wantTopic: leaderboardevents.LeaderboardGetSeasonStandingsFailedV1,
 		},
 	}
 

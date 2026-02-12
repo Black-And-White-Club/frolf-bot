@@ -41,19 +41,19 @@ type Handlers interface {
 	// --- ADMIN OPERATIONS ---
 
 	// HandlePointHistoryRequested returns point history for a member.
-	HandlePointHistoryRequested(ctx context.Context, payload *PointHistoryRequestedPayloadV1) ([]handlerwrapper.Result, error)
+	HandlePointHistoryRequested(ctx context.Context, payload *leaderboardevents.PointHistoryRequestedPayloadV1) ([]handlerwrapper.Result, error)
 
 	// HandleManualPointAdjustment processes a manual point adjustment.
-	HandleManualPointAdjustment(ctx context.Context, payload *ManualPointAdjustmentPayloadV1) ([]handlerwrapper.Result, error)
+	HandleManualPointAdjustment(ctx context.Context, payload *leaderboardevents.ManualPointAdjustmentPayloadV1) ([]handlerwrapper.Result, error)
 
 	// HandleRecalculateRound triggers recalculation for a round.
-	HandleRecalculateRound(ctx context.Context, payload *RecalculateRoundPayloadV1) ([]handlerwrapper.Result, error)
+	HandleRecalculateRound(ctx context.Context, payload *leaderboardevents.RecalculateRoundPayloadV1) ([]handlerwrapper.Result, error)
 
 	// HandleStartNewSeason creates a new season.
-	HandleStartNewSeason(ctx context.Context, payload *StartNewSeasonPayloadV1) ([]handlerwrapper.Result, error)
+	HandleStartNewSeason(ctx context.Context, payload *leaderboardevents.StartNewSeasonPayloadV1) ([]handlerwrapper.Result, error)
 
 	// HandleGetSeasonStandings returns standings for a specific season.
-	HandleGetSeasonStandings(ctx context.Context, payload *GetSeasonStandingsPayloadV1) ([]handlerwrapper.Result, error)
+	HandleGetSeasonStandings(ctx context.Context, payload *leaderboardevents.GetSeasonStandingsPayloadV1) ([]handlerwrapper.Result, error)
 
 	// --- INFRASTRUCTURE ---
 

@@ -52,10 +52,20 @@ func (s *LeaderboardService) AdjustPoints(
 ) (results.OperationResult[bool, error], error) {
 
 	adjustTx := func(ctx context.Context, db bun.IDB) (results.OperationResult[bool, error], error) {
+		// 0. Get Active Season
+		season, err := s.repo.GetActiveSeason(ctx, db, string(guildID))
+		if err != nil {
+			return results.OperationResult[bool, error]{}, fmt.Errorf("failed to get active season: %w", err)
+		}
+		if season == nil {
+			return results.FailureResult[bool, error](fmt.Errorf("no active season found")), nil
+		}
+
 		// 1. Save a PointHistory record with the adjustment reason
 		history := &leaderboarddb.PointHistory{
 			MemberID: memberID,
 			RoundID:  sharedtypes.RoundID(uuid.Nil), // Zero UUID for manual adjustments
+			SeasonID: season.ID,
 			Points:   pointsDelta,
 			Reason:   reason,
 		}
@@ -70,6 +80,7 @@ func (s *LeaderboardService) AdjustPoints(
 		}
 		if standing == nil {
 			standing = &leaderboarddb.SeasonStanding{
+				SeasonID: season.ID,
 				MemberID: memberID,
 			}
 		}

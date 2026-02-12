@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 
-	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
@@ -41,20 +40,8 @@ func (s *LeaderboardService) GetLeaderboard(
 		}
 
 		// Enrich from seasonal standings where available.
-		userIDs := make([]sharedtypes.DiscordID, len(entries))
-		for i, e := range entries {
-			userIDs[i] = e.UserID
-		}
-		standings, err := s.repo.GetSeasonStandings(ctx, s.db, string(guildID), "", userIDs)
-		if err != nil {
-			s.logger.ErrorContext(ctx, "failed to enrich normalized leaderboard with season standings", attr.Error(err))
-		} else {
-			for i := range entries {
-				if st, ok := standings[entries[i].UserID]; ok {
-					entries[i].TotalPoints = st.TotalPoints
-					entries[i].RoundsPlayed = st.RoundsPlayed
-				}
-			}
+		if err := s.enrichWithSeasonData(ctx, s.db, guildID, entries); err != nil {
+			// Already logged in helper, continue with unenriched data
 		}
 
 		return results.SuccessResult[[]leaderboardtypes.LeaderboardEntry, error](entries), nil

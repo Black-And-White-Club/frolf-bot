@@ -223,15 +223,6 @@ func init() {
 			return fmt.Errorf("create leaderboard_round_outcomes: %w", err)
 		}
 
-		// Add stats_json column to season_standings
-		_, err = db.NewRaw(`
-				ALTER TABLE leaderboard_season_standings
-			ADD COLUMN IF NOT EXISTS stats_json jsonb NOT NULL DEFAULT '{}'
-		`).Exec(ctx)
-		if err != nil {
-			return fmt.Errorf("add stats_json to season_standings: %w", err)
-		}
-
 		fmt.Println("Normalized tag state tables created successfully!")
 		return nil
 	}, func(ctx context.Context, db *bun.DB) error {
@@ -243,7 +234,6 @@ func init() {
 
 		// Remove guild_id columns (reverse migration)
 		_, _ = db.NewRaw("ALTER TABLE leaderboard_season_standings DROP COLUMN IF EXISTS guild_id").Exec(ctx)
-		_, _ = db.NewRaw("ALTER TABLE leaderboard_season_standings DROP COLUMN IF EXISTS stats_json").Exec(ctx)
 		_, _ = db.NewRaw("ALTER TABLE leaderboard_point_history DROP COLUMN IF EXISTS guild_id").Exec(ctx)
 		_, _ = db.NewRaw("ALTER TABLE leaderboard_seasons DROP COLUMN IF EXISTS guild_id").Exec(ctx)
 

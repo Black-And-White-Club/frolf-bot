@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
@@ -12,7 +13,7 @@ import (
 // HandlePointHistoryRequested returns point history for a member.
 func (h *LeaderboardHandlers) HandlePointHistoryRequested(
 	ctx context.Context,
-	payload *PointHistoryRequestedPayloadV1,
+	payload *leaderboardevents.PointHistoryRequestedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
 	limit := payload.Limit
 	if limit <= 0 {
@@ -22,21 +23,21 @@ func (h *LeaderboardHandlers) HandlePointHistoryRequested(
 	result, err := h.service.GetPointHistoryForMember(ctx, payload.GuildID, payload.MemberID, limit)
 	if err != nil {
 		return []handlerwrapper.Result{{
-			Topic:   LeaderboardPointHistoryFailedV1,
-			Payload: &FailedPayloadV1{GuildID: payload.GuildID, Reason: err.Error()},
+			Topic:   leaderboardevents.LeaderboardPointHistoryFailedV1,
+			Payload: &leaderboardevents.AdminFailedPayloadV1{GuildID: payload.GuildID, Reason: err.Error()},
 		}}, nil
 	}
 
 	if result.IsFailure() {
 		return []handlerwrapper.Result{{
-			Topic:   LeaderboardPointHistoryFailedV1,
-			Payload: &FailedPayloadV1{GuildID: payload.GuildID, Reason: fmt.Sprintf("%v", *result.Failure)},
+			Topic:   leaderboardevents.LeaderboardPointHistoryFailedV1,
+			Payload: &leaderboardevents.AdminFailedPayloadV1{GuildID: payload.GuildID, Reason: fmt.Sprintf("%v", *result.Failure)},
 		}}, nil
 	}
 
-	items := make([]PointHistoryItemV1, len(*result.Success))
+	items := make([]leaderboardevents.PointHistoryItemV1, len(*result.Success))
 	for i, entry := range *result.Success {
-		items[i] = PointHistoryItemV1{
+		items[i] = leaderboardevents.PointHistoryItemV1{
 			RoundID:   entry.RoundID,
 			SeasonID:  entry.SeasonID,
 			Points:    entry.Points,
@@ -48,8 +49,8 @@ func (h *LeaderboardHandlers) HandlePointHistoryRequested(
 	}
 
 	return []handlerwrapper.Result{{
-		Topic: LeaderboardPointHistoryResponseV1,
-		Payload: &PointHistoryResponsePayloadV1{
+		Topic: leaderboardevents.LeaderboardPointHistoryResponseV1,
+		Payload: &leaderboardevents.PointHistoryResponsePayloadV1{
 			GuildID:  payload.GuildID,
 			MemberID: payload.MemberID,
 			History:  items,
@@ -60,7 +61,7 @@ func (h *LeaderboardHandlers) HandlePointHistoryRequested(
 // HandleManualPointAdjustment processes a manual point adjustment request.
 func (h *LeaderboardHandlers) HandleManualPointAdjustment(
 	ctx context.Context,
-	payload *ManualPointAdjustmentPayloadV1,
+	payload *leaderboardevents.ManualPointAdjustmentPayloadV1,
 ) ([]handlerwrapper.Result, error) {
 	reason := payload.Reason
 	if payload.AdminID != "" {
@@ -70,21 +71,21 @@ func (h *LeaderboardHandlers) HandleManualPointAdjustment(
 	result, err := h.service.AdjustPoints(ctx, payload.GuildID, payload.MemberID, payload.PointsDelta, reason)
 	if err != nil {
 		return []handlerwrapper.Result{{
-			Topic:   LeaderboardManualPointAdjustmentFailedV1,
-			Payload: &FailedPayloadV1{GuildID: payload.GuildID, Reason: err.Error()},
+			Topic:   leaderboardevents.LeaderboardManualPointAdjustmentFailedV1,
+			Payload: &leaderboardevents.AdminFailedPayloadV1{GuildID: payload.GuildID, Reason: err.Error()},
 		}}, nil
 	}
 
 	if result.IsFailure() {
 		return []handlerwrapper.Result{{
-			Topic:   LeaderboardManualPointAdjustmentFailedV1,
-			Payload: &FailedPayloadV1{GuildID: payload.GuildID, Reason: fmt.Sprintf("%v", *result.Failure)},
+			Topic:   leaderboardevents.LeaderboardManualPointAdjustmentFailedV1,
+			Payload: &leaderboardevents.AdminFailedPayloadV1{GuildID: payload.GuildID, Reason: fmt.Sprintf("%v", *result.Failure)},
 		}}, nil
 	}
 
 	return []handlerwrapper.Result{{
-		Topic: LeaderboardManualPointAdjustmentSuccessV1,
-		Payload: &ManualPointAdjustmentSuccessPayloadV1{
+		Topic: leaderboardevents.LeaderboardManualPointAdjustmentSuccessV1,
+		Payload: &leaderboardevents.ManualPointAdjustmentSuccessPayloadV1{
 			GuildID:     payload.GuildID,
 			MemberID:    payload.MemberID,
 			PointsDelta: payload.PointsDelta,
@@ -96,27 +97,27 @@ func (h *LeaderboardHandlers) HandleManualPointAdjustment(
 // HandleRecalculateRound triggers recalculation of a round's points.
 func (h *LeaderboardHandlers) HandleRecalculateRound(
 	ctx context.Context,
-	payload *RecalculateRoundPayloadV1,
+	payload *leaderboardevents.RecalculateRoundPayloadV1,
 ) ([]handlerwrapper.Result, error) {
 	// Fetch round data to get participant info
 	if h.roundLookup == nil {
 		return []handlerwrapper.Result{{
-			Topic:   LeaderboardRecalculateRoundFailedV1,
-			Payload: &FailedPayloadV1{GuildID: payload.GuildID, Reason: "round lookup not available"},
+			Topic:   leaderboardevents.LeaderboardRecalculateRoundFailedV1,
+			Payload: &leaderboardevents.AdminFailedPayloadV1{GuildID: payload.GuildID, Reason: "round lookup not available"},
 		}}, nil
 	}
 
 	round, err := h.roundLookup.GetRound(ctx, payload.GuildID, payload.RoundID)
 	if err != nil {
 		return []handlerwrapper.Result{{
-			Topic:   LeaderboardRecalculateRoundFailedV1,
-			Payload: &FailedPayloadV1{GuildID: payload.GuildID, Reason: fmt.Sprintf("failed to fetch round: %v", err)},
+			Topic:   leaderboardevents.LeaderboardRecalculateRoundFailedV1,
+			Payload: &leaderboardevents.AdminFailedPayloadV1{GuildID: payload.GuildID, Reason: fmt.Sprintf("failed to fetch round: %v", err)},
 		}}, nil
 	}
 	if round == nil || len(round.Participants) == 0 {
 		return []handlerwrapper.Result{{
-			Topic:   LeaderboardRecalculateRoundFailedV1,
-			Payload: &FailedPayloadV1{GuildID: payload.GuildID, Reason: "round not found or has no participants"},
+			Topic:   leaderboardevents.LeaderboardRecalculateRoundFailedV1,
+			Payload: &leaderboardevents.AdminFailedPayloadV1{GuildID: payload.GuildID, Reason: "round not found or has no participants"},
 		}}, nil
 	}
 
@@ -133,8 +134,8 @@ func (h *LeaderboardHandlers) HandleRecalculateRound(
 
 	if len(playerResults) == 0 {
 		return []handlerwrapper.Result{{
-			Topic:   LeaderboardRecalculateRoundFailedV1,
-			Payload: &FailedPayloadV1{GuildID: payload.GuildID, Reason: "no participants with tags found"},
+			Topic:   leaderboardevents.LeaderboardRecalculateRoundFailedV1,
+			Payload: &leaderboardevents.AdminFailedPayloadV1{GuildID: payload.GuildID, Reason: "no participants with tags found"},
 		}}, nil
 	}
 
@@ -148,21 +149,21 @@ func (h *LeaderboardHandlers) HandleRecalculateRound(
 	)
 	if err != nil {
 		return []handlerwrapper.Result{{
-			Topic:   LeaderboardRecalculateRoundFailedV1,
-			Payload: &FailedPayloadV1{GuildID: payload.GuildID, Reason: err.Error()},
+			Topic:   leaderboardevents.LeaderboardRecalculateRoundFailedV1,
+			Payload: &leaderboardevents.AdminFailedPayloadV1{GuildID: payload.GuildID, Reason: err.Error()},
 		}}, nil
 	}
 
 	if result.IsFailure() {
 		return []handlerwrapper.Result{{
-			Topic:   LeaderboardRecalculateRoundFailedV1,
-			Payload: &FailedPayloadV1{GuildID: payload.GuildID, Reason: fmt.Sprintf("%v", *result.Failure)},
+			Topic:   leaderboardevents.LeaderboardRecalculateRoundFailedV1,
+			Payload: &leaderboardevents.AdminFailedPayloadV1{GuildID: payload.GuildID, Reason: fmt.Sprintf("%v", *result.Failure)},
 		}}, nil
 	}
 
 	return []handlerwrapper.Result{{
-		Topic: LeaderboardRecalculateRoundSuccessV1,
-		Payload: &RecalculateRoundSuccessPayloadV1{
+		Topic: leaderboardevents.LeaderboardRecalculateRoundSuccessV1,
+		Payload: &leaderboardevents.RecalculateRoundSuccessPayloadV1{
 			GuildID:       payload.GuildID,
 			RoundID:       payload.RoundID,
 			PointsAwarded: result.Success.PointsAwarded,
@@ -173,26 +174,26 @@ func (h *LeaderboardHandlers) HandleRecalculateRound(
 // HandleStartNewSeason creates a new season.
 func (h *LeaderboardHandlers) HandleStartNewSeason(
 	ctx context.Context,
-	payload *StartNewSeasonPayloadV1,
+	payload *leaderboardevents.StartNewSeasonPayloadV1,
 ) ([]handlerwrapper.Result, error) {
 	result, err := h.service.StartNewSeason(ctx, payload.GuildID, payload.SeasonID, payload.SeasonName)
 	if err != nil {
 		return []handlerwrapper.Result{{
-			Topic:   LeaderboardStartNewSeasonFailedV1,
-			Payload: &FailedPayloadV1{GuildID: payload.GuildID, Reason: err.Error()},
+			Topic:   leaderboardevents.LeaderboardStartNewSeasonFailedV1,
+			Payload: &leaderboardevents.AdminFailedPayloadV1{GuildID: payload.GuildID, Reason: err.Error()},
 		}}, nil
 	}
 
 	if result.IsFailure() {
 		return []handlerwrapper.Result{{
-			Topic:   LeaderboardStartNewSeasonFailedV1,
-			Payload: &FailedPayloadV1{GuildID: payload.GuildID, Reason: fmt.Sprintf("%v", *result.Failure)},
+			Topic:   leaderboardevents.LeaderboardStartNewSeasonFailedV1,
+			Payload: &leaderboardevents.AdminFailedPayloadV1{GuildID: payload.GuildID, Reason: fmt.Sprintf("%v", *result.Failure)},
 		}}, nil
 	}
 
 	return []handlerwrapper.Result{{
-		Topic: LeaderboardStartNewSeasonSuccessV1,
-		Payload: &StartNewSeasonSuccessPayloadV1{
+		Topic: leaderboardevents.LeaderboardStartNewSeasonSuccessV1,
+		Payload: &leaderboardevents.StartNewSeasonSuccessPayloadV1{
 			GuildID:    payload.GuildID,
 			SeasonID:   payload.SeasonID,
 			SeasonName: payload.SeasonName,
@@ -203,26 +204,26 @@ func (h *LeaderboardHandlers) HandleStartNewSeason(
 // HandleGetSeasonStandings returns standings for a specific season.
 func (h *LeaderboardHandlers) HandleGetSeasonStandings(
 	ctx context.Context,
-	payload *GetSeasonStandingsPayloadV1,
+	payload *leaderboardevents.GetSeasonStandingsPayloadV1,
 ) ([]handlerwrapper.Result, error) {
 	result, err := h.service.GetSeasonStandingsForSeason(ctx, payload.GuildID, payload.SeasonID)
 	if err != nil {
 		return []handlerwrapper.Result{{
-			Topic:   LeaderboardGetSeasonStandingsFailedV1,
-			Payload: &FailedPayloadV1{GuildID: payload.GuildID, Reason: err.Error()},
+			Topic:   leaderboardevents.LeaderboardGetSeasonStandingsFailedV1,
+			Payload: &leaderboardevents.AdminFailedPayloadV1{GuildID: payload.GuildID, Reason: err.Error()},
 		}}, nil
 	}
 
 	if result.IsFailure() {
 		return []handlerwrapper.Result{{
-			Topic:   LeaderboardGetSeasonStandingsFailedV1,
-			Payload: &FailedPayloadV1{GuildID: payload.GuildID, Reason: fmt.Sprintf("%v", *result.Failure)},
+			Topic:   leaderboardevents.LeaderboardGetSeasonStandingsFailedV1,
+			Payload: &leaderboardevents.AdminFailedPayloadV1{GuildID: payload.GuildID, Reason: fmt.Sprintf("%v", *result.Failure)},
 		}}, nil
 	}
 
-	items := make([]SeasonStandingItemV1, len(*result.Success))
+	items := make([]leaderboardevents.SeasonStandingItemV1, len(*result.Success))
 	for i, entry := range *result.Success {
-		items[i] = SeasonStandingItemV1{
+		items[i] = leaderboardevents.SeasonStandingItemV1{
 			MemberID:      entry.MemberID,
 			TotalPoints:   entry.TotalPoints,
 			CurrentTier:   entry.CurrentTier,
@@ -232,8 +233,8 @@ func (h *LeaderboardHandlers) HandleGetSeasonStandings(
 	}
 
 	return []handlerwrapper.Result{{
-		Topic: LeaderboardGetSeasonStandingsResponseV1,
-		Payload: &GetSeasonStandingsResponsePayloadV1{
+		Topic: leaderboardevents.LeaderboardGetSeasonStandingsResponseV1,
+		Payload: &leaderboardevents.GetSeasonStandingsResponsePayloadV1{
 			GuildID:   payload.GuildID,
 			SeasonID:  payload.SeasonID,
 			Standings: items,

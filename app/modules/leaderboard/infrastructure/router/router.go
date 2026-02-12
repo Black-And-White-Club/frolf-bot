@@ -220,11 +220,11 @@ func (r *LeaderboardRouter) RegisterHandlers(ctx context.Context, handlers leade
 	registerHandler(deps, sharedevents.TagAvailabilityCheckRequestedV1, handlers.HandleTagAvailabilityCheckRequested)
 
 	// ADMIN OPERATIONS
-	registerHandler(deps, leaderboardhandlers.LeaderboardPointHistoryRequestedV1, handlers.HandlePointHistoryRequested)
-	registerHandler(deps, leaderboardhandlers.LeaderboardManualPointAdjustmentV1, handlers.HandleManualPointAdjustment)
-	registerHandler(deps, leaderboardhandlers.LeaderboardRecalculateRoundV1, handlers.HandleRecalculateRound)
-	registerHandler(deps, leaderboardhandlers.LeaderboardStartNewSeasonV1, handlers.HandleStartNewSeason)
-	registerHandler(deps, leaderboardhandlers.LeaderboardGetSeasonStandingsV1, handlers.HandleGetSeasonStandings)
+	registerHandler(deps, leaderboardevents.LeaderboardPointHistoryRequestedV1, handlers.HandlePointHistoryRequested)
+	registerHandler(deps, leaderboardevents.LeaderboardManualPointAdjustmentV1, handlers.HandleManualPointAdjustment)
+	registerHandler(deps, leaderboardevents.LeaderboardRecalculateRoundV1, handlers.HandleRecalculateRound)
+	registerHandler(deps, leaderboardevents.LeaderboardStartNewSeasonV1, handlers.HandleStartNewSeason)
+	registerHandler(deps, leaderboardevents.LeaderboardGetSeasonStandingsV1, handlers.HandleGetSeasonStandings)
 
 	// INFRASTRUCTURE
 	registerHandler(deps, guildevents.GuildConfigCreatedV1, handlers.HandleGuildConfigCreated)

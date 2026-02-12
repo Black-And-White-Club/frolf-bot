@@ -138,12 +138,34 @@ func TestProcessRound_CoreFlow(t *testing.T) {
 	assert.Equal(t, 3, tagMapRecalc["user_c"])
 
 	// Verify Points updated (count history)
-	historyCount, err := deps.BunDB.NewSelect().
-		Table("leaderboard_point_history").
+	var histories []leaderboarddb.PointHistory
+	err = deps.BunDB.NewSelect().
+		Model(&histories).
 		Where("round_id = ?", roundID).
-		Count(ctx)
+		Order("member_id ASC").
+		Scan(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 4, historyCount, "Should have 4 history entries")
+	assert.Equal(t, 4, len(histories), "Should have 4 history entries")
+
+	// Verify specific point values for recalculation (A=1st, B=2nd...)
+	// Since we don't have the exact point calculation logic mocked or known here easily without duplication,
+	// we assume standard points: 1st > 2nd.
+	// Map member to points
+	pointMap := make(map[string]int)
+	for _, h := range histories {
+		pointMap[string(h.MemberID)] = h.Points
+	}
+	assert.True(t, pointMap["user_a"] > pointMap["user_b"], "User A (1st) should have more points than User B (2nd)")
+	assert.True(t, pointMap["user_b"] > pointMap["user_c"], "User B (2nd) should have more points than User C (3rd)")
+
+	// 7. Verify Tagless Participant Member Creation
+	// Ensure user_d exists in league_members even though they have no tag
+	exists, err := deps.BunDB.NewSelect().
+		Table("league_members").
+		Where("guild_id = ? AND member_id = ?", guildID, "user_d").
+		Exists(ctx)
+	require.NoError(t, err)
+	assert.True(t, exists, "Tagless participant user_d should exist in league_members")
 }
 
 func ptr(i int) *int {
