@@ -8,7 +8,10 @@ import (
 
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
+	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
+	"github.com/uptrace/bun"
 	"go.opentelemetry.io/otel/trace/noop"
 )
 
@@ -229,5 +232,27 @@ func TestLeaderboardService_CheckTagAvailability(t *testing.T) {
 				t.Errorf("expected reason %q, got %q", tt.expectReason, result.Reason)
 			}
 		})
+	}
+}
+
+func TestLeaderboardService_enrichWithSeasonData_RepoErrorDoesNotFail(t *testing.T) {
+	repo := NewFakeLeaderboardRepo()
+	repo.GetSeasonStandingsFunc = func(ctx context.Context, db bun.IDB, guildID string, seasonID string, memberIDs []sharedtypes.DiscordID) (map[sharedtypes.DiscordID]*leaderboarddb.SeasonStanding, error) {
+		return nil, errors.New("season standings unavailable")
+	}
+
+	s := &LeaderboardService{
+		repo:    repo,
+		logger:  loggerfrolfbot.NoOpLogger,
+		metrics: &leaderboardmetrics.NoOpMetrics{},
+		tracer:  noop.NewTracerProvider().Tracer("test"),
+	}
+
+	entries := []leaderboardtypes.LeaderboardEntry{
+		{UserID: "user1", TagNumber: 1},
+	}
+	err := s.enrichWithSeasonData(context.Background(), nil, sharedtypes.GuildID("guild-1"), "season-1", entries)
+	if err != nil {
+		t.Fatalf("expected nil error when enrichment fails, got %v", err)
 	}
 }

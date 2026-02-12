@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"math"
 	"slices"
 
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
@@ -30,11 +31,11 @@ func (s *LeaderboardService) ProcessRound(
 			// Treat 0 (no tag) as max int to sort to bottom
 			aTag := a.TagNumber
 			if aTag <= 0 {
-				aTag = int(^uint(0) >> 1)
+				aTag = math.MaxInt
 			}
 			bTag := b.TagNumber
 			if bTag <= 0 {
-				bTag = int(^uint(0) >> 1)
+				bTag = math.MaxInt
 			}
 
 			if c := cmp.Compare(aTag, bTag); c != 0 {

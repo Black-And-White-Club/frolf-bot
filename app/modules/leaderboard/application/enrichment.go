@@ -2,7 +2,6 @@ package leaderboardservice
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
@@ -30,10 +29,9 @@ func (s *LeaderboardService) enrichWithSeasonData(
 
 	standings, err := s.repo.GetSeasonStandings(ctx, db, string(guildID), seasonID, userIDs)
 	if err != nil {
-		// Log error but don't fail the request, just return without enrichment (or minimal info)
-		// The original code logged and continued.
+		// Log error but don't fail the request; return base entries without enrichment.
 		s.logger.ErrorContext(ctx, "failed to enrich normalized leaderboard with season standings", attr.Error(err))
-		return fmt.Errorf("failed to get season standings: %w", err)
+		return nil
 	}
 
 	for i := range entries {

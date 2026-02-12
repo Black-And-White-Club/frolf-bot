@@ -52,6 +52,11 @@ func (s *LeaderboardService) AdjustPoints(
 ) (results.OperationResult[bool, error], error) {
 
 	adjustTx := func(ctx context.Context, db bun.IDB) (results.OperationResult[bool, error], error) {
+		// Serialize leaderboard writes at guild scope to avoid races with round processing.
+		if err := s.memberRepo.AcquireGuildLock(ctx, db, string(guildID)); err != nil {
+			return results.OperationResult[bool, error]{}, fmt.Errorf("failed to acquire guild lock: %w", err)
+		}
+
 		// 0. Get Active Season
 		season, err := s.repo.GetActiveSeason(ctx, db, string(guildID))
 		if err != nil {

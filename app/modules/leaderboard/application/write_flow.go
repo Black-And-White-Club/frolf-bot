@@ -345,10 +345,10 @@ func (s *LeaderboardService) ensureParticipantMembers(
 	return nil
 }
 
-func (s *LeaderboardService) resolveActiveSeason(ctx context.Context, tx bun.Tx, guildID string, rollbackSeasonID string) (leaderboarddomain.SeasonInfo, error) {
+func (s *LeaderboardService) resolveActiveSeason(ctx context.Context, tx bun.Tx, guildID string, rollbackSeasonID string) (leaderboarddomain.ResolvedSeason, error) {
 	season, err := s.repo.GetActiveSeason(ctx, tx, guildID)
 	if err != nil {
-		return leaderboarddomain.SeasonInfo{}, err
+		return leaderboarddomain.ResolvedSeason{}, err
 	}
 	var state *leaderboarddomain.SeasonState
 	if season != nil {

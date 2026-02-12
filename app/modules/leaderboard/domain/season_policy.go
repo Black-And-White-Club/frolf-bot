@@ -2,8 +2,8 @@ package leaderboarddomain
 
 import "time"
 
-// SeasonInfo holds the resolved season context for a round processing operation.
-type SeasonInfo struct {
+// ResolvedSeason holds the resolved season context for a round processing operation.
+type ResolvedSeason struct {
 	SeasonID string
 	IsActive bool
 }
@@ -22,29 +22,29 @@ type SeasonState struct {
 // Rules:
 //   - If rollbackSeasonID is non-empty, use it (recalculation preserves original season).
 //   - If an active season exists, use it.
-//   - If no active season, return empty SeasonInfo (points will be skipped).
-func ResolveSeasonForRound(rollbackSeasonID string, activeSeason *SeasonState) SeasonInfo {
+//   - If no active season, return empty ResolvedSeason (points will be skipped).
+func ResolveSeasonForRound(rollbackSeasonID string, activeSeason *SeasonState) ResolvedSeason {
 	if rollbackSeasonID != "" {
-		return SeasonInfo{
+		return ResolvedSeason{
 			SeasonID: rollbackSeasonID,
 			IsActive: true,
 		}
 	}
 
 	if activeSeason != nil && activeSeason.IsActive {
-		return SeasonInfo{
+		return ResolvedSeason{
 			SeasonID: activeSeason.SeasonID,
 			IsActive: true,
 		}
 	}
 
 	// No active season = off-season. Tags still update, points are skipped.
-	return SeasonInfo{}
+	return ResolvedSeason{}
 }
 
 // ShouldAwardPoints determines whether points should be awarded for a round.
 // Points are skipped when there is no active season (off-season mode).
-func ShouldAwardPoints(season SeasonInfo) bool {
+func ShouldAwardPoints(season ResolvedSeason) bool {
 	return season.SeasonID != ""
 }
 

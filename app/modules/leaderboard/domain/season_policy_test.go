@@ -65,17 +65,17 @@ func TestResolveSeasonForRound(t *testing.T) {
 func TestShouldAwardPoints(t *testing.T) {
 	tests := []struct {
 		name     string
-		season   SeasonInfo
+		season   ResolvedSeason
 		expected bool
 	}{
 		{
 			name:     "Should award points if season ID is present",
-			season:   SeasonInfo{SeasonID: "s1", IsActive: true},
+			season:   ResolvedSeason{SeasonID: "s1", IsActive: true},
 			expected: true,
 		},
 		{
 			name:     "Should not award points if season ID is empty",
-			season:   SeasonInfo{SeasonID: "", IsActive: false},
+			season:   ResolvedSeason{SeasonID: "", IsActive: false},
 			expected: false,
 		},
 	}
