@@ -154,7 +154,7 @@ func (h *RoundHandlers) HandleScorecardParsedForNormalization(ctx context.Contex
 	if result.Failure != nil {
 		h.logger.WarnContext(ctx, "NormalizeParsedScorecard returned failure",
 			attr.String("import_id", payload.ImportID),
-			attr.Any("failure", result.Failure),
+			attr.Any("failure", *result.Failure),
 			attr.String("error_msg", (*result.Failure).Error()),
 		)
 	}

@@ -139,7 +139,7 @@ func (h *RoundHandlers) HandleRoundUpdateRequest(
 	if mappedResult.Failure != nil {
 		h.logger.WarnContext(ctx, "round update validation failed",
 			attr.RoundID("round_id", payload.RoundID),
-			attr.Any("failure", mappedResult.Failure),
+			attr.Any("failure", *mappedResult.Failure),
 		)
 		return mapOperationResult(mappedResult,
 			roundevents.RoundUpdateValidatedV1,
@@ -213,7 +213,7 @@ func (h *RoundHandlers) HandleRoundUpdateValidated(
 	if result.Failure != nil {
 		h.logger.WarnContext(ctx, "round entity update failed",
 			attr.RoundID("round_id", payload.RoundUpdateRequestPayload.RoundID),
-			attr.Any("failure", result.Failure),
+			attr.Any("failure", *result.Failure),
 		)
 		return []handlerwrapper.Result{
 			{
@@ -304,7 +304,7 @@ func (h *RoundHandlers) HandleRoundScheduleUpdate(
 
 	if result.Failure != nil {
 		h.logger.WarnContext(ctx, "scheduled round update failed",
-			attr.Any("failure", result.Failure),
+			attr.Any("failure", *result.Failure),
 		)
 		return []handlerwrapper.Result{
 			{

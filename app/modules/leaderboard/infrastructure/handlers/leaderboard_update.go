@@ -51,7 +51,13 @@ func (h *LeaderboardHandlers) handleLeaderboardUpdateWithServiceCommand(
 		return nil, fmt.Errorf("failed to fetch full leaderboard after update: %w", err)
 	}
 	if fullLeaderboardResult.IsFailure() {
-		return nil, fmt.Errorf("failed to fetch full leaderboard: %v", *fullLeaderboardResult.Failure)
+		if fullLeaderboardResult.Failure != nil {
+			return nil, fmt.Errorf("failed to fetch full leaderboard: %w", *fullLeaderboardResult.Failure)
+		}
+		return nil, fmt.Errorf("failed to fetch full leaderboard: unknown failure")
+	}
+	if fullLeaderboardResult.Success == nil {
+		return nil, fmt.Errorf("failed to fetch full leaderboard: success data is nil")
 	}
 
 	leaderboardData := make(map[sharedtypes.TagNumber]sharedtypes.DiscordID, len(*fullLeaderboardResult.Success))

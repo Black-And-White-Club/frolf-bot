@@ -28,10 +28,17 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(
 
 	if finalizeResult.Failure != nil {
 		h.logger.WarnContext(ctx, "backend round finalization failed",
-			attr.Any("failure", finalizeResult.Failure),
+			attr.Any("failure", *finalizeResult.Failure),
 		)
 		return []handlerwrapper.Result{
-			{Topic: roundevents.RoundFinalizationErrorV1, Payload: finalizeResult.Failure},
+			{
+				Topic: roundevents.RoundFinalizationErrorV1,
+				Payload: &roundevents.RoundFinalizationErrorPayloadV1{
+					GuildID: payload.GuildID,
+					RoundID: payload.RoundID,
+					Error:   (*finalizeResult.Failure).Error(),
+				},
+			},
 		}, nil
 	}
 
