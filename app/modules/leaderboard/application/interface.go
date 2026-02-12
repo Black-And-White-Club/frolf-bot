@@ -55,7 +55,7 @@ type Service interface {
 	// --- READS ---
 
 	// GetLeaderboard returns the active leaderboard entries as domain types.
-	GetLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error], error)
+	GetLeaderboard(ctx context.Context, guildID sharedtypes.GuildID, seasonID string) (results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error], error)
 
 	// GetTagByUserID returns the tag for a user or an error.
 	GetTagByUserID(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (results.OperationResult[sharedtypes.TagNumber, error], error)
@@ -89,6 +89,12 @@ type Service interface {
 
 	// GetSeasonStandings retrieves standings for a specific season.
 	GetSeasonStandingsForSeason(ctx context.Context, guildID sharedtypes.GuildID, seasonID string) (results.OperationResult[[]SeasonStandingEntry, error], error)
+
+	// ListSeasons returns all seasons for a guild, ordered by active first then start_date desc.
+	ListSeasons(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[[]SeasonInfo, error], error)
+
+	// GetSeasonName retrieves the display name for a specific season.
+	GetSeasonName(ctx context.Context, guildID sharedtypes.GuildID, seasonID string) (string, error)
 
 	// --- COMMAND-STYLE OPERATIONS (transport-agnostic) ---
 
@@ -125,4 +131,13 @@ type SeasonStandingEntry struct {
 	CurrentTier   string
 	SeasonBestTag int
 	RoundsPlayed  int
+}
+
+// SeasonInfo is a read model for season listing.
+type SeasonInfo struct {
+	ID        string
+	Name      string
+	IsActive  bool
+	StartDate string
+	EndDate   *string
 }

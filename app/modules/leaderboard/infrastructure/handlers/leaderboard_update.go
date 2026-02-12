@@ -44,15 +44,27 @@ func (h *LeaderboardHandlers) handleLeaderboardUpdateWithServiceCommand(
 	if output == nil {
 		return nil, fmt.Errorf("process round returned nil output")
 	}
-	updatedData := leaderboardDataFromFinalTags(output.FinalParticipantTags)
-	leaderboardData := make(map[sharedtypes.TagNumber]sharedtypes.DiscordID, len(updatedData))
-	for _, entry := range updatedData {
+
+	// Fetch full leaderboard to ensure all members are displayed
+	fullLeaderboardResult, err := h.service.GetLeaderboard(ctx, payload.GuildID, "")
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch full leaderboard after update: %w", err)
+	}
+	if fullLeaderboardResult.IsFailure() {
+		return nil, fmt.Errorf("failed to fetch full leaderboard: %v", *fullLeaderboardResult.Failure)
+	}
+
+	leaderboardData := make(map[sharedtypes.TagNumber]sharedtypes.DiscordID, len(*fullLeaderboardResult.Success))
+	for _, entry := range *fullLeaderboardResult.Success {
 		leaderboardData[entry.TagNumber] = entry.UserID
 	}
 
-	changedTags := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber, len(output.TagChanges))
-	for _, change := range output.TagChanges {
-		changedTags[sharedtypes.DiscordID(change.NewMemberID)] = sharedtypes.TagNumber(change.TagNumber)
+	// Use FinalParticipantTags to ensure round card is fully synced with all participants
+	changedTags := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber, len(output.FinalParticipantTags))
+	for memberID, tag := range output.FinalParticipantTags {
+		if tag > 0 {
+			changedTags[sharedtypes.DiscordID(memberID)] = sharedtypes.TagNumber(tag)
+		}
 	}
 
 	results := []handlerwrapper.Result{{

@@ -70,4 +70,10 @@ type Repository interface {
 
 	// GetSeasonStandingsBySeasonID retrieves all standings for a specific season.
 	GetSeasonStandingsBySeasonID(ctx context.Context, db bun.IDB, guildID string, seasonID string) ([]SeasonStanding, error)
+
+	// ListSeasons retrieves all seasons for a guild, ordered by is_active DESC, start_date DESC.
+	ListSeasons(ctx context.Context, db bun.IDB, guildID string) ([]Season, error)
+
+	// GetSeasonByID retrieves a single season by its ID.
+	GetSeasonByID(ctx context.Context, db bun.IDB, guildID string, seasonID string) (*Season, error)
 }

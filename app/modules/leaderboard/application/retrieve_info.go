@@ -19,6 +19,7 @@ type TagAvailabilityResult struct {
 func (s *LeaderboardService) GetLeaderboard(
 	ctx context.Context,
 	guildID sharedtypes.GuildID,
+	seasonID string,
 ) (results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error], error) {
 
 	return withTelemetry(s, ctx, "GetLeaderboard", guildID, func(ctx context.Context) (results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error], error) {
@@ -40,7 +41,7 @@ func (s *LeaderboardService) GetLeaderboard(
 		}
 
 		// Enrich from seasonal standings where available.
-		if err := s.enrichWithSeasonData(ctx, s.db, guildID, entries); err != nil {
+		if err := s.enrichWithSeasonData(ctx, s.db, guildID, seasonID, entries); err != nil {
 			// Already logged in helper, continue with unenriched data
 		}
 

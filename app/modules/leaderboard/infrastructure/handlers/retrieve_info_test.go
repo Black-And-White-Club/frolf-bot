@@ -32,7 +32,7 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 		{
 			name: "Successfully get leaderboard",
 			setupFake: func(f *FakeService) {
-				f.GetLeaderboardFunc = func(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error], error) {
+				f.GetLeaderboardFunc = func(ctx context.Context, guildID sharedtypes.GuildID, seasonID string) (results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error], error) {
 					return results.SuccessResult[[]leaderboardtypes.LeaderboardEntry, error]([]leaderboardtypes.LeaderboardEntry{
 						{UserID: "user-1", TagNumber: 1},
 					}), nil
@@ -45,7 +45,7 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 		{
 			name: "Service error returns Failed event",
 			setupFake: func(f *FakeService) {
-				f.GetLeaderboardFunc = func(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error], error) {
+				f.GetLeaderboardFunc = func(ctx context.Context, guildID sharedtypes.GuildID, seasonID string) (results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error], error) {
 					return results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error]{}, fmt.Errorf("database error")
 				}
 			},

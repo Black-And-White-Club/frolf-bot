@@ -24,7 +24,7 @@ type FakeService struct {
 	// Function fields allow per-test behavior configuration
 	ExecuteBatchTagAssignmentFunc func(ctx context.Context, guildID sharedtypes.GuildID, requests []sharedtypes.TagAssignmentRequest, updateID sharedtypes.RoundID, source sharedtypes.ServiceUpdateSource) (results.OperationResult[leaderboardtypes.LeaderboardData, error], error)
 	TagSwapRequestedFunc          func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, targetTag sharedtypes.TagNumber) (results.OperationResult[leaderboardtypes.LeaderboardData, error], error)
-	GetLeaderboardFunc            func(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error], error)
+	GetLeaderboardFunc            func(ctx context.Context, guildID sharedtypes.GuildID, seasonID string) (results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error], error)
 	GetTagByUserIDFunc            func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (results.OperationResult[sharedtypes.TagNumber, error], error)
 
 	RoundGetTagByUserIDFunc          func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (results.OperationResult[sharedtypes.TagNumber, error], error)
@@ -40,6 +40,8 @@ type FakeService struct {
 	AdjustPointsFunc                func(ctx context.Context, guildID sharedtypes.GuildID, memberID sharedtypes.DiscordID, pointsDelta int, reason string) (results.OperationResult[bool, error], error)
 	StartNewSeasonFunc              func(ctx context.Context, guildID sharedtypes.GuildID, seasonID string, seasonName string) (results.OperationResult[bool, error], error)
 	GetSeasonStandingsForSeasonFunc func(ctx context.Context, guildID sharedtypes.GuildID, seasonID string) (results.OperationResult[[]leaderboardservice.SeasonStandingEntry, error], error)
+	ListSeasonsFunc                 func(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[[]leaderboardservice.SeasonInfo, error], error)
+	GetSeasonNameFunc               func(ctx context.Context, guildID sharedtypes.GuildID, seasonID string) (string, error)
 }
 
 func NewFakeService() *FakeService {
@@ -114,10 +116,10 @@ func (f *FakeService) TagSwapRequested(ctx context.Context, guildID sharedtypes.
 	return results.OperationResult[leaderboardtypes.LeaderboardData, error]{}, nil
 }
 
-func (f *FakeService) GetLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error], error) {
+func (f *FakeService) GetLeaderboard(ctx context.Context, guildID sharedtypes.GuildID, seasonID string) (results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error], error) {
 	f.record("GetLeaderboard")
 	if f.GetLeaderboardFunc != nil {
-		return f.GetLeaderboardFunc(ctx, guildID)
+		return f.GetLeaderboardFunc(ctx, guildID, seasonID)
 	}
 	return results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error]{}, nil
 }
@@ -231,6 +233,22 @@ func (f *FakeService) GetSeasonStandingsForSeason(ctx context.Context, guildID s
 		return f.GetSeasonStandingsForSeasonFunc(ctx, guildID, seasonID)
 	}
 	return results.OperationResult[[]leaderboardservice.SeasonStandingEntry, error]{}, nil
+}
+
+func (f *FakeService) ListSeasons(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[[]leaderboardservice.SeasonInfo, error], error) {
+	f.record("ListSeasons")
+	if f.ListSeasonsFunc != nil {
+		return f.ListSeasonsFunc(ctx, guildID)
+	}
+	return results.OperationResult[[]leaderboardservice.SeasonInfo, error]{}, nil
+}
+
+func (f *FakeService) GetSeasonName(ctx context.Context, guildID sharedtypes.GuildID, seasonID string) (string, error) {
+	f.record("GetSeasonName")
+	if f.GetSeasonNameFunc != nil {
+		return f.GetSeasonNameFunc(ctx, guildID, seasonID)
+	}
+	return "", nil
 }
 
 // Ensure interface compliance

@@ -32,7 +32,7 @@ func (s *LeaderboardService) TagSwapRequested(
 		}
 		requestorTag := *requestorTagResult.Success
 
-		leaderboardResult, err := s.GetLeaderboard(ctx, guildID)
+		leaderboardResult, err := s.GetLeaderboard(ctx, guildID, "")
 		if err != nil {
 			return results.OperationResult[leaderboardtypes.LeaderboardData, error]{}, err
 		}

@@ -16,6 +16,7 @@ func (s *LeaderboardService) enrichWithSeasonData(
 	ctx context.Context,
 	db bun.IDB,
 	guildID sharedtypes.GuildID,
+	seasonID string,
 	entries []leaderboardtypes.LeaderboardEntry,
 ) error {
 	if len(entries) == 0 {
@@ -27,7 +28,7 @@ func (s *LeaderboardService) enrichWithSeasonData(
 		userIDs[i] = e.UserID
 	}
 
-	standings, err := s.repo.GetSeasonStandings(ctx, db, string(guildID), "", userIDs)
+	standings, err := s.repo.GetSeasonStandings(ctx, db, string(guildID), seasonID, userIDs)
 	if err != nil {
 		// Log error but don't fail the request, just return without enrichment (or minimal info)
 		// The original code logged and continued.

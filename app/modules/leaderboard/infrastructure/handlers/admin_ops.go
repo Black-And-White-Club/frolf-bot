@@ -241,3 +241,98 @@ func (h *LeaderboardHandlers) HandleGetSeasonStandings(
 		},
 	}}, nil
 }
+
+// HandleListSeasonsRequest returns all seasons for a guild via NATS request-reply.
+func (h *LeaderboardHandlers) HandleListSeasonsRequest(
+	ctx context.Context,
+	payload *leaderboardevents.ListSeasonsRequestPayloadV1,
+) ([]handlerwrapper.Result, error) {
+	result, err := h.service.ListSeasons(ctx, payload.GuildID)
+	if err != nil {
+		return []handlerwrapper.Result{{
+			Topic:   leaderboardevents.LeaderboardListSeasonsFailedV1,
+			Payload: &leaderboardevents.AdminFailedPayloadV1{GuildID: payload.GuildID, Reason: err.Error()},
+		}}, nil
+	}
+
+	if result.IsFailure() {
+		return []handlerwrapper.Result{{
+			Topic:   leaderboardevents.LeaderboardListSeasonsFailedV1,
+			Payload: &leaderboardevents.AdminFailedPayloadV1{GuildID: payload.GuildID, Reason: fmt.Sprintf("%v", *result.Failure)},
+		}}, nil
+	}
+
+	seasons := make([]leaderboardevents.SeasonInfoV1, len(*result.Success))
+	for i, s := range *result.Success {
+		seasons[i] = leaderboardevents.SeasonInfoV1{
+			ID:        s.ID,
+			Name:      s.Name,
+			IsActive:  s.IsActive,
+			StartDate: s.StartDate,
+			EndDate:   s.EndDate,
+		}
+	}
+
+	resp := &leaderboardevents.ListSeasonsResponsePayloadV1{
+		GuildID: payload.GuildID,
+		Seasons: seasons,
+	}
+
+	// Use reply_to for request-reply pattern
+	topic := leaderboardevents.LeaderboardListSeasonsResponseV1
+	if replyTo, ok := ctx.Value(handlerwrapper.CtxKeyReplyTo).(string); ok && replyTo != "" {
+		topic = replyTo
+	}
+
+	return []handlerwrapper.Result{{Topic: topic, Payload: resp}}, nil
+}
+
+// HandleSeasonStandingsRequest returns standings for a season via NATS request-reply.
+func (h *LeaderboardHandlers) HandleSeasonStandingsRequest(
+	ctx context.Context,
+	payload *leaderboardevents.SeasonStandingsRequestPayloadV1,
+) ([]handlerwrapper.Result, error) {
+	result, err := h.service.GetSeasonStandingsForSeason(ctx, payload.GuildID, payload.SeasonID)
+	if err != nil {
+		return []handlerwrapper.Result{{
+			Topic:   leaderboardevents.LeaderboardSeasonStandingsFailedV1,
+			Payload: &leaderboardevents.AdminFailedPayloadV1{GuildID: payload.GuildID, Reason: err.Error()},
+		}}, nil
+	}
+
+	if result.IsFailure() {
+		return []handlerwrapper.Result{{
+			Topic:   leaderboardevents.LeaderboardSeasonStandingsFailedV1,
+			Payload: &leaderboardevents.AdminFailedPayloadV1{GuildID: payload.GuildID, Reason: fmt.Sprintf("%v", *result.Failure)},
+		}}, nil
+	}
+
+	// Get season name for display
+	seasonName, _ := h.service.GetSeasonName(ctx, payload.GuildID, payload.SeasonID)
+
+	items := make([]leaderboardevents.SeasonStandingItemV1, len(*result.Success))
+	for i, entry := range *result.Success {
+		items[i] = leaderboardevents.SeasonStandingItemV1{
+			MemberID:      entry.MemberID,
+			TotalPoints:   entry.TotalPoints,
+			CurrentTier:   entry.CurrentTier,
+			SeasonBestTag: entry.SeasonBestTag,
+			RoundsPlayed:  entry.RoundsPlayed,
+		}
+	}
+
+	resp := &leaderboardevents.SeasonStandingsResponsePayloadV1{
+		GuildID:    payload.GuildID,
+		SeasonID:   payload.SeasonID,
+		SeasonName: seasonName,
+		Standings:  items,
+	}
+
+	// Use reply_to for request-reply pattern
+	topic := leaderboardevents.LeaderboardSeasonStandingsResponseV1
+	if replyTo, ok := ctx.Value(handlerwrapper.CtxKeyReplyTo).(string); ok && replyTo != "" {
+		topic = replyTo
+	}
+
+	return []handlerwrapper.Result{{Topic: topic, Payload: resp}}, nil
+}

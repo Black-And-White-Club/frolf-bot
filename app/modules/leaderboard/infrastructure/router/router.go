@@ -226,6 +226,10 @@ func (r *LeaderboardRouter) RegisterHandlers(ctx context.Context, handlers leade
 	registerHandler(deps, leaderboardevents.LeaderboardStartNewSeasonV1, handlers.HandleStartNewSeason)
 	registerHandler(deps, leaderboardevents.LeaderboardGetSeasonStandingsV1, handlers.HandleGetSeasonStandings)
 
+	// PWA REQUEST-REPLY ENDPOINTS
+	registerHandler(deps, "leaderboard.seasons.list.request.v1.>", handlers.HandleListSeasonsRequest)
+	registerHandler(deps, "leaderboard.season.standings.request.v1.>", handlers.HandleSeasonStandingsRequest)
+
 	// INFRASTRUCTURE
 	registerHandler(deps, guildevents.GuildConfigCreatedV1, handlers.HandleGuildConfigCreated)
 

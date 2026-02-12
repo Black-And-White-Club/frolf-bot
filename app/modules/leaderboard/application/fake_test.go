@@ -162,6 +162,16 @@ func (f *FakeLeaderboardRepo) GetSeasonStandingsBySeasonID(ctx context.Context, 
 	return nil, nil
 }
 
+func (f *FakeLeaderboardRepo) ListSeasons(ctx context.Context, db bun.IDB, guildID string) ([]leaderboarddb.Season, error) {
+	f.record("ListSeasons")
+	return nil, nil
+}
+
+func (f *FakeLeaderboardRepo) GetSeasonByID(ctx context.Context, db bun.IDB, guildID string, seasonID string) (*leaderboarddb.Season, error) {
+	f.record("GetSeasonByID")
+	return nil, nil
+}
+
 // --- Accessors for assertions ---
 
 func (f *FakeLeaderboardRepo) Trace() []string {

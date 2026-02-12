@@ -381,3 +381,40 @@ func (r *Impl) GetSeasonStandingsBySeasonID(ctx context.Context, db bun.IDB, gui
 	}
 	return standings, nil
 }
+
+// ListSeasons retrieves all seasons for a guild, ordered by active first, then start_date descending.
+func (r *Impl) ListSeasons(ctx context.Context, db bun.IDB, guildID string) ([]Season, error) {
+	if db == nil {
+		db = r.db
+	}
+	var seasons []Season
+	err := db.NewSelect().
+		Model(&seasons).
+		Where("guild_id = ?", guildID).
+		OrderExpr("is_active DESC, start_date DESC").
+		Scan(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("leaderboarddb.ListSeasons: %w", err)
+	}
+	return seasons, nil
+}
+
+// GetSeasonByID retrieves a single season by its ID within a guild.
+func (r *Impl) GetSeasonByID(ctx context.Context, db bun.IDB, guildID string, seasonID string) (*Season, error) {
+	if db == nil {
+		db = r.db
+	}
+	season := new(Season)
+	err := db.NewSelect().
+		Model(season).
+		Where("guild_id = ?", guildID).
+		Where("id = ?", seasonID).
+		Scan(ctx)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("leaderboarddb.GetSeasonByID: %w", err)
+	}
+	return season, nil
+}

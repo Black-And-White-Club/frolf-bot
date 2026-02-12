@@ -55,6 +55,14 @@ type Handlers interface {
 	// HandleGetSeasonStandings returns standings for a specific season.
 	HandleGetSeasonStandings(ctx context.Context, payload *leaderboardevents.GetSeasonStandingsPayloadV1) ([]handlerwrapper.Result, error)
 
+	// --- REQUEST-REPLY (PWA) ---
+
+	// HandleListSeasonsRequest returns all seasons for a guild via request-reply.
+	HandleListSeasonsRequest(ctx context.Context, payload *leaderboardevents.ListSeasonsRequestPayloadV1) ([]handlerwrapper.Result, error)
+
+	// HandleSeasonStandingsRequest returns standings for a season via request-reply.
+	HandleSeasonStandingsRequest(ctx context.Context, payload *leaderboardevents.SeasonStandingsRequestPayloadV1) ([]handlerwrapper.Result, error)
+
 	// --- INFRASTRUCTURE ---
 
 	// HandleGuildConfigCreated ensures a leaderboard exists when a new guild is configured.

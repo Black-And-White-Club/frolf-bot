@@ -25,7 +25,7 @@ func TestLeaderboardReadOperations(t *testing.T) {
 			{UserID: "user_1", TagNumber: 1},
 		}, true, sharedtypes.RoundID{})
 
-		res, err := deps.Service.GetLeaderboard(ctx, "test_guild")
+		res, err := deps.Service.GetLeaderboard(ctx, "test_guild", "")
 		if err != nil {
 			t.Fatalf("GetLeaderboard failed: %v", err)
 		}
@@ -36,7 +36,7 @@ func TestLeaderboardReadOperations(t *testing.T) {
 
 	t.Run("GetLeaderboard empty guild returns empty data", func(t *testing.T) {
 		_ = testutils.CleanLeaderboardIntegrationTables(ctx, deps.BunDB)
-		res, err := deps.Service.GetLeaderboard(ctx, "empty_guild")
+		res, err := deps.Service.GetLeaderboard(ctx, "empty_guild", "")
 		if err != nil {
 			t.Fatalf("GetLeaderboard failed: %v", err)
 		}

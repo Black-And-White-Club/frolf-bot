@@ -60,7 +60,7 @@ func TestLeaderboardService_GetLeaderboard(t *testing.T) {
 			}
 			s.SetCommandPipeline(pipeline)
 
-			res, err := s.GetLeaderboard(context.Background(), guildID)
+			res, err := s.GetLeaderboard(context.Background(), guildID, "")
 
 			if tt.wantErr {
 				if err == nil {

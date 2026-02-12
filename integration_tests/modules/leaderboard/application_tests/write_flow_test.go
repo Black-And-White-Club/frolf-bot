@@ -85,7 +85,7 @@ func TestProcessRound_CoreFlow(t *testing.T) {
 	assert.False(t, dHasTag, "user_d should not have a tag")
 
 	// Verify DB state using GetLeaderboard
-	resLb, err := deps.Service.GetLeaderboard(ctx, guildID)
+	resLb, err := deps.Service.GetLeaderboard(ctx, guildID, "")
 	require.NoError(t, err)
 	require.True(t, resLb.IsSuccess())
 
@@ -127,7 +127,7 @@ func TestProcessRound_CoreFlow(t *testing.T) {
 	assert.False(t, output3.WasIdempotent)
 
 	// Verify Tags updated again (Revert to A:1, B:2, C:3)
-	resLb2, err := deps.Service.GetLeaderboard(ctx, guildID)
+	resLb2, err := deps.Service.GetLeaderboard(ctx, guildID, "")
 	require.NoError(t, err)
 	tagMapRecalc := make(map[string]int)
 	for _, entry := range *resLb2.Success {

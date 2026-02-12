@@ -93,7 +93,7 @@ func (f *FakeLeaderboardService) ExecuteBatchTagAssignment(ctx context.Context, 
 func (f *FakeLeaderboardService) TagSwapRequested(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, targetTag sharedtypes.TagNumber) (results.OperationResult[leaderboardtypes.LeaderboardData, error], error) {
 	return results.FailureResult[leaderboardtypes.LeaderboardData, error](errors.New("not implemented")), nil
 }
-func (f *FakeLeaderboardService) GetLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error], error) {
+func (f *FakeLeaderboardService) GetLeaderboard(ctx context.Context, guildID sharedtypes.GuildID, seasonID string) (results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error], error) {
 	return results.FailureResult[[]leaderboardtypes.LeaderboardEntry, error](errors.New("not implemented")), nil
 }
 func (f *FakeLeaderboardService) GetTagByUserID(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (results.OperationResult[sharedtypes.TagNumber, error], error) {
@@ -150,4 +150,12 @@ func (f *FakeLeaderboardService) ResetTagsFromQualifyingRound(
 
 func (f *FakeLeaderboardService) EndSeason(ctx context.Context, guildID sharedtypes.GuildID) error {
 	return nil
+}
+
+func (f *FakeLeaderboardService) ListSeasons(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[[]leaderboardservice.SeasonInfo, error], error) {
+	return results.FailureResult[[]leaderboardservice.SeasonInfo, error](errors.New("not implemented")), nil
+}
+
+func (f *FakeLeaderboardService) GetSeasonName(ctx context.Context, guildID sharedtypes.GuildID, seasonID string) (string, error) {
+	return "", errors.New("not implemented")
 }

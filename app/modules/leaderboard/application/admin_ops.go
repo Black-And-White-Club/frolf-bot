@@ -147,3 +147,48 @@ func (s *LeaderboardService) GetSeasonStandingsForSeason(
 		return results.SuccessResult[[]SeasonStandingEntry, error](entries), nil
 	})
 }
+
+// ListSeasons returns all seasons for a guild, ordered by active first then start_date descending.
+func (s *LeaderboardService) ListSeasons(
+	ctx context.Context,
+	guildID sharedtypes.GuildID,
+) (results.OperationResult[[]SeasonInfo, error], error) {
+	return withTelemetry(s, ctx, "ListSeasons", guildID, func(ctx context.Context) (results.OperationResult[[]SeasonInfo, error], error) {
+		seasons, err := s.repo.ListSeasons(ctx, nil, string(guildID))
+		if err != nil {
+			return results.OperationResult[[]SeasonInfo, error]{}, fmt.Errorf("failed to list seasons: %w", err)
+		}
+
+		entries := make([]SeasonInfo, len(seasons))
+		for i, season := range seasons {
+			entry := SeasonInfo{
+				ID:        season.ID,
+				Name:      season.Name,
+				IsActive:  season.IsActive,
+				StartDate: season.StartDate.Format(time.RFC3339),
+			}
+			if !season.EndDate.IsZero() {
+				endStr := season.EndDate.Format(time.RFC3339)
+				entry.EndDate = &endStr
+			}
+			entries[i] = entry
+		}
+		return results.SuccessResult[[]SeasonInfo, error](entries), nil
+	})
+}
+
+// GetSeasonName retrieves the display name for a specific season.
+func (s *LeaderboardService) GetSeasonName(
+	ctx context.Context,
+	guildID sharedtypes.GuildID,
+	seasonID string,
+) (string, error) {
+	season, err := s.repo.GetSeasonByID(ctx, nil, string(guildID), seasonID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get season: %w", err)
+	}
+	if season == nil {
+		return "", nil
+	}
+	return season.Name, nil
+}
