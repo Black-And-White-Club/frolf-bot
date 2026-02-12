@@ -48,6 +48,15 @@ type TaggedMemberView struct {
 
 const RecalculationWindow = 24 * time.Hour
 
+// DefaultTagHistoryLimit is the default number of tag history entries returned.
+const DefaultTagHistoryLimit = 100
+
+// MaxTagHistoryLimit is the maximum number of tag history entries a caller can request.
+const MaxTagHistoryLimit = 500
+
+// ChartHistoryLimit is the number of tag history entries used for chart generation.
+const ChartHistoryLimit = 20
+
 // ProcessRound executes the spec's full ProcessRound workflow:
 //  1. Acquire guild advisory lock
 //  2. Compute processing hash + idempotency check
@@ -879,4 +888,49 @@ func historyReasonFromSource(source sharedtypes.ServiceUpdateSource) string {
 	default:
 		return "admin_fix"
 	}
+}
+
+// getTagHistoryCore returns tag history for a member or all members in a guild.
+func (s *LeaderboardService) getTagHistoryCore(ctx context.Context, guildID, memberID string, limit int) ([]TagHistoryView, error) {
+	if limit <= 0 {
+		limit = DefaultTagHistoryLimit
+	}
+	if limit > MaxTagHistoryLimit {
+		limit = MaxTagHistoryLimit
+	}
+
+	var entries []leaderboarddb.TagHistoryEntry
+	var err error
+
+	if memberID != "" {
+		entries, err = s.tagHistRepo.GetTagHistoryForMember(ctx, s.db, guildID, memberID, limit)
+	} else {
+		entries, err = s.tagHistRepo.GetLatestTagHistory(ctx, s.db, guildID, limit)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("LeaderboardService.GetTagHistory: %w", err)
+	}
+
+	views := make([]TagHistoryView, len(entries))
+	for i, entry := range entries {
+		views[i] = toTagHistoryView(entry)
+	}
+	return views, nil
+}
+
+// generateTagGraphPNGCore generates a PNG chart of a member's tag history.
+func (s *LeaderboardService) generateTagGraphPNGCore(ctx context.Context, guildID, memberID string) ([]byte, error) {
+	entries, err := s.tagHistRepo.GetTagHistoryForMember(ctx, s.db, guildID, memberID, ChartHistoryLimit)
+	if err != nil {
+		return nil, fmt.Errorf("LeaderboardService.GenerateTagGraphPNG: %w", err)
+	}
+
+	views := make([]TagHistoryView, len(entries))
+	for i, entry := range entries {
+		views[i] = toTagHistoryView(entry)
+	}
+	slices.Reverse(views)
+
+	return GenerateTagHistoryChart(views, ObsidianForestPalette)
 }

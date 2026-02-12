@@ -35,6 +35,42 @@ type CommandPipeline interface {
 	GetTaggedMembers(ctx context.Context, guildID string) ([]TaggedMemberView, error)
 	GetMemberTag(ctx context.Context, guildID, memberID string) (int, bool, error)
 	CheckTagAvailability(ctx context.Context, guildID, memberID string, tagNumber int) (bool, string, error)
+
+	// Tag History
+	GetTagHistory(ctx context.Context, guildID, memberID string, limit int) ([]TagHistoryView, error)
+
+	// Chart Generation
+	GenerateTagGraphPNG(ctx context.Context, guildID, memberID string) ([]byte, error)
+}
+
+// TagHistoryView is a read model for tag history entries returned by the service.
+type TagHistoryView struct {
+	ID          int64
+	TagNumber   int
+	OldMemberID string
+	NewMemberID string
+	Reason      string
+	RoundID     *string
+	CreatedAt   time.Time
+}
+
+// toTagHistoryView converts a repository model to a service view model.
+func toTagHistoryView(entry leaderboarddb.TagHistoryEntry) TagHistoryView {
+	view := TagHistoryView{
+		ID:          entry.ID,
+		TagNumber:   entry.TagNumber,
+		NewMemberID: entry.NewMemberID,
+		Reason:      entry.Reason,
+		CreatedAt:   entry.CreatedAt,
+	}
+	if entry.OldMemberID != nil {
+		view.OldMemberID = *entry.OldMemberID
+	}
+	if entry.RoundID != nil {
+		s := entry.RoundID.String()
+		view.RoundID = &s
+	}
+	return view
 }
 
 // LeaderboardService implements the Service interface.

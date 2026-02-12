@@ -52,4 +52,12 @@ func (p *serviceCommandPipeline) CheckTagAvailability(ctx context.Context, guild
 	return p.service.checkTagAvailabilityCore(ctx, guildID, memberID, tagNumber)
 }
 
+func (p *serviceCommandPipeline) GetTagHistory(ctx context.Context, guildID, memberID string, limit int) ([]TagHistoryView, error) {
+	return p.service.getTagHistoryCore(ctx, guildID, memberID, limit)
+}
+
+func (p *serviceCommandPipeline) GenerateTagGraphPNG(ctx context.Context, guildID, memberID string) ([]byte, error) {
+	return p.service.generateTagGraphPNGCore(ctx, guildID, memberID)
+}
+
 var _ CommandPipeline = (*serviceCommandPipeline)(nil)

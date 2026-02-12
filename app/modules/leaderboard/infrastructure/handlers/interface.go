@@ -63,6 +63,17 @@ type Handlers interface {
 	// HandleSeasonStandingsRequest returns standings for a season via request-reply.
 	HandleSeasonStandingsRequest(ctx context.Context, payload *leaderboardevents.SeasonStandingsRequestPayloadV1) ([]handlerwrapper.Result, error)
 
+	// --- TAG HISTORY (Request-Reply) ---
+
+	// HandleTagHistoryRequest returns tag history for a member or guild.
+	HandleTagHistoryRequest(ctx context.Context, payload *leaderboardevents.TagHistoryRequestedPayloadV1) ([]handlerwrapper.Result, error)
+
+	// HandleTagGraphRequest returns a PNG tag history chart for a member.
+	HandleTagGraphRequest(ctx context.Context, payload *leaderboardevents.TagGraphRequestedPayloadV1) ([]handlerwrapper.Result, error)
+
+	// HandleTagListRequest returns the master tag list for a guild.
+	HandleTagListRequest(ctx context.Context, payload *leaderboardevents.TagListRequestedPayloadV1) ([]handlerwrapper.Result, error)
+
 	// --- INFRASTRUCTURE ---
 
 	// HandleGuildConfigCreated ensures a leaderboard exists when a new guild is configured.

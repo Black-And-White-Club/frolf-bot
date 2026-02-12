@@ -107,6 +107,17 @@ type Service interface {
 	// EndSeason ends the active season for a guild.
 	EndSeason(ctx context.Context, guildID sharedtypes.GuildID) error
 
+	// --- TAG HISTORY ---
+
+	// GetTagHistory returns tag history for a member or all members.
+	GetTagHistory(ctx context.Context, guildID sharedtypes.GuildID, memberID string, limit int) ([]TagHistoryView, error)
+
+	// GetTagList returns the master tag list for a guild.
+	GetTagList(ctx context.Context, guildID sharedtypes.GuildID) ([]TaggedMemberView, error)
+
+	// GenerateTagGraphPNG generates a PNG chart of a member's tag history.
+	GenerateTagGraphPNG(ctx context.Context, guildID sharedtypes.GuildID, memberID string) ([]byte, error)
+
 	// --- INFRASTRUCTURE ---
 	EnsureGuildLeaderboard(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[bool, error], error)
 }

@@ -196,12 +196,14 @@ type FakeCommandPipeline struct {
 		source sharedtypes.ServiceUpdateSource,
 		updateID sharedtypes.RoundID,
 	) (leaderboardtypes.LeaderboardData, error)
-	StartSeasonFunc  func(ctx context.Context, guildID, seasonID, seasonName string) error
-	EndSeasonFunc    func(ctx context.Context, guildID string) error
-	ResetTagsFunc    func(ctx context.Context, guildID string, finishOrder []string) ([]leaderboarddomain.TagChange, error)
-	GetTaggedFunc    func(ctx context.Context, guildID string) ([]TaggedMemberView, error)
-	GetMemberTagFunc func(ctx context.Context, guildID, memberID string) (int, bool, error)
-	CheckTagFunc     func(ctx context.Context, guildID, memberID string, tagNumber int) (bool, string, error)
+	StartSeasonFunc         func(ctx context.Context, guildID, seasonID, seasonName string) error
+	EndSeasonFunc           func(ctx context.Context, guildID string) error
+	ResetTagsFunc           func(ctx context.Context, guildID string, finishOrder []string) ([]leaderboarddomain.TagChange, error)
+	GetTaggedFunc           func(ctx context.Context, guildID string) ([]TaggedMemberView, error)
+	GetMemberTagFunc        func(ctx context.Context, guildID, memberID string) (int, bool, error)
+	CheckTagFunc            func(ctx context.Context, guildID, memberID string, tagNumber int) (bool, string, error)
+	GetTagHistoryFunc       func(ctx context.Context, guildID, memberID string, limit int) ([]TagHistoryView, error)
+	GenerateTagGraphPNGFunc func(ctx context.Context, guildID, memberID string) ([]byte, error)
 }
 
 func (f *FakeCommandPipeline) ProcessRound(ctx context.Context, cmd ProcessRoundCommand) (*ProcessRoundOutput, error) {
@@ -264,6 +266,20 @@ func (f *FakeCommandPipeline) CheckTagAvailability(ctx context.Context, guildID,
 		return f.CheckTagFunc(ctx, guildID, memberID, tagNumber)
 	}
 	return true, "", nil
+}
+
+func (f *FakeCommandPipeline) GetTagHistory(ctx context.Context, guildID, memberID string, limit int) ([]TagHistoryView, error) {
+	if f.GetTagHistoryFunc != nil {
+		return f.GetTagHistoryFunc(ctx, guildID, memberID, limit)
+	}
+	return nil, nil
+}
+
+func (f *FakeCommandPipeline) GenerateTagGraphPNG(ctx context.Context, guildID, memberID string) ([]byte, error) {
+	if f.GenerateTagGraphPNGFunc != nil {
+		return f.GenerateTagGraphPNGFunc(ctx, guildID, memberID)
+	}
+	return nil, nil
 }
 
 var _ CommandPipeline = (*FakeCommandPipeline)(nil)
