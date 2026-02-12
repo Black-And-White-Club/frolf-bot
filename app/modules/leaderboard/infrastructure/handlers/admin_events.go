@@ -12,8 +12,8 @@ const (
 	LeaderboardPointHistoryFailedV1    = "leaderboard.point.history.failed.v1"
 
 	LeaderboardManualPointAdjustmentV1        = "leaderboard.manual.point.adjustment.v1"
-	LeaderboardManualPointAdjustmentSuccessV1  = "leaderboard.manual.point.adjustment.success.v1"
-	LeaderboardManualPointAdjustmentFailedV1   = "leaderboard.manual.point.adjustment.failed.v1"
+	LeaderboardManualPointAdjustmentSuccessV1 = "leaderboard.manual.point.adjustment.success.v1"
+	LeaderboardManualPointAdjustmentFailedV1  = "leaderboard.manual.point.adjustment.failed.v1"
 
 	LeaderboardRecalculateRoundV1        = "leaderboard.recalculate.round.v1"
 	LeaderboardRecalculateRoundSuccessV1 = "leaderboard.recalculate.round.success.v1"
@@ -80,9 +80,9 @@ type RecalculateRoundPayloadV1 struct {
 
 // RecalculateRoundSuccessPayloadV1 confirms round recalculation.
 type RecalculateRoundSuccessPayloadV1 struct {
-	GuildID       sharedtypes.GuildID            `json:"guild_id"`
-	RoundID       sharedtypes.RoundID            `json:"round_id"`
-	PointsAwarded map[sharedtypes.DiscordID]int  `json:"points_awarded"`
+	GuildID       sharedtypes.GuildID           `json:"guild_id"`
+	RoundID       sharedtypes.RoundID           `json:"round_id"`
+	PointsAwarded map[sharedtypes.DiscordID]int `json:"points_awarded"`
 }
 
 // StartNewSeasonPayloadV1 requests a new season to be started.
@@ -107,9 +107,9 @@ type GetSeasonStandingsPayloadV1 struct {
 
 // GetSeasonStandingsResponsePayloadV1 contains the standings response.
 type GetSeasonStandingsResponsePayloadV1 struct {
-	GuildID   sharedtypes.GuildID      `json:"guild_id"`
-	SeasonID  string                   `json:"season_id"`
-	Standings []SeasonStandingItemV1   `json:"standings"`
+	GuildID   sharedtypes.GuildID    `json:"guild_id"`
+	SeasonID  string                 `json:"season_id"`
+	Standings []SeasonStandingItemV1 `json:"standings"`
 }
 
 // SeasonStandingItemV1 represents a single season standing entry.

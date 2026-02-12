@@ -44,25 +44,25 @@ func (h *LeaderboardHandlers) handleLeaderboardUpdateWithServiceCommand(
 	if output == nil {
 		return nil, fmt.Errorf("process round returned nil output")
 	}
-	       updatedData := leaderboardDataFromFinalTags(output.FinalParticipantTags)
-	        leaderboardData := make(map[sharedtypes.TagNumber]sharedtypes.DiscordID, len(updatedData))
-	        for _, entry := range updatedData {
-	                leaderboardData[entry.TagNumber] = entry.UserID
-	        }
-	
-	        changedTags := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber, len(output.TagChanges))
-	        for _, change := range output.TagChanges {
-	                changedTags[sharedtypes.DiscordID(change.NewMemberID)] = sharedtypes.TagNumber(change.TagNumber)
-	        }
-	
-	        results := []handlerwrapper.Result{		{
-			Topic: leaderboardevents.LeaderboardUpdatedV1,
-			Payload: &leaderboardevents.LeaderboardUpdatedPayloadV1{
-				GuildID:         payload.GuildID,
-				RoundID:         payload.RoundID,
-				LeaderboardData: leaderboardData,
-			},
+	updatedData := leaderboardDataFromFinalTags(output.FinalParticipantTags)
+	leaderboardData := make(map[sharedtypes.TagNumber]sharedtypes.DiscordID, len(updatedData))
+	for _, entry := range updatedData {
+		leaderboardData[entry.TagNumber] = entry.UserID
+	}
+
+	changedTags := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber, len(output.TagChanges))
+	for _, change := range output.TagChanges {
+		changedTags[sharedtypes.DiscordID(change.NewMemberID)] = sharedtypes.TagNumber(change.TagNumber)
+	}
+
+	results := []handlerwrapper.Result{{
+		Topic: leaderboardevents.LeaderboardUpdatedV1,
+		Payload: &leaderboardevents.LeaderboardUpdatedPayloadV1{
+			GuildID:         payload.GuildID,
+			RoundID:         payload.RoundID,
+			LeaderboardData: leaderboardData,
 		},
+	},
 		{
 			Topic: sharedevents.SyncRoundsTagRequestV1,
 			Payload: &sharedevents.SyncRoundsTagRequestPayloadV1{

@@ -19,11 +19,11 @@ func TestLeaderboardHandlers_HandlePointHistoryRequested(t *testing.T) {
 	memberID := sharedtypes.DiscordID("user-1")
 
 	tests := []struct {
-		name         string
-		payload      *PointHistoryRequestedPayloadV1
-		setupFake    func(*FakeService)
-		wantTopic    string
-		wantErr      bool
+		name      string
+		payload   *PointHistoryRequestedPayloadV1
+		setupFake func(*FakeService)
+		wantTopic string
+		wantErr   bool
 	}{
 		{
 			name:    "success returns history",
@@ -134,11 +134,11 @@ func TestLeaderboardHandlers_HandleRecalculateRound(t *testing.T) {
 	tag2 := sharedtypes.TagNumber(2)
 
 	tests := []struct {
-		name           string
-		payload        *RecalculateRoundPayloadV1
-		setupFake      func(*FakeService)
-		roundLookup    RoundLookup
-		wantTopic      string
+		name        string
+		payload     *RecalculateRoundPayloadV1
+		setupFake   func(*FakeService)
+		roundLookup RoundLookup
+		wantTopic   string
 	}{
 		{
 			name:    "success recalculation",
