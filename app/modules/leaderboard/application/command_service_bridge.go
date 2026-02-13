@@ -4,6 +4,7 @@ import (
 	"context"
 
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	leaderboarddomain "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/domain"
 )
 
@@ -37,11 +38,16 @@ func (s *LeaderboardService) ResetTagsFromQualifyingRound(
 }
 
 // EndSeason ends the active season for a guild through normalized command orchestration.
-func (s *LeaderboardService) EndSeason(ctx context.Context, guildID sharedtypes.GuildID) error {
-	if s.commandPipeline == nil {
-		return ErrCommandPipelineUnavailable
-	}
-	return s.commandPipeline.EndSeason(ctx, string(guildID))
+func (s *LeaderboardService) EndSeason(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[bool, error], error) {
+	return withTelemetry(s, ctx, "EndSeason", guildID, func(ctx context.Context) (results.OperationResult[bool, error], error) {
+		if s.commandPipeline == nil {
+			return results.OperationResult[bool, error]{}, ErrCommandPipelineUnavailable
+		}
+		if err := s.commandPipeline.EndSeason(ctx, string(guildID)); err != nil {
+			return results.OperationResult[bool, error]{}, err
+		}
+		return results.SuccessResult[bool, error](true), nil
+	})
 }
 
 // GetTagHistory returns tag history for a member or all members.
