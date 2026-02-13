@@ -33,7 +33,7 @@ type FakeService struct {
 	ProcessRoundFunc                 func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, playerResults []leaderboardservice.PlayerResult, source sharedtypes.ServiceUpdateSource) (results.OperationResult[leaderboardservice.ProcessRoundResult, error], error)
 	ProcessRoundCommandFunc          func(ctx context.Context, cmd leaderboardservice.ProcessRoundCommand) (*leaderboardservice.ProcessRoundOutput, error)
 	ResetTagsFromQualifyingRoundFunc func(ctx context.Context, guildID sharedtypes.GuildID, finishOrder []sharedtypes.DiscordID) ([]leaderboarddomain.TagChange, error)
-	EndSeasonFunc                    func(ctx context.Context, guildID sharedtypes.GuildID) error
+	EndSeasonFunc                    func(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[bool, error], error)
 
 	// Tag History
 	GetTagHistoryFunc       func(ctx context.Context, guildID sharedtypes.GuildID, memberID string, limit int) ([]leaderboardservice.TagHistoryView, error)
@@ -190,12 +190,12 @@ func (f *FakeService) ResetTagsFromQualifyingRound(
 	return nil, leaderboardservice.ErrCommandPipelineUnavailable
 }
 
-func (f *FakeService) EndSeason(ctx context.Context, guildID sharedtypes.GuildID) error {
+func (f *FakeService) EndSeason(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[bool, error], error) {
 	f.record("EndSeason")
 	if f.EndSeasonFunc != nil {
 		return f.EndSeasonFunc(ctx, guildID)
 	}
-	return nil
+	return results.SuccessResult[bool, error](true), nil
 }
 
 func (f *FakeService) GetTagHistory(ctx context.Context, guildID sharedtypes.GuildID, memberID string, limit int) ([]leaderboardservice.TagHistoryView, error) {

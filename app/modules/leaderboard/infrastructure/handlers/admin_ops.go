@@ -336,3 +336,31 @@ func (h *LeaderboardHandlers) HandleSeasonStandingsRequest(
 
 	return []handlerwrapper.Result{{Topic: topic, Payload: resp}}, nil
 }
+
+// HandleEndSeason ends the active season.
+func (h *LeaderboardHandlers) HandleEndSeason(
+	ctx context.Context,
+	payload *leaderboardevents.EndSeasonPayloadV1,
+) ([]handlerwrapper.Result, error) {
+	result, err := h.service.EndSeason(ctx, payload.GuildID)
+	if err != nil {
+		return []handlerwrapper.Result{{
+			Topic:   leaderboardevents.LeaderboardEndSeasonFailedV1,
+			Payload: &leaderboardevents.AdminFailedPayloadV1{GuildID: payload.GuildID, Reason: err.Error()},
+		}}, nil
+	}
+
+	if result.IsFailure() {
+		return []handlerwrapper.Result{{
+			Topic:   leaderboardevents.LeaderboardEndSeasonFailedV1,
+			Payload: &leaderboardevents.AdminFailedPayloadV1{GuildID: payload.GuildID, Reason: fmt.Sprintf("%v", *result.Failure)},
+		}}, nil
+	}
+
+	return []handlerwrapper.Result{{
+		Topic: leaderboardevents.LeaderboardEndSeasonSuccessV1,
+		Payload: &leaderboardevents.EndSeasonSuccessPayloadV1{
+			GuildID: payload.GuildID,
+		},
+	}}, nil
+}

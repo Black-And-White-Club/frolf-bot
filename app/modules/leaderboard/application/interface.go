@@ -105,7 +105,7 @@ type Service interface {
 	ResetTagsFromQualifyingRound(ctx context.Context, guildID sharedtypes.GuildID, finishOrder []sharedtypes.DiscordID) ([]leaderboarddomain.TagChange, error)
 
 	// EndSeason ends the active season for a guild.
-	EndSeason(ctx context.Context, guildID sharedtypes.GuildID) error
+	EndSeason(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[bool, error], error)
 
 	// --- TAG HISTORY ---
 

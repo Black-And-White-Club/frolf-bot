@@ -224,6 +224,7 @@ func (r *LeaderboardRouter) RegisterHandlers(ctx context.Context, handlers leade
 	registerHandler(deps, leaderboardevents.LeaderboardManualPointAdjustmentV1, handlers.HandleManualPointAdjustment)
 	registerHandler(deps, leaderboardevents.LeaderboardRecalculateRoundV1, handlers.HandleRecalculateRound)
 	registerHandler(deps, leaderboardevents.LeaderboardStartNewSeasonV1, handlers.HandleStartNewSeason)
+	registerHandler(deps, leaderboardevents.LeaderboardEndSeasonV1, handlers.HandleEndSeason)
 	registerHandler(deps, leaderboardevents.LeaderboardGetSeasonStandingsV1, handlers.HandleGetSeasonStandings)
 
 	// PWA REQUEST-REPLY ENDPOINTS

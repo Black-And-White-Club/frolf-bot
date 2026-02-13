@@ -148,8 +148,8 @@ func (f *FakeLeaderboardService) ResetTagsFromQualifyingRound(
 	return nil, leaderboardservice.ErrCommandPipelineUnavailable
 }
 
-func (f *FakeLeaderboardService) EndSeason(ctx context.Context, guildID sharedtypes.GuildID) error {
-	return nil
+func (f *FakeLeaderboardService) EndSeason(ctx context.Context, guildID sharedtypes.GuildID) (results.OperationResult[bool, error], error) {
+	return results.SuccessResult[bool, error](true), nil
 }
 
 func (f *FakeLeaderboardService) GetTagHistory(ctx context.Context, guildID sharedtypes.GuildID, memberID string, limit int) ([]leaderboardservice.TagHistoryView, error) {

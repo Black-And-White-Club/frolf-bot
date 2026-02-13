@@ -52,6 +52,9 @@ type Handlers interface {
 	// HandleStartNewSeason creates a new season.
 	HandleStartNewSeason(ctx context.Context, payload *leaderboardevents.StartNewSeasonPayloadV1) ([]handlerwrapper.Result, error)
 
+	// HandleEndSeason ends the active season.
+	HandleEndSeason(ctx context.Context, payload *leaderboardevents.EndSeasonPayloadV1) ([]handlerwrapper.Result, error)
+
 	// HandleGetSeasonStandings returns standings for a specific season.
 	HandleGetSeasonStandings(ctx context.Context, payload *leaderboardevents.GetSeasonStandingsPayloadV1) ([]handlerwrapper.Result, error)
 
