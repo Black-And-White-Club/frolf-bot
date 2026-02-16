@@ -60,3 +60,4 @@ gha-creds-*.json
 .github/workflows/gemini-*.yml
 feature-silent-refresh.md
 .mcp.json
+vendor/
