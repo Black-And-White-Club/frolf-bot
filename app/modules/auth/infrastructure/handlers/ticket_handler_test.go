@@ -1,6 +1,7 @@
 package authhandlers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -21,13 +22,15 @@ func TestAuthHandlers_HandleHTTPLogin(t *testing.T) {
 	tests := []struct {
 		name          string
 		url           string
+		body          string
 		secureCookies bool
 		setupService  func(*FakeService)
 		verify        func(t *testing.T, rr *httptest.ResponseRecorder)
 	}{
 		{
 			name: "success",
-			url:  "/api/auth/callback?t=otp-token",
+			url:  "/api/auth/callback",
+			body: `{"token":"otp-token"}`,
 			setupService: func(s *FakeService) {
 				s.LoginUserFunc = func(ctx context.Context, oneTimeToken string) (*authservice.LoginResponse, error) {
 					return &authservice.LoginResponse{
@@ -64,7 +67,8 @@ func TestAuthHandlers_HandleHTTPLogin(t *testing.T) {
 		},
 		{
 			name: "success with secure cookies",
-			url:  "/api/auth/callback?t=otp-token",
+			url:  "/api/auth/callback",
+			body: `{"token":"otp-token"}`,
 			setupService: func(s *FakeService) {
 				s.LoginUserFunc = func(ctx context.Context, oneTimeToken string) (*authservice.LoginResponse, error) {
 					return &authservice.LoginResponse{
@@ -104,7 +108,8 @@ func TestAuthHandlers_HandleHTTPLogin(t *testing.T) {
 		},
 		{
 			name: "service error",
-			url:  "/api/auth/callback?t=token",
+			url:  "/api/auth/callback",
+			body: `{"token":"token"}`,
 			setupService: func(s *FakeService) {
 				s.LoginUserFunc = func(ctx context.Context, token string) (*authservice.LoginResponse, error) {
 					return nil, errors.New("auth error")
@@ -125,7 +130,10 @@ func TestAuthHandlers_HandleHTTPLogin(t *testing.T) {
 				tt.setupService(fakeService)
 			}
 			h := NewAuthHandlers(fakeService, &FakeEventBus{}, &FakeHelpers{}, logger, tracer, tt.secureCookies)
-			req := httptest.NewRequest("GET", tt.url, nil)
+			req := httptest.NewRequest(http.MethodPost, tt.url, bytes.NewBufferString(tt.body))
+			if tt.body != "" {
+				req.Header.Set("Content-Type", "application/json")
+			}
 			rr := httptest.NewRecorder()
 			h.HandleHTTPLogin(rr, req)
 			tt.verify(t, rr)

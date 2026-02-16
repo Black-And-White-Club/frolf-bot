@@ -54,6 +54,14 @@ type SeasonStanding struct {
 	UpdatedAt time.Time `bun:"updated_at,nullzero,notnull,default:current_timestamp"`
 }
 
+// SeasonStandingDecrement represents a rollback delta for one member in one season.
+type SeasonStandingDecrement struct {
+	MemberID       sharedtypes.DiscordID
+	SeasonID       string
+	PointsToRemove int
+	RoundsToRemove int
+}
+
 // LeagueMember represents persistent tag state for a guild member.
 type LeagueMember struct {
 	bun.BaseModel `bun:"table:league_members,alias:lm"`

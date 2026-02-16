@@ -54,6 +54,9 @@ type Repository interface {
 	// If seasonID is empty, the active season is used.
 	DecrementSeasonStanding(ctx context.Context, db bun.IDB, guildID string, memberID sharedtypes.DiscordID, seasonID string, pointsToRemove int) error
 
+	// DecrementSeasonStandingsBatch decrements multiple season standings in one statement.
+	DecrementSeasonStandingsBatch(ctx context.Context, db bun.IDB, guildID string, deltas []SeasonStandingDecrement) error
+
 	// --- Season Management ---
 
 	// GetActiveSeason retrieves the currently active season.

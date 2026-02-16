@@ -54,6 +54,9 @@ type Service struct {
 // ServiceOptions allows customization of the queue service
 type ServiceOptions struct {
 	FetchPollInterval *time.Duration
+	PoolMaxConns      *int32
+	DefaultWorkers    *int
+	RoundWorkers      *int
 }
 
 // NewService creates a new River-based queue service for round scheduling
@@ -79,6 +82,9 @@ func NewServiceWithOptions(ctx context.Context, bunDB *bun.DB, logger *slog.Logg
 		metrics.RecordOperationFailure(ctx, "initialize_service", "river")
 		return nil, fmt.Errorf("failed to parse DSN: %w", err)
 	}
+	if opts != nil && opts.PoolMaxConns != nil && *opts.PoolMaxConns > 0 {
+		config.MaxConns = *opts.PoolMaxConns
+	}
 
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
@@ -100,10 +106,19 @@ func NewServiceWithOptions(ctx context.Context, bunDB *bun.DB, logger *slog.Logg
 	river.AddWorker(workers, NewRoundStartWorker(ctxLogger, eventBus, helpers))
 	river.AddWorker(workers, NewRoundReminderWorker(ctxLogger, eventBus, helpers))
 
+	defaultWorkers := 50
+	roundWorkers := 25
+	if opts != nil && opts.DefaultWorkers != nil && *opts.DefaultWorkers > 0 {
+		defaultWorkers = *opts.DefaultWorkers
+	}
+	if opts != nil && opts.RoundWorkers != nil && *opts.RoundWorkers > 0 {
+		roundWorkers = *opts.RoundWorkers
+	}
+
 	riverConfig := &river.Config{
 		Queues: map[string]river.QueueConfig{
-			river.QueueDefault: {MaxWorkers: 50},
-			"round":            {MaxWorkers: 25},
+			river.QueueDefault: {MaxWorkers: defaultWorkers},
+			"round":            {MaxWorkers: roundWorkers},
 		},
 		Workers: workers,
 	}

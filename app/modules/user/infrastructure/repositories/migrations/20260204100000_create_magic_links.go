@@ -13,9 +13,9 @@ func init() {
 
 		return db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
 			if _, err := tx.ExecContext(ctx, `
-				CREATE TABLE IF NOT EXISTS magic_links (
-					token           VARCHAR(64) PRIMARY KEY,
-					user_uuid       UUID NOT NULL REFERENCES users(uuid) ON DELETE CASCADE,
+					CREATE TABLE IF NOT EXISTS magic_links (
+						token           VARCHAR(64) PRIMARY KEY, -- SHA-256 hash of the raw one-time token
+						user_uuid       UUID NOT NULL REFERENCES users(uuid) ON DELETE CASCADE,
 					guild_id        VARCHAR(32) NOT NULL,
 					role            VARCHAR(50) NOT NULL,
 					expires_at      TIMESTAMPTZ NOT NULL,

@@ -78,7 +78,7 @@ river-clean:
 
 
 run:
-	go run cmd/app/main.go
+	go run main.go
 
 # --- Project-Wide Test Targets ---
 # Run all unit tests across the entire project

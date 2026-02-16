@@ -78,14 +78,26 @@ func (r *Impl) CreateRound(ctx context.Context, db bun.IDB, guildID sharedtypes.
 
 // GetRound retrieves a specific round by ID.
 func (r *Impl) GetRound(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (*roundtypes.Round, error) {
+	return r.getRound(ctx, db, guildID, roundID, false)
+}
+
+// GetRoundForUpdate retrieves and locks a round row by ID.
+func (r *Impl) GetRoundForUpdate(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (*roundtypes.Round, error) {
+	return r.getRound(ctx, db, guildID, roundID, true)
+}
+
+func (r *Impl) getRound(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, forUpdate bool) (*roundtypes.Round, error) {
 	if db == nil {
 		db = r.db
 	}
 	localRound := new(Round)
-	err := db.NewSelect().
+	q := db.NewSelect().
 		Model(localRound).
-		Where("id = ? AND guild_id = ?", roundID, guildID).
-		Scan(ctx)
+		Where("id = ? AND guild_id = ?", roundID, guildID)
+	if forUpdate {
+		q = q.For("UPDATE")
+	}
+	err := q.Scan(ctx)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
@@ -515,6 +527,7 @@ func (r *Impl) GetUpcomingRounds(ctx context.Context, db bun.IDB, guildID shared
 	var localRounds []*Round
 	err := db.NewSelect().
 		Model(&localRounds).
+		ExcludeColumn("file_data").
 		Where("state = ? AND guild_id = ?", roundtypes.RoundStateUpcoming, guildID).
 		Scan(ctx)
 	if err != nil {
@@ -537,6 +550,7 @@ func (r *Impl) GetRoundsByGuildID(ctx context.Context, db bun.IDB, guildID share
 	}
 	query := db.NewSelect().
 		Model((*Round)(nil)).
+		ExcludeColumn("file_data").
 		Where("guild_id = ?", guildID)
 
 	// Add state filters if provided
@@ -567,6 +581,7 @@ func (r *Impl) GetUpcomingRoundsByParticipant(ctx context.Context, db bun.IDB, g
 	var localRounds []*Round
 	err := db.NewSelect().
 		Model(&localRounds).
+		ExcludeColumn("file_data").
 		Where("state = ? AND guild_id = ?", roundtypes.RoundStateUpcoming, guildID).
 		Where("participants @> ?", fmt.Sprintf(`[{"user_id": "%s"}]`, userID)).
 		Scan(ctx)

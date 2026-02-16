@@ -134,6 +134,73 @@ func (s *RoundService) resolveUserID(ctx context.Context, db bun.IDB, guildID sh
 	return ""
 }
 
+type batchImportUserLookup interface {
+	ResolveByNormalizedNames(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, normalizedNames []string) (map[string]sharedtypes.DiscordID, error)
+}
+
+func collectNormalizedImportNames(data roundtypes.NormalizedScorecard) []string {
+	unique := make(map[string]struct{})
+	names := make([]string, 0)
+
+	if data.Mode != sharedtypes.RoundModeSingles {
+		for _, team := range data.Teams {
+			for _, member := range team.Members {
+				normalized := normalizeName(member.RawName)
+				if normalized == "" {
+					continue
+				}
+				if _, exists := unique[normalized]; exists {
+					continue
+				}
+				unique[normalized] = struct{}{}
+				names = append(names, normalized)
+			}
+		}
+		return names
+	}
+
+	for _, player := range data.Players {
+		normalized := normalizeName(player.DisplayName)
+		if normalized == "" {
+			continue
+		}
+		if _, exists := unique[normalized]; exists {
+			continue
+		}
+		unique[normalized] = struct{}{}
+		names = append(names, normalized)
+	}
+
+	return names
+}
+
+func (s *RoundService) resolveImportUserIDs(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, normalizedNames []string) map[string]sharedtypes.DiscordID {
+	resolved := make(map[string]sharedtypes.DiscordID, len(normalizedNames))
+
+	if len(normalizedNames) == 0 {
+		return resolved
+	}
+
+	batchLookup, ok := s.userLookup.(batchImportUserLookup)
+	if ok {
+		batchResolved, err := batchLookup.ResolveByNormalizedNames(ctx, db, guildID, normalizedNames)
+		if err == nil {
+			return batchResolved
+		}
+
+		s.logger.WarnContext(ctx, "Batch user resolution failed, falling back to per-name lookup",
+			attr.String("guild_id", string(guildID)),
+			attr.Error(err),
+		)
+	}
+
+	for _, normalizedName := range normalizedNames {
+		resolved[normalizedName] = s.resolveUserID(ctx, db, guildID, normalizedName)
+	}
+
+	return resolved
+}
+
 func cloneInts(in []int) []int {
 	if in == nil {
 		return nil
@@ -162,6 +229,8 @@ func (s *RoundService) IngestNormalizedScorecard(ctx context.Context, req roundt
 			matchedCount := 0
 			unmatchedPlayers := make([]string, 0)
 			groupsToCreate := []roundtypes.Participant{}
+			normalizedNames := collectNormalizedImportNames(req.NormalizedData)
+			resolvedUserIDs := s.resolveImportUserIDs(ctx, tx, req.GuildID, normalizedNames)
 
 			// --- Handle Mode: Doubles / Teams ---
 			if req.NormalizedData.Mode != sharedtypes.RoundModeSingles {
@@ -172,7 +241,7 @@ func (s *RoundService) IngestNormalizedScorecard(ctx context.Context, req roundt
 						s.logger.InfoContext(ctx, "Resolving team member",
 							attr.String("raw_name", member.RawName),
 							attr.String("normalized_name", normalizedName))
-						discordID := s.resolveUserID(ctx, tx, req.GuildID, normalizedName)
+						discordID := resolvedUserIDs[normalizedName]
 
 						// Prepare participant for DB group creation
 						groupsToCreate = append(groupsToCreate, roundtypes.Participant{
@@ -224,7 +293,7 @@ func (s *RoundService) IngestNormalizedScorecard(ctx context.Context, req roundt
 				// --- Singles mode ---
 				for _, p := range req.NormalizedData.Players {
 					normalizedName := normalizeName(p.DisplayName)
-					discordID := s.resolveUserID(ctx, tx, req.GuildID, normalizedName)
+					discordID := resolvedUserIDs[normalizedName]
 					s.logger.InfoContext(ctx, "Resolving singles player",
 						attr.String("display_name", p.DisplayName),
 						attr.String("normalized_name", normalizedName),

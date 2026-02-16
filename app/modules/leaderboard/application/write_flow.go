@@ -494,11 +494,29 @@ func (s *LeaderboardService) rollbackPreviousRound(ctx context.Context, tx bun.T
 		return nil
 	}
 
-	// Decrement standings for each player
+	type rollbackKey struct {
+		memberID sharedtypes.DiscordID
+		seasonID string
+	}
+
+	grouped := make(map[rollbackKey]leaderboarddb.SeasonStandingDecrement, len(history))
 	for _, ph := range history {
-		if err := s.repo.DecrementSeasonStanding(ctx, tx, guildID, ph.MemberID, ph.SeasonID, ph.Points); err != nil {
-			return fmt.Errorf("decrement standing for %s: %w", ph.MemberID, err)
-		}
+		key := rollbackKey{memberID: ph.MemberID, seasonID: ph.SeasonID}
+		delta := grouped[key]
+		delta.MemberID = ph.MemberID
+		delta.SeasonID = ph.SeasonID
+		delta.PointsToRemove += ph.Points
+		delta.RoundsToRemove++
+		grouped[key] = delta
+	}
+
+	deltas := make([]leaderboarddb.SeasonStandingDecrement, 0, len(grouped))
+	for _, delta := range grouped {
+		deltas = append(deltas, delta)
+	}
+
+	if err := s.repo.DecrementSeasonStandingsBatch(ctx, tx, guildID, deltas); err != nil {
+		return fmt.Errorf("batch decrement standings: %w", err)
 	}
 
 	// Delete the point history entries

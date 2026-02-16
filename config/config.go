@@ -15,6 +15,7 @@ import (
 // Config struct to hold the configuration settings
 type Config struct {
 	Postgres      PostgresConfig      `yaml:"postgres"`
+	RoundQueue    RoundQueueConfig    `yaml:"round_queue"`
 	NATS          NATSConfig          `yaml:"nats"`
 	JWT           JWTConfig           `yaml:"jwt"`
 	PWA           PWAConfig           `yaml:"pwa"`
@@ -30,7 +31,18 @@ type HTTPConfig struct {
 
 // PostgresConfig holds Postgres configuration.
 type PostgresConfig struct {
-	DSN string `yaml:"dsn"`
+	DSN             string        `yaml:"dsn"`
+	MaxOpenConns    int           `yaml:"max_open_conns"`
+	MaxIdleConns    int           `yaml:"max_idle_conns"`
+	ConnMaxLifetime time.Duration `yaml:"conn_max_lifetime"`
+}
+
+// RoundQueueConfig holds River queue pool and worker settings.
+type RoundQueueConfig struct {
+	PoolMaxConns      int           `yaml:"pool_max_conns"`
+	DefaultWorkers    int           `yaml:"default_workers"`
+	RoundWorkers      int           `yaml:"round_workers"`
+	FetchPollInterval time.Duration `yaml:"fetch_poll_interval"`
 }
 
 // NATSConfig holds NATS configuration.
@@ -45,6 +57,28 @@ type JWTConfig struct {
 	Issuer     string        `yaml:"issuer" env:"JWT_ISSUER"`
 	Audience   string        `yaml:"audience" env:"JWT_AUDIENCE"`
 }
+
+var weakJWTSecrets = map[string]struct{}{
+	"":                {},
+	"changeme":        {},
+	"change-me":       {},
+	"default":         {},
+	"secret":          {},
+	"password":        {},
+	"jwt-secret":      {},
+	"jwt_secret":      {},
+	"your-secret":     {},
+	"your-jwt-secret": {},
+}
+
+const (
+	defaultPostgresMaxOpenConns      = 25
+	defaultPostgresMaxIdleConns      = 25
+	defaultPostgresConnMaxLifetime   = 5 * time.Minute
+	defaultRoundQueueDefaultWorkers  = 50
+	defaultRoundQueueRoundWorkers    = 25
+	defaultRoundQueuePoolMaxConnsMin = 2
+)
 
 // PWAConfig holds PWA configuration.
 type PWAConfig struct {
@@ -95,6 +129,41 @@ func LoadConfig(filename string) (*Config, error) {
 	// --- OVERRIDE WITH ENV VARS IF PRESENT ---
 	if v := os.Getenv("DATABASE_URL"); v != "" {
 		cfg.Postgres.DSN = v
+	}
+	if v := os.Getenv("POSTGRES_MAX_OPEN_CONNS"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil {
+			cfg.Postgres.MaxOpenConns = parsed
+		}
+	}
+	if v := os.Getenv("POSTGRES_MAX_IDLE_CONNS"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil {
+			cfg.Postgres.MaxIdleConns = parsed
+		}
+	}
+	if v := os.Getenv("POSTGRES_CONN_MAX_LIFETIME"); v != "" {
+		if parsed, err := time.ParseDuration(v); err == nil {
+			cfg.Postgres.ConnMaxLifetime = parsed
+		}
+	}
+	if v := os.Getenv("ROUND_QUEUE_POOL_MAX_CONNS"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil {
+			cfg.RoundQueue.PoolMaxConns = parsed
+		}
+	}
+	if v := os.Getenv("ROUND_QUEUE_DEFAULT_WORKERS"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil {
+			cfg.RoundQueue.DefaultWorkers = parsed
+		}
+	}
+	if v := os.Getenv("ROUND_QUEUE_ROUND_WORKERS"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil {
+			cfg.RoundQueue.RoundWorkers = parsed
+		}
+	}
+	if v := os.Getenv("ROUND_QUEUE_FETCH_POLL_INTERVAL"); v != "" {
+		if parsed, err := time.ParseDuration(v); err == nil {
+			cfg.RoundQueue.FetchPollInterval = parsed
+		}
 	}
 	if v := os.Getenv("NATS_URL"); v != "" {
 		cfg.NATS.URL = v
@@ -169,6 +238,8 @@ func LoadConfig(filename string) (*Config, error) {
 		cfg.HTTP.AllowedOrigins = []string{cfg.PWA.BaseURL}
 	}
 
+	applyDefaults(&cfg)
+
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
@@ -184,6 +255,55 @@ func loadConfigFromEnv() (*Config, error) {
 	cfg.Postgres.DSN = os.Getenv("DATABASE_URL")
 	if cfg.Postgres.DSN == "" {
 		return nil, fmt.Errorf("DATABASE_URL environment variable not set")
+	}
+	if v := os.Getenv("POSTGRES_MAX_OPEN_CONNS"); v != "" {
+		parsed, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid POSTGRES_MAX_OPEN_CONNS value: %v", err)
+		}
+		cfg.Postgres.MaxOpenConns = parsed
+	}
+	if v := os.Getenv("POSTGRES_MAX_IDLE_CONNS"); v != "" {
+		parsed, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid POSTGRES_MAX_IDLE_CONNS value: %v", err)
+		}
+		cfg.Postgres.MaxIdleConns = parsed
+	}
+	if v := os.Getenv("POSTGRES_CONN_MAX_LIFETIME"); v != "" {
+		parsed, err := time.ParseDuration(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid POSTGRES_CONN_MAX_LIFETIME value: %v", err)
+		}
+		cfg.Postgres.ConnMaxLifetime = parsed
+	}
+	if v := os.Getenv("ROUND_QUEUE_POOL_MAX_CONNS"); v != "" {
+		parsed, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid ROUND_QUEUE_POOL_MAX_CONNS value: %v", err)
+		}
+		cfg.RoundQueue.PoolMaxConns = parsed
+	}
+	if v := os.Getenv("ROUND_QUEUE_DEFAULT_WORKERS"); v != "" {
+		parsed, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid ROUND_QUEUE_DEFAULT_WORKERS value: %v", err)
+		}
+		cfg.RoundQueue.DefaultWorkers = parsed
+	}
+	if v := os.Getenv("ROUND_QUEUE_ROUND_WORKERS"); v != "" {
+		parsed, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid ROUND_QUEUE_ROUND_WORKERS value: %v", err)
+		}
+		cfg.RoundQueue.RoundWorkers = parsed
+	}
+	if v := os.Getenv("ROUND_QUEUE_FETCH_POLL_INTERVAL"); v != "" {
+		parsed, err := time.ParseDuration(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid ROUND_QUEUE_FETCH_POLL_INTERVAL value: %v", err)
+		}
+		cfg.RoundQueue.FetchPollInterval = parsed
 	}
 
 	// Load NATS URL
@@ -261,6 +381,8 @@ func loadConfigFromEnv() (*Config, error) {
 		cfg.HTTP.AllowedOrigins = strings.Split(v, ",")
 	}
 
+	applyDefaults(&cfg)
+
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
@@ -268,9 +390,43 @@ func loadConfigFromEnv() (*Config, error) {
 	return &cfg, nil
 }
 
+func applyDefaults(cfg *Config) {
+	if cfg.Postgres.MaxOpenConns <= 0 {
+		cfg.Postgres.MaxOpenConns = defaultPostgresMaxOpenConns
+	}
+	if cfg.Postgres.MaxIdleConns <= 0 {
+		cfg.Postgres.MaxIdleConns = defaultPostgresMaxIdleConns
+	}
+	if cfg.Postgres.ConnMaxLifetime <= 0 {
+		cfg.Postgres.ConnMaxLifetime = defaultPostgresConnMaxLifetime
+	}
+
+	if cfg.RoundQueue.DefaultWorkers <= 0 {
+		cfg.RoundQueue.DefaultWorkers = defaultRoundQueueDefaultWorkers
+	}
+	if cfg.RoundQueue.RoundWorkers <= 0 {
+		cfg.RoundQueue.RoundWorkers = defaultRoundQueueRoundWorkers
+	}
+	if cfg.RoundQueue.PoolMaxConns <= 0 {
+		derived := cfg.Postgres.MaxOpenConns / 2
+		if derived < defaultRoundQueuePoolMaxConnsMin {
+			derived = defaultRoundQueuePoolMaxConnsMin
+		}
+		cfg.RoundQueue.PoolMaxConns = derived
+	}
+}
+
 // Validate validates the configuration.
 func (c *Config) Validate() error {
-	if c.AuthCallout.Enabled && c.JWT.Secret == "" {
+	secret := strings.TrimSpace(c.JWT.Secret)
+	if _, weak := weakJWTSecrets[strings.ToLower(secret)]; weak {
+		return fmt.Errorf("JWT_SECRET must be set to a strong value and must not use a known default")
+	}
+	if len(secret) < 32 {
+		return fmt.Errorf("JWT_SECRET must be at least 32 characters")
+	}
+
+	if c.AuthCallout.Enabled && secret == "" {
 		return fmt.Errorf("JWT_SECRET required when auth callout is enabled")
 	}
 	return nil

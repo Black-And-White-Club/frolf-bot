@@ -2,7 +2,9 @@ package authhandlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
@@ -20,9 +22,15 @@ func (h *AuthHandlers) httpError(w http.ResponseWriter, r *http.Request, message
 
 func (h *AuthHandlers) HandleHTTPLogin(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	token := r.URL.Query().Get("t")
+
+	if r.Method != http.MethodPost {
+		h.httpError(w, r, "method not allowed", http.StatusMethodNotAllowed, nil)
+		return
+	}
+
+	token, err := readMagicLinkToken(r)
 	if token == "" {
-		h.httpError(w, r, "missing token", http.StatusBadRequest, nil)
+		h.httpError(w, r, "missing token", http.StatusBadRequest, err)
 		return
 	}
 
@@ -32,8 +40,7 @@ func (h *AuthHandlers) HandleHTTPLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Set HttpOnly cookie — SameSite=Lax is required because the user arrives
-	// via an external magic link click, which is a cross-site top-level navigation.
+	// Set HttpOnly cookie for session continuity after token exchange.
 	http.SetCookie(w, &http.Cookie{
 		Name:     RefreshTokenCookie,
 		Value:    resp.RefreshToken,
@@ -47,6 +54,30 @@ func (h *AuthHandlers) HandleHTTPLogin(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "user_uuid": resp.UserUUID})
+}
+
+type loginRequest struct {
+	Token string `json:"token"`
+}
+
+func readMagicLinkToken(r *http.Request) (string, error) {
+	if token := strings.TrimSpace(r.Header.Get("X-Magic-Link-Token")); token != "" {
+		return token, nil
+	}
+
+	contentType := strings.ToLower(r.Header.Get("Content-Type"))
+	if strings.Contains(contentType, "application/json") {
+		req := loginRequest{}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			return "", fmt.Errorf("invalid json body: %w", err)
+		}
+		return strings.TrimSpace(req.Token), nil
+	}
+
+	if err := r.ParseForm(); err != nil {
+		return "", fmt.Errorf("invalid form body: %w", err)
+	}
+	return strings.TrimSpace(r.FormValue("token")), nil
 }
 
 func (h *AuthHandlers) HandleHTTPTicket(w http.ResponseWriter, r *http.Request) {

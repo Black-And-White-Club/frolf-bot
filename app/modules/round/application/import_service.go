@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"strings"
 	"time"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
@@ -69,7 +68,12 @@ func (s *RoundService) downloadFile(ctx context.Context, url string) ([]byte, er
 		return nil, err
 	}
 
-	resp, err := newDownloadClient().Do(req)
+	client := s.downloadClient
+	if client == nil {
+		client = newDownloadClient()
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -158,11 +162,8 @@ func (s *RoundService) ScorecardURLRequested(ctx context.Context, req *roundtype
 			// 2. Normalize the UDisc URL
 			normalizedURL, err := normalizeUDiscExportURL(req.UDiscURL)
 			if err != nil {
-				if !strings.Contains(strings.ToLower(req.UDiscURL), "udisc.com") {
-					s.logger.WarnContext(ctx, "Invalid UDisc URL provided", attr.String("url", req.UDiscURL))
-					return results.FailureResult[roundtypes.CreateImportJobResult](fmt.Errorf("invalid UDisc URL: %w", err)), nil
-				}
-				normalizedURL = req.UDiscURL
+				s.logger.WarnContext(ctx, "Invalid UDisc URL provided", attr.String("url", req.UDiscURL))
+				return results.FailureResult[roundtypes.CreateImportJobResult](fmt.Errorf("invalid UDisc URL: %w", err)), nil
 			}
 
 			// 3. Update DB State

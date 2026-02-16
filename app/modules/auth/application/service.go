@@ -71,7 +71,7 @@ func (s *service) runInTx(ctx context.Context, fn func(ctx context.Context, db b
 
 const (
 	TicketTTL            = 5 * time.Minute // Short-lived NATS ticket exchanged for a NATS User JWT
-	DefaultTokenTTL      = 24 * time.Hour  // Default magic link TTL
+	DefaultTokenTTL      = 15 * time.Minute
 	RefreshTokenExpiry   = 30 * 24 * time.Hour
 	ProfileSyncStaleness = 24 * time.Hour // Re-sync display name from Discord if older than this
 )
@@ -130,7 +130,7 @@ func (s *service) GenerateMagicLink(ctx context.Context, userID, guildID string,
 }
 
 func (s *service) createAndSaveMagicLink(ctx context.Context, userUUID uuid.UUID, guildID string, role authdomain.Role) (string, error) {
-	token, err := generateRandomToken(32)
+	rawToken, err := generateRandomToken(32)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate token: %w", err)
 	}
@@ -141,11 +141,11 @@ func (s *service) createAndSaveMagicLink(ctx context.Context, userUUID uuid.UUID
 	}
 
 	magicLink := &userdb.MagicLink{
-		Token:     token,
+		TokenHash: hashToken(rawToken),
 		UserUUID:  userUUID,
 		GuildID:   guildID,
 		Role:      string(role),
-		ExpiresAt: time.Now().Add(ttl),
+		ExpiresAt: time.Now().UTC().Add(ttl),
 	}
 
 	if err := s.repo.SaveMagicLink(ctx, nil, magicLink); err != nil {
@@ -153,11 +153,11 @@ func (s *service) createAndSaveMagicLink(ctx context.Context, userUUID uuid.UUID
 		return "", err
 	}
 
-	return token, nil
+	return rawToken, nil
 }
 
 func (s *service) buildMagicLinkURL(token string) string {
-	return fmt.Sprintf("%s?t=%s", s.config.PWABaseURL, token)
+	return fmt.Sprintf("%s#t=%s", s.config.PWABaseURL, token)
 }
 
 func (s *service) resolveUserAndClub(ctx context.Context, userID, guildID string) (uuid.UUID, uuid.UUID, error) {
@@ -305,7 +305,6 @@ func (s *service) HandleNATSAuthRequest(ctx context.Context, req *NATSAuthReques
 	}
 
 	return &NATSAuthResponse{
-		Jwt:            userJWT,
 		SignedResponse: signedResponse,
 	}, nil
 }

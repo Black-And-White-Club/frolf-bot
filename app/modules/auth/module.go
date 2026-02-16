@@ -104,7 +104,7 @@ func NewModule(
 			r.Use(authhandlers.RateLimitMiddleware(limiter))
 
 			// Public routes
-			r.Get("/callback", handlers.HandleHTTPLogin)
+			r.Post("/callback", handlers.HandleHTTPLogin)
 
 			// Protected routes
 			r.Group(func(r chi.Router) {

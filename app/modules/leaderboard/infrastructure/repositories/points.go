@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/uptrace/bun"
@@ -176,6 +177,64 @@ func (r *Impl) DecrementSeasonStanding(ctx context.Context, db bun.IDB, guildID 
 	if err != nil {
 		return fmt.Errorf("leaderboarddb.DecrementSeasonStanding: %w", err)
 	}
+	return nil
+}
+
+func (r *Impl) DecrementSeasonStandingsBatch(ctx context.Context, db bun.IDB, guildID string, deltas []SeasonStandingDecrement) error {
+	if len(deltas) == 0 {
+		return nil
+	}
+	if db == nil {
+		db = r.db
+	}
+
+	resolved := make([]SeasonStandingDecrement, 0, len(deltas))
+	activeSeasonID := ""
+	for _, delta := range deltas {
+		if delta.PointsToRemove <= 0 && delta.RoundsToRemove <= 0 {
+			continue
+		}
+
+		if delta.SeasonID == "" {
+			if activeSeasonID == "" {
+				activeSeasonID = r.getActiveSeasonID(ctx, db, guildID)
+			}
+			delta.SeasonID = activeSeasonID
+		}
+
+		if delta.RoundsToRemove <= 0 {
+			delta.RoundsToRemove = 1
+		}
+
+		resolved = append(resolved, delta)
+	}
+
+	if len(resolved) == 0 {
+		return nil
+	}
+
+	args := make([]any, 0, len(resolved)*4+1)
+	values := make([]string, 0, len(resolved))
+	for _, delta := range resolved {
+		values = append(values, "(?, ?, ?, ?)")
+		args = append(args, delta.MemberID, delta.SeasonID, delta.PointsToRemove, delta.RoundsToRemove)
+	}
+	args = append(args, guildID)
+
+	query := fmt.Sprintf(`
+		UPDATE leaderboard_season_standings AS ss
+		SET total_points = GREATEST(ss.total_points - v.points_to_remove, 0),
+		    rounds_played = GREATEST(ss.rounds_played - v.rounds_to_remove, 0)
+		FROM (VALUES %s) AS v(member_id, season_id, points_to_remove, rounds_to_remove)
+		WHERE ss.guild_id = ?
+		  AND ss.member_id = v.member_id
+		  AND ss.season_id = v.season_id
+	`, strings.Join(values, ","))
+
+	if _, err := db.NewRaw(query, args...).Exec(ctx); err != nil {
+		return fmt.Errorf("leaderboarddb.DecrementSeasonStandingsBatch: %w", err)
+	}
+
 	return nil
 }
 
