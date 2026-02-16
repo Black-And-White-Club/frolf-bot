@@ -113,10 +113,12 @@ func (app *App) Initialize(ctx context.Context, cfg *config.Config, obs observab
 }
 
 func (app *App) registerHealthEndpoints() {
-	app.HTTPRouter.Get("/livez", func(w http.ResponseWriter, _ *http.Request) {
+	liveHandler := func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
-	})
+	}
+
+	app.HTTPRouter.Get("/livez", liveHandler)
 
 	readyHandler := func(w http.ResponseWriter, r *http.Request) {
 		failures := app.readinessFailures(r.Context())
@@ -131,8 +133,8 @@ func (app *App) registerHealthEndpoints() {
 	}
 
 	app.HTTPRouter.Get("/readyz", readyHandler)
-	// Keep /health for compatibility and map it to readiness semantics.
-	app.HTTPRouter.Get("/health", readyHandler)
+	// Keep /health for compatibility and map it to liveness semantics to avoid restart loops on dependency outages
+	app.HTTPRouter.Get("/health", liveHandler)
 }
 
 func (app *App) readinessFailures(ctx context.Context) []string {
