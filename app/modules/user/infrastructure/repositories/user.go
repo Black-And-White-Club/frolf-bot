@@ -444,7 +444,7 @@ func (r *Impl) FindByUDiscUsername(ctx context.Context, db bun.IDB, guildID shar
 		ColumnExpr("gm.role").
 		ColumnExpr("gm.joined_at").
 		Join("JOIN guild_memberships AS gm ON u.user_id = gm.user_id").
-		Where("LOWER(TRIM(u.udisc_username)) IN (LOWER(?), LOWER(?))", username, targetWithAt).
+		Where("LOWER(u.udisc_username) IN (LOWER(?), LOWER(?))", strings.TrimSpace(username), strings.TrimSpace(targetWithAt)).
 		Where("gm.guild_id = ?", guildID).
 		Limit(1).
 		Scan(ctx, uwm)
@@ -470,7 +470,7 @@ func (r *Impl) FindGlobalByUDiscUsername(ctx context.Context, db bun.IDB, userna
 	user := &User{}
 	err := db.NewSelect().
 		Model(user).
-		Where("LOWER(TRIM(u.udisc_username)) IN (LOWER(?), LOWER(?))", username, targetWithAt).
+		Where("LOWER(u.udisc_username) IN (LOWER(?), LOWER(?))", strings.TrimSpace(username), strings.TrimSpace(targetWithAt)).
 		Limit(1).
 		Scan(ctx)
 	if err != nil {
@@ -495,7 +495,7 @@ func (r *Impl) GetGlobalUsersByUDiscUsernames(ctx context.Context, db bun.IDB, u
 	var users []*User
 	err := db.NewSelect().
 		Model(&users).
-		Where("LOWER(TRIM(u.udisc_username)) IN (?)", bun.In(normalizedUsernames)).
+		Where("LOWER(u.udisc_username) IN (?)", bun.In(normalizedUsernames)).
 		OrderExpr("u.id ASC").
 		Scan(ctx)
 	if err != nil {
@@ -516,7 +516,7 @@ func (r *Impl) FindByUDiscName(ctx context.Context, db bun.IDB, guildID sharedty
 		ColumnExpr("gm.role").
 		ColumnExpr("gm.joined_at").
 		Join("JOIN guild_memberships AS gm ON u.user_id = gm.user_id").
-		Where("LOWER(TRIM(u.udisc_name)) = LOWER(?)", name).
+		Where("LOWER(u.udisc_name) = LOWER(?)", strings.TrimSpace(name)).
 		Where("gm.guild_id = ?", guildID).
 		Limit(1).
 		Scan(ctx, uwm)
@@ -544,7 +544,7 @@ func (r *Impl) GetUsersByUDiscNames(ctx context.Context, db bun.IDB, guildID sha
 		ColumnExpr("gm.role").
 		ColumnExpr("gm.joined_at").
 		Join("JOIN guild_memberships AS gm ON u.user_id = gm.user_id").
-		Where("LOWER(TRIM(u.udisc_name)) IN (?)", bun.In(normalizedNames)).
+		Where("LOWER(u.udisc_name) IN (?)", bun.In(normalizedNames)).
 		Where("gm.guild_id = ?", guildID).
 		OrderExpr("u.id ASC").
 		Scan(ctx, &results)
@@ -569,7 +569,7 @@ func (r *Impl) GetUsersByUDiscUsernames(ctx context.Context, db bun.IDB, guildID
 		ColumnExpr("gm.role").
 		ColumnExpr("gm.joined_at").
 		Join("JOIN guild_memberships AS gm ON u.user_id = gm.user_id").
-		Where("LOWER(TRIM(u.udisc_username)) IN (?)", bun.In(normalizedUsernames)).
+		Where("LOWER(u.udisc_username) IN (?)", bun.In(normalizedUsernames)).
 		Where("gm.guild_id = ?", guildID).
 		OrderExpr("u.id ASC").
 		Scan(ctx, &results)
