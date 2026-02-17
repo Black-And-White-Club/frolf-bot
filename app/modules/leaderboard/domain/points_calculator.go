@@ -25,7 +25,8 @@ type PointAward struct {
 // CalculateRoundPoints computes points for all participants using the opponents-defeated matrix.
 //
 // Participants are sorted by tag number ascending (best tag = rank 1).
-// Each participant earns points for every participant they outrank (have a lower tag number).
+// Each participant earns points for every tagged opponent they outrank (have a lower tag number).
+// Untagged participants (TagNumber == 0) do not count as opponents and award no points when beaten.
 // Tier bonuses apply per matchup according to CalculateMatchup rules.
 func CalculateRoundPoints(participants []RoundParticipant) []PointAward {
 	if len(participants) == 0 {
@@ -64,8 +65,12 @@ func CalculateRoundPoints(participants []RoundParticipant) []PointAward {
 		totalPoints := 0
 		opponentsBeaten := 0
 
-		// Winner beats everyone ranked below them
+		// Winner beats every tagged opponent ranked below them
 		for j := i + 1; j < len(sorted); j++ {
+			if sorted[j].TagNumber <= 0 {
+				continue // untagged players are not counted as opponents
+			}
+
 			loser := PlayerContext{
 				ID:           sorted[j].MemberID,
 				RoundsPlayed: sorted[j].RoundsPlayed,

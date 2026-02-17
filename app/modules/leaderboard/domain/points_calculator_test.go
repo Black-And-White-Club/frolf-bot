@@ -43,7 +43,7 @@ func TestCalculateRoundPointsDeterministicTieBreak(t *testing.T) {
 	}
 }
 
-func TestCalculateRoundPointsUntaggedSortedLast(t *testing.T) {
+func TestCalculateRoundPointsUntaggedNotCountedAsOpponent(t *testing.T) {
 	participants := []RoundParticipant{
 		{MemberID: "untagged", TagNumber: 0, RoundsPlayed: 5, BestTag: 0, CurrentTier: TierBronze},
 		{MemberID: "tagged", TagNumber: 10, RoundsPlayed: 5, BestTag: 10, CurrentTier: TierBronze},
@@ -54,12 +54,15 @@ func TestCalculateRoundPointsUntaggedSortedLast(t *testing.T) {
 		t.Fatalf("expected 2 awards, got %d", len(awards))
 	}
 
-	// Tagged player (Tag 10) should beat Untagged player (Tag 0 -> effectively infinity)
+	// Tagged player sorts first, but earns 0 points: untagged players are not counted as opponents.
 	if awards[0].MemberID != "tagged" {
 		t.Errorf("expected tagged player to be first, got %s", awards[0].MemberID)
 	}
-	if awards[0].Points <= 0 {
-		t.Errorf("expected tagged player to earn points, got %d", awards[0].Points)
+	if awards[0].Points != 0 {
+		t.Errorf("expected tagged player to earn 0 points (no tagged opponents), got %d", awards[0].Points)
+	}
+	if awards[0].OpponentsBeaten != 0 {
+		t.Errorf("expected 0 opponents beaten, got %d", awards[0].OpponentsBeaten)
 	}
 
 	if awards[1].MemberID != "untagged" {
