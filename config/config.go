@@ -444,6 +444,7 @@ func ToObsConfig(appCfg *Config) obs.Config {
 		TempoSampleRate: appCfg.Observability.TempoSampleRate,
 		OTLPEndpoint:    appCfg.Observability.OTLPEndpoint,
 		OTLPTransport:   appCfg.Observability.OTLPTransport,
+		OTLPInsecure:    appCfg.Observability.TempoInsecure,
 		LogsEnabled:     appCfg.Observability.OTLPLogsEnabled,
 	}
 }
