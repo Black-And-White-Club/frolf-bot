@@ -109,7 +109,7 @@ func NewModule(
 			// Protected routes
 			r.Group(func(r chi.Router) {
 				r.Use(authhandlers.AuthMiddleware)
-				r.Get("/ticket", handlers.HandleHTTPTicket)
+				r.Post("/ticket", handlers.HandleHTTPTicket)
 				r.Post("/logout", handlers.HandleHTTPLogout)
 			})
 		})
