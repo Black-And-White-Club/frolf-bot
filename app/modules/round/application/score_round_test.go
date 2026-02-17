@@ -465,3 +465,132 @@ func TestRoundService_CheckAllScoresSubmitted(t *testing.T) {
 		})
 	}
 }
+
+func TestRoundService_UpdateParticipantScoresBulk(t *testing.T) {
+	ctx := context.Background()
+	guildID := sharedtypes.GuildID("guild-123")
+	roundID := sharedtypes.RoundID(uuid.New())
+	scoreA := sharedtypes.Score(54)
+	scoreB := sharedtypes.Score(48)
+	scoreC := sharedtypes.Score(51)
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	tracerProvider := noop.NewTracerProvider()
+	tracer := tracerProvider.Tracer("test")
+	mockMetrics := &roundmetrics.NoOpMetrics{}
+
+	tests := []struct {
+		name      string
+		setup     func(*FakeRepo)
+		request   *roundtypes.BulkScoreUpdateRequest
+		assertion func(t *testing.T, res BulkScoreUpdateResult, err error)
+	}{
+		{
+			name: "updates existing participants and appends new participant in one write",
+			setup: func(f *FakeRepo) {
+				f.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{
+						ID:      r,
+						GuildID: g,
+						Participants: []roundtypes.Participant{
+							{UserID: "user-a", Response: roundtypes.ResponseAccept, Score: &scoreA},
+							{UserID: "user-b", Response: roundtypes.ResponseTentative, Score: &scoreB},
+						},
+					}, nil
+				}
+				f.UpdateRoundsAndParticipantsFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, updates []roundtypes.RoundUpdate) error {
+					if len(updates) != 1 {
+						t.Fatalf("expected one round update, got %d", len(updates))
+					}
+					if updates[0].RoundID != roundID {
+						t.Fatalf("expected round ID %s, got %s", roundID, updates[0].RoundID)
+					}
+					if len(updates[0].Participants) != 3 {
+						t.Fatalf("expected 3 participants, got %d", len(updates[0].Participants))
+					}
+					return nil
+				}
+			},
+			request: &roundtypes.BulkScoreUpdateRequest{
+				GuildID: guildID,
+				RoundID: roundID,
+				Updates: []roundtypes.ScoreUpdateRequest{
+					{GuildID: guildID, RoundID: roundID, UserID: "user-a", Score: &scoreC},
+					{GuildID: guildID, RoundID: roundID, UserID: "user-c", Score: &scoreA},
+				},
+			},
+			assertion: func(t *testing.T, res BulkScoreUpdateResult, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if !res.IsSuccess() {
+					t.Fatalf("expected success result, got failure")
+				}
+				updated := *res.Success
+				if len(updated.Participants) != 3 {
+					t.Fatalf("expected 3 participants, got %d", len(updated.Participants))
+				}
+				var foundUserA bool
+				var foundUserC bool
+				for _, participant := range updated.Participants {
+					if participant.UserID == "user-a" {
+						foundUserA = true
+						if participant.Score == nil || *participant.Score != scoreC {
+							t.Fatalf("expected user-a score %d, got %v", scoreC, participant.Score)
+						}
+					}
+					if participant.UserID == "user-c" {
+						foundUserC = true
+					}
+				}
+				if !foundUserA || !foundUserC {
+					t.Fatalf("expected user-a and user-c in participants")
+				}
+			},
+		},
+		{
+			name: "fails when round fetch fails",
+			setup: func(f *FakeRepo) {
+				f.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return nil, errors.New("round not found")
+				}
+			},
+			request: &roundtypes.BulkScoreUpdateRequest{
+				GuildID: guildID,
+				RoundID: roundID,
+				Updates: []roundtypes.ScoreUpdateRequest{
+					{GuildID: guildID, RoundID: roundID, UserID: "user-a", Score: &scoreA},
+				},
+			},
+			assertion: func(t *testing.T, res BulkScoreUpdateResult, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if res.IsSuccess() {
+					t.Fatalf("expected failure result")
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fakeRepo := &FakeRepo{}
+			if tt.setup != nil {
+				tt.setup(fakeRepo)
+			}
+
+			service := &RoundService{
+				repo:           fakeRepo,
+				logger:         logger,
+				metrics:        mockMetrics,
+				tracer:         tracer,
+				roundValidator: &FakeRoundValidator{},
+				parserFactory:  &StubFactory{},
+			}
+
+			result, err := service.UpdateParticipantScoresBulk(ctx, tt.request)
+			tt.assertion(t, result, err)
+		})
+	}
+}

@@ -2,7 +2,9 @@ package authhandlers
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -85,7 +87,7 @@ func (h *AuthHandlers) HandleNATSAuthCallout(msg *nats.Msg) {
 	}
 	if userToken == "" {
 		h.logger.DebugContext(ctx, "Auth token not found in any standard field",
-			attr.Any("connect_opts", claims.Nats.ConnectOpts),
+			attr.String("client_nkey", claims.Nats.UserNkey),
 		)
 	}
 
@@ -129,10 +131,19 @@ func (h *AuthHandlers) HandleNATSAuthCallout(msg *nats.Msg) {
 		)
 	} else {
 		h.logger.InfoContext(ctx, "Auth request approved",
-			attr.String("jwt", resp.Jwt),
-			attr.String("signed_response", resp.SignedResponse),
+			attr.String("user_jwt_fingerprint", tokenFingerprint(resp.Jwt)),
+			attr.String("signed_response_fingerprint", tokenFingerprint(resp.SignedResponse)),
 		)
 	}
+}
+
+func tokenFingerprint(token string) string {
+	if token == "" {
+		return ""
+	}
+
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:6])
 }
 
 // decodeAuthRequestJWT decodes a NATS auth callout JWT and extracts the claims.

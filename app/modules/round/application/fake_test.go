@@ -80,6 +80,7 @@ type FakeRepo struct {
 
 	CreateRoundFunc                    func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r *roundtypes.Round) error
 	GetRoundFunc                       func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (*roundtypes.Round, error)
+	GetRoundForUpdateFunc              func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (*roundtypes.Round, error)
 	UpdateRoundFunc                    func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID, r *roundtypes.Round) (*roundtypes.Round, error)
 	DeleteRoundFunc                    func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID) error
 	UpdateParticipantFunc              func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID, p roundtypes.Participant) ([]roundtypes.Participant, error)
@@ -129,6 +130,20 @@ func (f *FakeRepo) CreateRound(ctx context.Context, db bun.IDB, g sharedtypes.Gu
 
 func (f *FakeRepo) GetRound(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (*roundtypes.Round, error) {
 	f.record("GetRound")
+	if f.GetRoundFunc != nil {
+		return f.GetRoundFunc(ctx, db, guildID, roundID)
+	}
+	return &roundtypes.Round{
+		ID:      roundID,
+		GuildID: guildID,
+	}, nil
+}
+
+func (f *FakeRepo) GetRoundForUpdate(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (*roundtypes.Round, error) {
+	f.record("GetRoundForUpdate")
+	if f.GetRoundForUpdateFunc != nil {
+		return f.GetRoundForUpdateFunc(ctx, db, guildID, roundID)
+	}
 	if f.GetRoundFunc != nil {
 		return f.GetRoundFunc(ctx, db, guildID, roundID)
 	}

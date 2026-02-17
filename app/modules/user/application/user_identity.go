@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
@@ -116,7 +117,56 @@ func (s *UserService) GetUUIDByDiscordID(ctx context.Context, discordID sharedty
 
 // GetClubUUIDByDiscordGuildID resolves a Discord guild ID to internal club UUID.
 func (s *UserService) GetClubUUIDByDiscordGuildID(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) {
-	return s.repo.GetClubUUIDByDiscordGuildID(ctx, s.db, guildID)
+	if guildID == "" {
+		return uuid.Nil, fmt.Errorf("guildID cannot be empty")
+	}
+
+	now := time.Now().UTC()
+	if cached, ok := s.getCachedClubUUID(guildID, now); ok {
+		return cached, nil
+	}
+
+	clubUUID, err := s.repo.GetClubUUIDByDiscordGuildID(ctx, s.db, guildID)
+	if err != nil {
+		return uuid.Nil, err
+	}
+
+	s.cacheClubUUID(guildID, clubUUID, now)
+	return clubUUID, nil
+}
+
+func (s *UserService) getCachedClubUUID(guildID sharedtypes.GuildID, now time.Time) (uuid.UUID, bool) {
+	if s.clubUUIDCacheTTL <= 0 {
+		return uuid.Nil, false
+	}
+
+	s.clubUUIDCacheMu.RLock()
+	entry, ok := s.clubUUIDCache[guildID]
+	s.clubUUIDCacheMu.RUnlock()
+	if !ok {
+		return uuid.Nil, false
+	}
+	if now.After(entry.expiresAt) {
+		return uuid.Nil, false
+	}
+
+	return entry.clubUUID, true
+}
+
+func (s *UserService) cacheClubUUID(guildID sharedtypes.GuildID, clubUUID uuid.UUID, now time.Time) {
+	if s.clubUUIDCacheTTL <= 0 {
+		return
+	}
+
+	s.clubUUIDCacheMu.Lock()
+	if s.clubUUIDCache == nil {
+		s.clubUUIDCache = make(map[sharedtypes.GuildID]clubUUIDCacheEntry)
+	}
+	s.clubUUIDCache[guildID] = clubUUIDCacheEntry{
+		clubUUID:  clubUUID,
+		expiresAt: now.Add(s.clubUUIDCacheTTL),
+	}
+	s.clubUUIDCacheMu.Unlock()
 }
 
 func normalizeStringPointer(val *string) *string {

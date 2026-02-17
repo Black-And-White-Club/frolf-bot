@@ -15,14 +15,22 @@ func newDownloadClient() *http.Client {
 			if len(via) >= maxRedirects {
 				return fmt.Errorf("too many redirects")
 			}
+			if err := validateUDiscURL(req.URL); err != nil {
+				return fmt.Errorf("redirect target rejected: %w", err)
+			}
 			return nil
 		},
 	}
 }
 
 // newDownloadRequest creates a GET request with browser-like headers.
-func newDownloadRequest(ctx context.Context, url string) (*http.Request, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+func newDownloadRequest(ctx context.Context, rawURL string) (*http.Request, error) {
+	u, err := parseAndValidateUDiscURL(rawURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid download URL: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		return nil, err
 	}

@@ -63,7 +63,7 @@ func TestService_GenerateMagicLink(t *testing.T) {
 				if !resp.Success {
 					t.Errorf("expected success, got failure: %s", resp.Error)
 				}
-				if !strings.HasPrefix(resp.URL, "https://frolf.bot?t=") {
+				if !strings.HasPrefix(resp.URL, "https://frolf.bot#t=") {
 					t.Errorf("expected URL to start with base URL, got %s", resp.URL)
 				}
 			},
@@ -237,8 +237,11 @@ func TestService_HandleNATSAuthRequest(t *testing.T) {
 				if resp.Error != "" {
 					t.Errorf("unexpected error in response: %s", resp.Error)
 				}
-				if resp.Jwt != "nats-jwt" {
-					t.Errorf("expected nats-jwt, got %s", resp.Jwt)
+				if resp.Jwt != "" {
+					t.Errorf("expected empty Jwt field, got %s", resp.Jwt)
+				}
+				if resp.SignedResponse == "" {
+					t.Error("expected signed response, got empty")
 				}
 			},
 		},
@@ -328,16 +331,14 @@ func TestService_LoginUser(t *testing.T) {
 				j.ValidateTokenFunc = func(tokenString string) (*authdomain.Claims, error) {
 					return &authdomain.Claims{UserUUID: userUUID}, nil
 				}
-				r.GetMagicLinkFn = func(ctx context.Context, db bun.IDB, token string) (*userdb.MagicLink, error) {
+				r.ConsumeMagicLinkFn = func(ctx context.Context, db bun.IDB, tokenHash string, now time.Time) (*userdb.MagicLink, error) {
 					return &userdb.MagicLink{
-						Token:     token,
+						TokenHash: tokenHash,
 						UserUUID:  userUUID,
 						ExpiresAt: time.Now().Add(time.Hour),
-						Used:      false,
+						Used:      true,
+						UsedAt:    &now,
 					}, nil
-				}
-				r.MarkMagicLinkUsedFn = func(ctx context.Context, db bun.IDB, token string) error {
-					return nil
 				}
 				r.SaveRefreshTokenFn = func(ctx context.Context, db bun.IDB, token *userdb.RefreshToken) error {
 					return nil
@@ -359,8 +360,8 @@ func TestService_LoginUser(t *testing.T) {
 			name:         "invalid token",
 			oneTimeToken: "bad-otp",
 			setupMock: func(j *FakeJWTProvider, r *userdb.FakeRepository) {
-				r.GetMagicLinkFn = func(ctx context.Context, db bun.IDB, token string) (*userdb.MagicLink, error) {
-					return nil, userdb.ErrNotFound
+				r.ConsumeMagicLinkFn = func(ctx context.Context, db bun.IDB, tokenHash string, now time.Time) (*userdb.MagicLink, error) {
+					return nil, userdb.ErrNoRowsAffected
 				}
 			},
 			verify: func(t *testing.T, resp *LoginResponse, err error) {
@@ -383,6 +384,40 @@ func TestService_LoginUser(t *testing.T) {
 			resp, err := s.LoginUser(ctx, tt.oneTimeToken)
 			tt.verify(t, resp, err)
 		})
+	}
+}
+
+func TestService_LoginUser_DoesNotFallbackToRawToken(t *testing.T) {
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	tracer := noop.NewTracerProvider().Tracer("test")
+	config := Config{}
+	jwtProvider := &FakeJWTProvider{}
+	repo := &userdb.FakeRepository{}
+
+	const oneTimeToken = "otp"
+	expectedHash := hashToken(oneTimeToken)
+	consumeCalls := 0
+
+	repo.ConsumeMagicLinkFn = func(ctx context.Context, db bun.IDB, tokenHash string, now time.Time) (*userdb.MagicLink, error) {
+		consumeCalls++
+		if tokenHash != expectedHash {
+			t.Fatalf("expected hashed token %q, got %q", expectedHash, tokenHash)
+		}
+		return nil, userdb.ErrNoRowsAffected
+	}
+
+	s := NewService(jwtProvider, &FakeUserJWTBuilder{}, repo, config, logger, tracer, nil)
+	resp, err := s.LoginUser(ctx, oneTimeToken)
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if resp != nil {
+		t.Fatalf("expected nil response, got %+v", resp)
+	}
+	if consumeCalls != 1 {
+		t.Fatalf("expected exactly one consume attempt, got %d", consumeCalls)
 	}
 }
 
@@ -440,8 +475,8 @@ func TestService_GetTicket(t *testing.T) {
 				}
 			},
 			verify: func(t *testing.T, resp *TicketResponse, err error) {
-				if err == nil || !strings.Contains(err.Error(), "session revoked") {
-					t.Errorf("expected session revoked error, got %v", err)
+				if !errors.Is(err, ErrRevokedSession) {
+					t.Errorf("expected ErrRevokedSession, got %v", err)
 				}
 			},
 		},
@@ -459,6 +494,39 @@ func TestService_GetTicket(t *testing.T) {
 			resp, err := s.GetTicket(ctx, tt.refreshToken, "")
 			tt.verify(t, resp, err)
 		})
+	}
+}
+
+func TestService_GetTicket_RevokedTokenReplayRevokesAllUserTokens(t *testing.T) {
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	tracer := noop.NewTracerProvider().Tracer("test")
+	userUUID := uuid.New()
+	revokeAllCalls := 0
+
+	repo := &userdb.FakeRepository{
+		GetRefreshTokenFn: func(ctx context.Context, db bun.IDB, hash string) (*userdb.RefreshToken, error) {
+			return &userdb.RefreshToken{UserUUID: userUUID, Revoked: true}, nil
+		},
+		RevokeAllUserTokensFn: func(ctx context.Context, db bun.IDB, gotUserUUID uuid.UUID) error {
+			revokeAllCalls++
+			if gotUserUUID != userUUID {
+				t.Fatalf("expected user UUID %s, got %s", userUUID, gotUserUUID)
+			}
+			return nil
+		},
+	}
+
+	s := NewService(&FakeJWTProvider{}, &FakeUserJWTBuilder{}, repo, Config{}, logger, tracer, nil)
+	resp, err := s.GetTicket(ctx, "revoked-rt", "")
+	if resp != nil {
+		t.Fatalf("expected nil response, got %+v", resp)
+	}
+	if !errors.Is(err, ErrRevokedSession) {
+		t.Fatalf("expected ErrRevokedSession, got %v", err)
+	}
+	if revokeAllCalls != 1 {
+		t.Fatalf("expected RevokeAllUserTokens to be called once, got %d", revokeAllCalls)
 	}
 }
 

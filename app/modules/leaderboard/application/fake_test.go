@@ -30,9 +30,10 @@ type FakeLeaderboardRepo struct {
 	GetSeasonStandingsFunc func(ctx context.Context, db bun.IDB, guildID string, seasonID string, memberIDs []sharedtypes.DiscordID) (map[sharedtypes.DiscordID]*leaderboarddb.SeasonStanding, error)
 
 	// Rollback Stubs
-	GetPointHistoryForRoundFunc    func(ctx context.Context, db bun.IDB, guildID string, roundID sharedtypes.RoundID) ([]leaderboarddb.PointHistory, error)
-	DeletePointHistoryForRoundFunc func(ctx context.Context, db bun.IDB, guildID string, roundID sharedtypes.RoundID) error
-	DecrementSeasonStandingFunc    func(ctx context.Context, db bun.IDB, guildID string, memberID sharedtypes.DiscordID, seasonID string, pointsToRemove int) error
+	GetPointHistoryForRoundFunc       func(ctx context.Context, db bun.IDB, guildID string, roundID sharedtypes.RoundID) ([]leaderboarddb.PointHistory, error)
+	DeletePointHistoryForRoundFunc    func(ctx context.Context, db bun.IDB, guildID string, roundID sharedtypes.RoundID) error
+	DecrementSeasonStandingFunc       func(ctx context.Context, db bun.IDB, guildID string, memberID sharedtypes.DiscordID, seasonID string, pointsToRemove int) error
+	DecrementSeasonStandingsBatchFunc func(ctx context.Context, db bun.IDB, guildID string, deltas []leaderboarddb.SeasonStandingDecrement) error
 }
 
 func NewFakeLeaderboardRepo() *FakeLeaderboardRepo {
@@ -131,6 +132,14 @@ func (f *FakeLeaderboardRepo) DecrementSeasonStanding(ctx context.Context, db bu
 	f.record("DecrementSeasonStanding")
 	if f.DecrementSeasonStandingFunc != nil {
 		return f.DecrementSeasonStandingFunc(ctx, db, guildID, memberID, seasonID, pointsToRemove)
+	}
+	return nil
+}
+
+func (f *FakeLeaderboardRepo) DecrementSeasonStandingsBatch(ctx context.Context, db bun.IDB, guildID string, deltas []leaderboarddb.SeasonStandingDecrement) error {
+	f.record("DecrementSeasonStandingsBatch")
+	if f.DecrementSeasonStandingsBatchFunc != nil {
+		return f.DecrementSeasonStandingsBatchFunc(ctx, db, guildID, deltas)
 	}
 	return nil
 }

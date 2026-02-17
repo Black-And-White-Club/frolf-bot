@@ -225,3 +225,84 @@ func TestRoundService_ImportProcessing(t *testing.T) {
 		})
 	}
 }
+
+func TestRoundService_IngestNormalizedScorecard_UsesBatchLookup(t *testing.T) {
+	ctx := context.Background()
+	guildID := sharedtypes.GuildID("guild-123")
+	roundID := sharedtypes.RoundID(uuid.New())
+
+	lookup := &batchLookupStub{
+		resolved: map[string]sharedtypes.DiscordID{
+			"alice": "alice-id",
+		},
+	}
+
+	service := &RoundService{
+		repo:       NewFakeRepo(),
+		userLookup: lookup,
+		logger:     loggerfrolfbot.NoOpLogger,
+		tracer:     noop.NewTracerProvider().Tracer("test"),
+		metrics:    &roundmetrics.NoOpMetrics{},
+	}
+
+	req := roundtypes.ImportIngestScorecardInput{
+		GuildID:  guildID,
+		RoundID:  roundID,
+		ImportID: "import-123",
+		NormalizedData: roundtypes.NormalizedScorecard{
+			Mode: sharedtypes.RoundModeSingles,
+			Players: []roundtypes.NormalizedPlayer{
+				{DisplayName: "Alice", Total: 54},
+				{DisplayName: "Bob", Total: 60},
+			},
+		},
+	}
+
+	res, err := service.IngestNormalizedScorecard(ctx, req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.Failure != nil {
+		t.Fatalf("unexpected failure: %v", *res.Failure)
+	}
+	if lookup.batchCalls != 1 {
+		t.Fatalf("expected one batch lookup call, got %d", lookup.batchCalls)
+	}
+	if lookup.singleLookupCalls != 0 {
+		t.Fatalf("expected no single-name lookup calls, got %d", lookup.singleLookupCalls)
+	}
+}
+
+type batchLookupStub struct {
+	resolved          map[string]sharedtypes.DiscordID
+	batchCalls        int
+	singleLookupCalls int
+}
+
+func (b *batchLookupStub) ResolveByNormalizedNames(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, normalizedNames []string) (map[string]sharedtypes.DiscordID, error) {
+	b.batchCalls++
+	out := make(map[string]sharedtypes.DiscordID, len(normalizedNames))
+	for _, name := range normalizedNames {
+		out[name] = b.resolved[name]
+	}
+	return out, nil
+}
+
+func (b *batchLookupStub) FindByNormalizedUDiscUsername(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, normalizedUsername string) (*UserIdentity, error) {
+	b.singleLookupCalls++
+	return nil, nil
+}
+
+func (b *batchLookupStub) FindGlobalByNormalizedUDiscUsername(ctx context.Context, db bun.IDB, normalizedUsername string) (*UserIdentity, error) {
+	b.singleLookupCalls++
+	return nil, nil
+}
+
+func (b *batchLookupStub) FindByNormalizedUDiscDisplayName(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, normalizedDisplayName string) (*UserIdentity, error) {
+	b.singleLookupCalls++
+	return nil, nil
+}
+
+func (b *batchLookupStub) FindByPartialUDiscName(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, partialName string) ([]*UserIdentity, error) {
+	return nil, nil
+}

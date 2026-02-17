@@ -342,10 +342,13 @@ func TestRollbackPreviousRound_DeletesHistoryAfterDecrement(t *testing.T) {
 		}, nil
 	}
 
-	decrementCalls := 0
+	batchCalls := 0
 	deleteCalled := false
-	repo.DecrementSeasonStandingFunc = func(ctx context.Context, db bun.IDB, guildID string, memberID sharedtypes.DiscordID, seasonID string, pointsToRemove int) error {
-		decrementCalls++
+	repo.DecrementSeasonStandingsBatchFunc = func(ctx context.Context, db bun.IDB, guildID string, deltas []leaderboarddb.SeasonStandingDecrement) error {
+		batchCalls++
+		if len(deltas) != 2 {
+			t.Fatalf("expected 2 grouped deltas, got %d", len(deltas))
+		}
 		return nil
 	}
 	repo.DeletePointHistoryForRoundFunc = func(ctx context.Context, db bun.IDB, guildID string, rid sharedtypes.RoundID) error {
@@ -357,8 +360,8 @@ func TestRollbackPreviousRound_DeletesHistoryAfterDecrement(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rollbackPreviousRound returned error: %v", err)
 	}
-	if decrementCalls != 2 {
-		t.Fatalf("expected 2 decrement calls, got %d", decrementCalls)
+	if batchCalls != 1 {
+		t.Fatalf("expected 1 batch decrement call, got %d", batchCalls)
 	}
 	if !deleteCalled {
 		t.Fatalf("expected point history delete to be called")

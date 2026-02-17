@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	pprof "net/http/pprof"
 	"os"
@@ -42,7 +43,13 @@ func startPprofIfEnabled() {
 	}
 	addr := os.Getenv("PPROF_ADDR")
 	if addr == "" {
-		addr = ":6060"
+		addr = "127.0.0.1:6060"
+	} else if strings.HasPrefix(addr, ":") {
+		addr = "127.0.0.1" + addr
+	}
+
+	if !isLoopbackAddr(addr) {
+		log.Printf("pprof warning: non-loopback bind address %s may expose profiling data", addr)
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
@@ -50,12 +57,36 @@ func startPprofIfEnabled() {
 	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
 	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+
+	var handler http.Handler = mux
+	if token := strings.TrimSpace(os.Getenv("PPROF_AUTH_TOKEN")); token != "" {
+		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("Authorization") != "Bearer "+token {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			mux.ServeHTTP(w, r)
+		})
+	}
+
 	go func() {
 		log.Printf("pprof enabled on %s", addr)
-		if err := http.ListenAndServe(addr, mux); err != nil {
+		if err := http.ListenAndServe(addr, handler); err != nil {
 			log.Printf("pprof server stopped: %v", err)
 		}
 	}()
+}
+
+func isLoopbackAddr(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func main() {
@@ -115,79 +146,32 @@ func main() {
 	fmt.Println("DEBUG: Application initialized successfully")
 	logger.Info("Application initialized successfully")
 
-	// --- Graceful Shutdown Setup ---
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
-	cleanShutdown := make(chan struct{})
-
-	// Goroutine to handle signals and initiate shutdown
-	go func() {
-		select {
-		case sig := <-interrupt:
-			fmt.Printf("DEBUG: Received signal: %s\n", sig.String())
-			logger.Info("Received signal", attr.String("signal", sig.String()))
-		case <-ctx.Done():
-			fmt.Println("DEBUG: Context was cancelled from elsewhere")
-			logger.Info("Application context cancelled")
-		}
-
-		fmt.Println("DEBUG: Initiating graceful shutdown...")
-		logger.Info("Initiating graceful shutdown...")
-		cancel()
-
-		// Create a timeout for the entire shutdown process
-		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 25*time.Second)
-		defer shutdownCancel()
-
-		// Shutdown application first
-		go func() {
-			defer close(cleanShutdown)
-			logger.Info("Closing application...")
-			if err := application.Close(); err != nil {
-				logger.Error("Error during application shutdown", attr.Error(err))
-			} else {
-				logger.Info("Application closed successfully")
-			}
-
-			// Shutdown observability components
-			logger.Info("Shutting down observability components...")
-			obsShutdownCtx, obsShutdownCancel := context.WithTimeout(shutdownCtx, 10*time.Second)
-			defer obsShutdownCancel()
-			if err := obs.Provider.Shutdown(obsShutdownCtx); err != nil {
-				logger.Error("Error shutting down observability", attr.Error(err))
-			} else {
-				logger.Info("Observability shutdown successful")
-			}
-		}()
-
-		// Wait for cleanup or timeout
-		select {
-		case <-shutdownCtx.Done():
-			if shutdownCtx.Err() == context.DeadlineExceeded {
-				logger.Error("Graceful shutdown timeout reached, forcing exit")
-				os.Exit(1)
-			}
-		case <-cleanShutdown:
-			logger.Info("Graceful shutdown completed successfully")
-		}
-	}()
+	defer signal.Stop(interrupt)
 
 	// --- Run Application ---
 	fmt.Println("DEBUG: Starting application run loop...")
+	runErrCh := make(chan error, 1)
+	reportRunError := func(err error) {
+		select {
+		case runErrCh <- err:
+		default:
+		}
+	}
 	go func() {
+		defer close(runErrCh)
 		defer func() {
 			if r := recover(); r != nil {
 				fmt.Printf("DEBUG: Application panicked: %v\n", r)
-				logger.Error("Application panicked", attr.String("panic", fmt.Sprintf("%v", r)))
-				cancel()
+				reportRunError(fmt.Errorf("application panicked: %v", r))
 			}
 		}()
 
 		logger.Info("Starting application run loop")
 		if err := application.Run(ctx); err != nil && err != context.Canceled {
 			fmt.Printf("DEBUG: Application run failed: %v\n", err)
-			logger.Error("Application run failed", attr.Error(err))
-			cancel()
+			reportRunError(fmt.Errorf("application run failed: %w", err))
 		} else if err == context.Canceled {
 			fmt.Println("DEBUG: Application run stopped due to context cancellation")
 			logger.Info("Application run stopped due to context cancellation")
@@ -200,21 +184,76 @@ func main() {
 	logger.Info("Application is running. Press Ctrl+C to gracefully shut down.")
 	fmt.Println("DEBUG: Application startup complete, waiting for shutdown signal...")
 
-	// --- Wait for Shutdown Signal ---
-	fmt.Println("DEBUG: Waiting for shutdown signal...")
-	<-ctx.Done()
-	fmt.Println("DEBUG: Context cancelled, beginning shutdown sequence...")
+	exitCode := 0
+	shutdownReason := "context canceled"
 
-	// --- Final Wait for Cleanup ---
 	select {
-	case <-cleanShutdown:
-		// Shutdown completed cleanly
-	case <-time.After(5 * time.Second):
-		logger.Warn("Did not receive clean shutdown signal within final wait period.")
+	case sig := <-interrupt:
+		shutdownReason = fmt.Sprintf("signal: %s", sig.String())
+		fmt.Printf("DEBUG: Received signal: %s\n", sig.String())
+		logger.Info("Received signal", attr.String("signal", sig.String()))
+		cancel()
+	case err, ok := <-runErrCh:
+		shutdownReason = "application run loop exited"
+		cancel()
+		if ok && err != nil {
+			logger.Error("Application run loop failed", attr.Error(err))
+			exitCode = 1
+		}
+	case <-ctx.Done():
+		shutdownReason = "application context canceled"
 	}
 
-	logger.Info("Exiting main.")
-	os.Exit(0)
+	logger.Info("Initiating graceful shutdown", attr.String("reason", shutdownReason))
+	fmt.Printf("DEBUG: Initiating graceful shutdown (%s)\n", shutdownReason)
+
+	// Wait for run loop to stop after cancellation.
+	select {
+	case err, ok := <-runErrCh:
+		if ok && err != nil {
+			logger.Error("Application run loop failed during shutdown", attr.Error(err))
+			exitCode = 1
+		}
+	case <-time.After(5 * time.Second):
+		logger.Warn("Timed out waiting for application run loop to stop")
+	}
+
+	// Shutdown application resources from main only.
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer shutdownCancel()
+
+	closeDone := make(chan error, 1)
+	go func() {
+		closeDone <- application.Close()
+	}()
+
+	select {
+	case err := <-closeDone:
+		if err != nil {
+			logger.Error("Error during application shutdown", attr.Error(err))
+			exitCode = 1
+		} else {
+			logger.Info("Application closed successfully")
+		}
+	case <-shutdownCtx.Done():
+		logger.Error("Graceful shutdown timeout reached", attr.Error(shutdownCtx.Err()))
+		exitCode = 1
+	}
+
+	// Shutdown observability components after application resources.
+	logger.Info("Shutting down observability components...")
+	obsShutdownCtx, obsShutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer obsShutdownCancel()
+	if err := obs.Provider.Shutdown(obsShutdownCtx); err != nil {
+		logger.Error("Error shutting down observability", attr.Error(err))
+		exitCode = 1
+	} else {
+		logger.Info("Observability shutdown successful")
+	}
+
+	if exitCode != 0 {
+		os.Exit(exitCode)
+	}
 }
 
 // runMigrations handles database migration execution

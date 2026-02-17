@@ -4,11 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
-	"os/signal"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
@@ -49,6 +46,8 @@ type App struct {
 	Helpers           utils.Helpers
 	HTTPRouter        *chi.Mux
 	HTTPServer        *http.Server
+	closeOnce         sync.Once
+	closeErr          error
 }
 
 func (app *App) GetHealthCheckers() []eventbus.HealthChecker {
@@ -57,6 +56,8 @@ func (app *App) GetHealthCheckers() []eventbus.HealthChecker {
 	}
 	return app.EventBus.GetHealthCheckers()
 }
+
+const dependencyCheckTimeout = 2 * time.Second
 
 // Initialize initializes the application.
 func (app *App) Initialize(ctx context.Context, cfg *config.Config, obs observability.Observability) error {
@@ -72,11 +73,7 @@ func (app *App) Initialize(ctx context.Context, cfg *config.Config, obs observab
 	app.HTTPRouter.Use(chi_middleware.RealIP)
 	app.HTTPRouter.Use(SecurityHeaders)
 
-	// Health endpoint for Kubernetes probes (served by the same chi router)
-	app.HTTPRouter.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
-	})
+	app.registerHealthEndpoints()
 
 	// Initialize database
 	var err error
@@ -113,6 +110,72 @@ func (app *App) Initialize(ctx context.Context, cfg *config.Config, obs observab
 
 	logger.Info("App Initialize finished")
 	return nil
+}
+
+func (app *App) registerHealthEndpoints() {
+	liveHandler := func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}
+
+	app.HTTPRouter.Get("/livez", liveHandler)
+
+	readyHandler := func(w http.ResponseWriter, r *http.Request) {
+		failures := app.readinessFailures(r.Context())
+		if len(failures) > 0 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(strings.Join(failures, "; ")))
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}
+
+	app.HTTPRouter.Get("/readyz", readyHandler)
+	// Keep /health for compatibility and map it to liveness semantics to avoid restart loops on dependency outages
+	app.HTTPRouter.Get("/health", liveHandler)
+}
+
+func (app *App) readinessFailures(ctx context.Context) []string {
+	var failures []string
+
+	if app.DB == nil || app.DB.GetDB() == nil {
+		failures = append(failures, "database not initialized")
+	} else {
+		dbCtx, cancel := context.WithTimeout(ctx, dependencyCheckTimeout)
+		if err := app.DB.GetDB().PingContext(dbCtx); err != nil {
+			failures = append(failures, fmt.Sprintf("database unavailable: %v", err))
+		}
+		cancel()
+	}
+
+	checkers := app.GetHealthCheckers()
+	if app.EventBus == nil {
+		failures = append(failures, "event bus not initialized")
+	} else if len(checkers) == 0 {
+		failures = append(failures, "event bus health checkers unavailable")
+	} else {
+		for _, checker := range checkers {
+			checkCtx, cancel := context.WithTimeout(ctx, dependencyCheckTimeout)
+			if err := checker.Check(checkCtx); err != nil {
+				failures = append(failures, fmt.Sprintf("%s unavailable: %v", checker.Name(), err))
+			}
+			cancel()
+		}
+	}
+
+	if app.RoundModule == nil || app.RoundModule.QueueService == nil {
+		failures = append(failures, "round queue not initialized")
+	} else {
+		queueCtx, cancel := context.WithTimeout(ctx, dependencyCheckTimeout)
+		if err := app.RoundModule.QueueService.HealthCheck(queueCtx); err != nil {
+			failures = append(failures, fmt.Sprintf("round queue unavailable: %v", err))
+		}
+		cancel()
+	}
+
+	return failures
 }
 
 // initializeModules initializes the application modules.
@@ -158,17 +221,16 @@ func (app *App) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	interrupt := make(chan os.Signal, 1)
-	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
-
-	go func() {
-		<-interrupt
-		app.Observability.Provider.Logger.Info("Interrupt signal received, shutting down...")
-		cancel()
-	}()
-
 	routerRunCtx, routerRunCancel := context.WithCancel(ctx)
 	defer routerRunCancel()
+
+	fatalErrs := make(chan error, 2)
+	reportFatal := func(err error) {
+		select {
+		case fatalErrs <- err:
+		default:
+		}
+	}
 
 	if err := app.initializeModules(ctx, routerRunCtx); err != nil {
 		app.Observability.Provider.Logger.Error("Failed during module initialization", attr.Error(err))
@@ -192,11 +254,13 @@ func (app *App) Run(ctx context.Context) error {
 					attr.String("solution", "Ensure all required NATS streams are created before starting the backend"))
 			}
 
+			reportFatal(fmt.Errorf("watermill router failed: %w", err))
 			cancel()
 		} else if err == context.Canceled {
 			app.Observability.Provider.Logger.Info("Watermill router stopped due to context cancellation")
 		} else {
 			app.Observability.Provider.Logger.Error("Watermill router finished unexpectedly")
+			reportFatal(fmt.Errorf("watermill router finished unexpectedly"))
 			cancel()
 		}
 	}()
@@ -222,6 +286,7 @@ func (app *App) Run(ctx context.Context) error {
 		app.Observability.Provider.Logger.Info("Starting HTTP server", attr.String("port", port))
 		if err := app.HTTPServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			app.Observability.Provider.Logger.Error("HTTP server failed", attr.Error(err))
+			reportFatal(fmt.Errorf("http server failed: %w", err))
 			cancel()
 		}
 	}()
@@ -235,17 +300,24 @@ func (app *App) Run(ctx context.Context) error {
 		return fmt.Errorf("timeout waiting for main router to start")
 	}
 
-	<-ctx.Done()
-	app.Observability.Provider.Logger.Info("Shutting down...")
-	if err := app.Close(); err != nil {
+	select {
+	case err := <-fatalErrs:
 		return err
+	case <-ctx.Done():
+		app.Observability.Provider.Logger.Info("Run context canceled")
+		return nil
 	}
-
-	app.Observability.Provider.Logger.Info("Graceful shutdown complete.")
-	return nil
 }
 
 func (app *App) Close() error {
+	app.closeOnce.Do(func() {
+		app.closeErr = app.close()
+	})
+
+	return app.closeErr
+}
+
+func (app *App) close() error {
 	// Shutdown HTTP Server
 	if app.HTTPServer != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

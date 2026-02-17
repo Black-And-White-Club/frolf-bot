@@ -3,6 +3,7 @@ package userservice
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
@@ -57,29 +58,33 @@ type FakeUserRepository struct {
 	GetClubMembershipsByUserUUIDsFn func(ctx context.Context, db bun.IDB, userUUIDs []uuid.UUID) ([]*userdb.ClubMembership, error)
 
 	// Guild-scoped operations
-	GetUserByUserIDFunc           func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID) (*userdb.UserWithMembership, error)
-	GetUserRoleFunc               func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID) (sharedtypes.UserRoleEnum, error)
-	UpdateUserRoleFunc            func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, role sharedtypes.UserRoleEnum) error
-	FindByUDiscUsernameFunc       func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, username string) (*userdb.UserWithMembership, error)
-	FindGlobalByUDiscUsernameFunc func(ctx context.Context, db bun.IDB, username string) (*userdb.User, error)
-	FindByUDiscNameFunc           func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, name string) (*userdb.UserWithMembership, error)
-	GetUsersByUDiscNamesFunc      func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, names []string) ([]userdb.UserWithMembership, error)
-	GetUsersByUDiscUsernamesFunc  func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, usernames []string) ([]userdb.UserWithMembership, error)
-	FindByUDiscNameFuzzyFunc      func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, partialName string) ([]*userdb.UserWithMembership, error)
+	GetUserByUserIDFunc                func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID) (*userdb.UserWithMembership, error)
+	GetUserRoleFunc                    func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID) (sharedtypes.UserRoleEnum, error)
+	UpdateUserRoleFunc                 func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, role sharedtypes.UserRoleEnum) error
+	FindByUDiscUsernameFunc            func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, username string) (*userdb.UserWithMembership, error)
+	FindGlobalByUDiscUsernameFunc      func(ctx context.Context, db bun.IDB, username string) (*userdb.User, error)
+	GetGlobalUsersByUDiscUsernamesFunc func(ctx context.Context, db bun.IDB, usernames []string) ([]*userdb.User, error)
+	FindByUDiscNameFunc                func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, name string) (*userdb.UserWithMembership, error)
+	GetUsersByUDiscNamesFunc           func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, names []string) ([]userdb.UserWithMembership, error)
+	GetUsersByUDiscUsernamesFunc       func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, usernames []string) ([]userdb.UserWithMembership, error)
+	FindByUDiscNameFuzzyFunc           func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, partialName string) ([]*userdb.UserWithMembership, error)
 
 	// Profile operations
 	UpdateProfileFunc func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, displayName string, avatarHash string) error
 
 	// Refresh Token operations
-	SaveRefreshTokenFn    func(ctx context.Context, db bun.IDB, token *userdb.RefreshToken) error
-	GetRefreshTokenFn     func(ctx context.Context, db bun.IDB, hash string) (*userdb.RefreshToken, error)
-	RevokeRefreshTokenFn  func(ctx context.Context, db bun.IDB, hash string) error
-	RevokeAllUserTokensFn func(ctx context.Context, db bun.IDB, userUUID uuid.UUID) error
+	SaveRefreshTokenFn           func(ctx context.Context, db bun.IDB, token *userdb.RefreshToken) error
+	GetRefreshTokenFn            func(ctx context.Context, db bun.IDB, hash string) (*userdb.RefreshToken, error)
+	GetRefreshTokenForUpdateFn   func(ctx context.Context, db bun.IDB, hash string) (*userdb.RefreshToken, error)
+	RevokeRefreshTokenFn         func(ctx context.Context, db bun.IDB, hash string) error
+	RevokeRefreshTokenIfActiveFn func(ctx context.Context, db bun.IDB, hash string) error
+	RevokeAllUserTokensFn        func(ctx context.Context, db bun.IDB, userUUID uuid.UUID) error
 
 	// Magic Link operations
 	SaveMagicLinkFn     func(ctx context.Context, db bun.IDB, link *userdb.MagicLink) error
 	GetMagicLinkFn      func(ctx context.Context, db bun.IDB, token string) (*userdb.MagicLink, error)
 	MarkMagicLinkUsedFn func(ctx context.Context, db bun.IDB, token string) error
+	ConsumeMagicLinkFn  func(ctx context.Context, db bun.IDB, tokenHash string, now time.Time) (*userdb.MagicLink, error)
 }
 
 // Trace returns the sequence of method calls made to the fake.
@@ -270,6 +275,14 @@ func (f *FakeUserRepository) FindGlobalByUDiscUsername(ctx context.Context, db b
 	return nil, userdb.ErrNotFound
 }
 
+func (f *FakeUserRepository) GetGlobalUsersByUDiscUsernames(ctx context.Context, db bun.IDB, usernames []string) ([]*userdb.User, error) {
+	f.record("GetGlobalUsersByUDiscUsernames")
+	if f.GetGlobalUsersByUDiscUsernamesFunc != nil {
+		return f.GetGlobalUsersByUDiscUsernamesFunc(ctx, db, usernames)
+	}
+	return []*userdb.User{}, nil
+}
+
 func (f *FakeUserRepository) FindByUDiscName(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, name string) (*userdb.UserWithMembership, error) {
 	f.record("FindByUDiscName")
 	if f.FindByUDiscNameFunc != nil {
@@ -334,12 +347,28 @@ func (f *FakeUserRepository) GetRefreshToken(ctx context.Context, db bun.IDB, ha
 	return nil, nil
 }
 
+func (f *FakeUserRepository) GetRefreshTokenForUpdate(ctx context.Context, db bun.IDB, hash string) (*userdb.RefreshToken, error) {
+	f.record("GetRefreshTokenForUpdate")
+	if f.GetRefreshTokenForUpdateFn != nil {
+		return f.GetRefreshTokenForUpdateFn(ctx, db, hash)
+	}
+	return f.GetRefreshToken(ctx, db, hash)
+}
+
 func (f *FakeUserRepository) RevokeRefreshToken(ctx context.Context, db bun.IDB, hash string) error {
 	f.record("RevokeRefreshToken")
 	if f.RevokeRefreshTokenFn != nil {
 		return f.RevokeRefreshTokenFn(ctx, db, hash)
 	}
 	return nil
+}
+
+func (f *FakeUserRepository) RevokeRefreshTokenIfActive(ctx context.Context, db bun.IDB, hash string) error {
+	f.record("RevokeRefreshTokenIfActive")
+	if f.RevokeRefreshTokenIfActiveFn != nil {
+		return f.RevokeRefreshTokenIfActiveFn(ctx, db, hash)
+	}
+	return f.RevokeRefreshToken(ctx, db, hash)
 }
 
 func (f *FakeUserRepository) RevokeAllUserTokens(ctx context.Context, db bun.IDB, userUUID uuid.UUID) error {
@@ -372,6 +401,14 @@ func (f *FakeUserRepository) MarkMagicLinkUsed(ctx context.Context, db bun.IDB, 
 		return f.MarkMagicLinkUsedFn(ctx, db, token)
 	}
 	return nil
+}
+
+func (f *FakeUserRepository) ConsumeMagicLink(ctx context.Context, db bun.IDB, tokenHash string, now time.Time) (*userdb.MagicLink, error) {
+	f.record("ConsumeMagicLink")
+	if f.ConsumeMagicLinkFn != nil {
+		return f.ConsumeMagicLinkFn(ctx, db, tokenHash, now)
+	}
+	return nil, userdb.ErrNoRowsAffected
 }
 
 // Ensure the fake actually satisfies the interface

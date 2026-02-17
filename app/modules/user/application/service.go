@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
@@ -13,6 +14,7 @@ import (
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
+	"github.com/google/uuid"
 	"github.com/uptrace/bun"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -29,7 +31,18 @@ type UserService struct {
 	metrics usermetrics.UserMetrics
 	tracer  trace.Tracer
 	db      *bun.DB
+
+	clubUUIDCacheTTL time.Duration
+	clubUUIDCacheMu  sync.RWMutex
+	clubUUIDCache    map[sharedtypes.GuildID]clubUUIDCacheEntry
 }
+
+type clubUUIDCacheEntry struct {
+	clubUUID  uuid.UUID
+	expiresAt time.Time
+}
+
+const defaultClubUUIDCacheTTL = 30 * time.Second
 
 // NewUserService creates a new UserService.
 func NewUserService(
@@ -45,6 +58,9 @@ func NewUserService(
 		metrics: metrics,
 		tracer:  tracer,
 		db:      db,
+
+		clubUUIDCacheTTL: defaultClubUUIDCacheTTL,
+		clubUUIDCache:    make(map[sharedtypes.GuildID]clubUUIDCacheEntry),
 	}
 }
 

@@ -117,7 +117,7 @@ func TestRoundService_ScorecardURLRequested(t *testing.T) {
 		{
 			name: "Success - Valid UDisc URL",
 			payload: &roundtypes.ImportCreateJobInput{
-				GuildID: guildID, RoundID: roundID, UDiscURL: "https://udisc.com/scorecards/12345",
+				GuildID: guildID, RoundID: roundID, UDiscURL: "https://udisc.com/courses/12345/rounds/67890/leaderboard",
 			},
 			setupRepo: func(f *FakeRepo) {
 				f.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID) (*roundtypes.Round, error) {

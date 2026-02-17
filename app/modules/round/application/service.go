@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
@@ -35,6 +36,7 @@ type RoundService struct {
 	guildConfigProvider GuildConfigProvider
 	parserFactory       parsers.ParserFactory
 	db                  *bun.DB
+	downloadClient      *http.Client
 }
 
 // GuildConfigProvider supplies guild config for enrichment (DB-backed, no events)
@@ -65,6 +67,7 @@ func NewRoundService(
 		roundValidator: roundValidator,
 		parserFactory:  parsers.NewFactory(),
 		db:             db,
+		downloadClient: newDownloadClient(),
 	}
 }
 

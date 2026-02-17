@@ -6,6 +6,49 @@ import (
 	"strings"
 )
 
+var allowedUDiscHosts = map[string]struct{}{
+	"udisc.com":     {},
+	"www.udisc.com": {},
+}
+
+func validateUDiscURL(u *url.URL) error {
+	if u == nil {
+		return fmt.Errorf("invalid URL")
+	}
+
+	if !strings.EqualFold(u.Scheme, "https") {
+		return fmt.Errorf("unsupported URL scheme")
+	}
+
+	if u.User != nil {
+		return fmt.Errorf("userinfo is not allowed")
+	}
+
+	if u.Port() != "" {
+		return fmt.Errorf("explicit ports are not allowed")
+	}
+
+	host := strings.ToLower(strings.TrimSuffix(u.Hostname(), "."))
+	if _, ok := allowedUDiscHosts[host]; !ok {
+		return fmt.Errorf("unsupported host: %s", u.Host)
+	}
+
+	return nil
+}
+
+func parseAndValidateUDiscURL(raw string) (*url.URL, error) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return nil, fmt.Errorf("invalid URL")
+	}
+
+	if err := validateUDiscURL(u); err != nil {
+		return nil, err
+	}
+
+	return u, nil
+}
+
 // normalizeUDiscExportURL canonicalizes a variety of UDisc leaderboard URLs to the
 // canonical /leaderboard/export path and performs a strict host allowlist check.
 func normalizeUDiscExportURL(raw string) (string, error) {
@@ -13,14 +56,9 @@ func normalizeUDiscExportURL(raw string) (string, error) {
 		return "", fmt.Errorf("empty URL")
 	}
 
-	u, err := url.Parse(raw)
+	u, err := parseAndValidateUDiscURL(raw)
 	if err != nil {
-		return "", fmt.Errorf("invalid URL")
-	}
-
-	// Security: allowlist host
-	if !strings.EqualFold(u.Host, "udisc.com") && !strings.EqualFold(u.Host, "www.udisc.com") {
-		return "", fmt.Errorf("unsupported host: %s", u.Host)
+		return "", err
 	}
 
 	// Strip browser-only parts

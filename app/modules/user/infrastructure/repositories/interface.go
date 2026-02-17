@@ -2,6 +2,7 @@ package userdb
 
 import (
 	"context"
+	"time"
 
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/google/uuid"
@@ -46,6 +47,7 @@ type Repository interface {
 	UpdateUserRole(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, role sharedtypes.UserRoleEnum) error
 	FindByUDiscUsername(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, username string) (*UserWithMembership, error)
 	FindGlobalByUDiscUsername(ctx context.Context, db bun.IDB, username string) (*User, error)
+	GetGlobalUsersByUDiscUsernames(ctx context.Context, db bun.IDB, usernames []string) ([]*User, error)
 	FindByUDiscName(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, name string) (*UserWithMembership, error)
 	GetUsersByUDiscNames(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, names []string) ([]UserWithMembership, error)
 	GetUsersByUDiscUsernames(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, usernames []string) ([]UserWithMembership, error)
@@ -57,11 +59,14 @@ type Repository interface {
 	// Refresh Token operations
 	SaveRefreshToken(ctx context.Context, db bun.IDB, token *RefreshToken) error
 	GetRefreshToken(ctx context.Context, db bun.IDB, hash string) (*RefreshToken, error)
+	GetRefreshTokenForUpdate(ctx context.Context, db bun.IDB, hash string) (*RefreshToken, error)
 	RevokeRefreshToken(ctx context.Context, db bun.IDB, hash string) error
+	RevokeRefreshTokenIfActive(ctx context.Context, db bun.IDB, hash string) error
 	RevokeAllUserTokens(ctx context.Context, db bun.IDB, userUUID uuid.UUID) error
 
 	// Magic Link operations
 	SaveMagicLink(ctx context.Context, db bun.IDB, link *MagicLink) error
 	GetMagicLink(ctx context.Context, db bun.IDB, token string) (*MagicLink, error)
 	MarkMagicLinkUsed(ctx context.Context, db bun.IDB, token string) error
+	ConsumeMagicLink(ctx context.Context, db bun.IDB, tokenHash string, now time.Time) (*MagicLink, error)
 }

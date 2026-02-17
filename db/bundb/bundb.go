@@ -5,6 +5,9 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"net"
+	"net/url"
+	"strings"
 	"time"
 
 	clubdb "github.com/Black-And-White-Club/frolf-bot/app/modules/club/infrastructure/repositories"
@@ -37,9 +40,9 @@ func (dbService *DBService) GetDB() *bun.DB {
 
 // NewBunDBService initializes a new DBService with the provided Postgres configuration.
 func NewBunDBService(ctx context.Context, cfg config.PostgresConfig) (*DBService, error) {
-	log.Printf("NewBunDBService - Initializing with DSN: %s", cfg.DSN)
+	log.Printf("NewBunDBService - Initializing database connection (%s)", redactedConnectionMetadata(cfg.DSN))
 
-	sqldb, err := pgConn(cfg.DSN)
+	sqldb, err := pgConnWithConfig(cfg)
 	if err != nil {
 		log.Printf("NewBunDBService - Failed to connect to PostgreSQL: %v", err)
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
@@ -103,12 +106,30 @@ func bunDB(sqldb *sql.DB) *bun.DB {
 
 // PgConn creates a new SQL DB connection - exported for testing
 func PgConn(dsn string) (*sql.DB, error) {
+	return PgConnWithConfig(config.PostgresConfig{DSN: dsn})
+}
+
+func PgConnWithConfig(cfg config.PostgresConfig) (*sql.DB, error) {
+	dsn := cfg.DSN
 	sqldb := sql.OpenDB(pgdriver.NewConnector(pgdriver.WithDSN(dsn)))
 
+	maxOpenConns := cfg.MaxOpenConns
+	if maxOpenConns <= 0 {
+		maxOpenConns = 25
+	}
+	maxIdleConns := cfg.MaxIdleConns
+	if maxIdleConns <= 0 {
+		maxIdleConns = maxOpenConns
+	}
+	connMaxLifetime := cfg.ConnMaxLifetime
+	if connMaxLifetime <= 0 {
+		connMaxLifetime = 5 * time.Minute
+	}
+
 	// Set connection pooling settings
-	sqldb.SetMaxOpenConns(25)
-	sqldb.SetMaxIdleConns(25)
-	sqldb.SetConnMaxLifetime(5 * time.Minute)
+	sqldb.SetMaxOpenConns(maxOpenConns)
+	sqldb.SetMaxIdleConns(maxIdleConns)
+	sqldb.SetConnMaxLifetime(connMaxLifetime)
 
 	if err := sqldb.Ping(); err != nil {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
@@ -118,6 +139,28 @@ func PgConn(dsn string) (*sql.DB, error) {
 }
 
 // Internal version for regular use
-func pgConn(dsn string) (*sql.DB, error) {
-	return PgConn(dsn)
+func pgConnWithConfig(cfg config.PostgresConfig) (*sql.DB, error) {
+	return PgConnWithConfig(cfg)
+}
+
+func redactedConnectionMetadata(dsn string) string {
+	parsed, err := url.Parse(dsn)
+	if err != nil {
+		return "host=unknown db=unknown"
+	}
+
+	host := parsed.Hostname()
+	if host == "" {
+		host = "unknown"
+	}
+	if port := parsed.Port(); port != "" {
+		host = net.JoinHostPort(host, port)
+	}
+
+	dbName := strings.TrimPrefix(parsed.Path, "/")
+	if dbName == "" {
+		dbName = "unknown"
+	}
+
+	return fmt.Sprintf("host=%s db=%s", host, dbName)
 }

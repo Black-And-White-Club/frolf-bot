@@ -55,7 +55,32 @@ func NewRoundModule(
 
 	logger.InfoContext(ctx, "round.NewRoundModule called")
 
-	queueService, err := roundqueue.NewService(
+	var queueOpts roundqueue.ServiceOptions
+	poolMaxConns := int32(cfg.RoundQueue.PoolMaxConns)
+	if cfg.Postgres.MaxOpenConns > 0 && int(poolMaxConns) >= cfg.Postgres.MaxOpenConns {
+		capped := cfg.Postgres.MaxOpenConns / 2
+		if capped < 1 {
+			capped = 1
+		}
+		poolMaxConns = int32(capped)
+	}
+	if poolMaxConns > 0 {
+		queueOpts.PoolMaxConns = &poolMaxConns
+	}
+	if cfg.RoundQueue.DefaultWorkers > 0 {
+		defaultWorkers := cfg.RoundQueue.DefaultWorkers
+		queueOpts.DefaultWorkers = &defaultWorkers
+	}
+	if cfg.RoundQueue.RoundWorkers > 0 {
+		roundWorkers := cfg.RoundQueue.RoundWorkers
+		queueOpts.RoundWorkers = &roundWorkers
+	}
+	if cfg.RoundQueue.FetchPollInterval > 0 {
+		fetchPollInterval := cfg.RoundQueue.FetchPollInterval
+		queueOpts.FetchPollInterval = &fetchPollInterval
+	}
+
+	queueService, err := roundqueue.NewServiceWithOptions(
 		ctx,
 		db,
 		logger,
@@ -63,6 +88,7 @@ func NewRoundModule(
 		metrics,
 		eventBus,
 		helpers,
+		&queueOpts,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize queue service: %w", err)

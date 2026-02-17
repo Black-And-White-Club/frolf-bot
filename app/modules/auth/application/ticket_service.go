@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 
@@ -32,6 +33,14 @@ func hashToken(token string) string {
 	return hex.EncodeToString(hash[:])
 }
 
+func tokenFingerprint(token string) string {
+	if token == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:6])
+}
+
 // LoginUser validates a one-time token and creates a long-lived session (refresh token).
 // The entire operation runs in a transaction to prevent double-redemption of magic links.
 func (s *service) LoginUser(ctx context.Context, oneTimeToken string) (*LoginResponse, error) {
@@ -41,27 +50,16 @@ func (s *service) LoginUser(ctx context.Context, oneTimeToken string) (*LoginRes
 	var resp *LoginResponse
 
 	err := s.runInTx(ctx, func(ctx context.Context, tx bun.IDB) error {
-		// 1. Validate the one-time token (DB)
-		ml, err := s.repo.GetMagicLink(ctx, tx, oneTimeToken)
+		// 1. Atomically consume one-time token.
+		now := time.Now().UTC()
+		tokenHash := hashToken(oneTimeToken)
+		ml, err := s.repo.ConsumeMagicLink(ctx, tx, tokenHash, now)
 		if err != nil {
-			s.logger.WarnContext(ctx, "Invalid one-time token", attr.Error(err))
-			return fmt.Errorf("invalid token: %w", err)
-		}
-
-		if ml.Used {
-			s.logger.WarnContext(ctx, "One-time token already used", attr.String("token", oneTimeToken))
-			return fmt.Errorf("token already used")
-		}
-
-		if time.Now().After(ml.ExpiresAt) {
-			s.logger.WarnContext(ctx, "One-time token expired", attr.String("token", oneTimeToken))
-			return fmt.Errorf("token expired")
-		}
-
-		// Mark as used
-		if err := s.repo.MarkMagicLinkUsed(ctx, tx, oneTimeToken); err != nil {
-			s.logger.ErrorContext(ctx, "Failed to mark token used", attr.Error(err))
-			return fmt.Errorf("failed to process token: %w", err)
+			s.logger.WarnContext(ctx, "Failed to consume one-time token",
+				attr.Error(err),
+				attr.String("token_fingerprint", tokenFingerprint(oneTimeToken)),
+			)
+			return fmt.Errorf("invalid or expired token")
 		}
 
 		userUUID := ml.UserUUID
@@ -114,171 +112,184 @@ func (s *service) GetTicket(ctx context.Context, rawToken string, activeClubUUID
 	defer span.End()
 
 	hashedToken := hashToken(rawToken)
+	var replayedUserUUID uuid.UUID
 
-	// 1. Retrieve and validate the refresh token
-	token, err := s.repo.GetRefreshToken(ctx, nil, hashedToken)
-	if err != nil {
-		return nil, fmt.Errorf("invalid refresh token: %w", err)
-	}
-
-	if token.Revoked {
-		s.logger.WarnContext(ctx, "Revoked token used", attr.String("token_hash", hashedToken))
-		// Security hardening: Revoke all tokens in family if a revoked token is reused
-		if err := s.repo.RevokeAllUserTokens(ctx, nil, token.UserUUID); err != nil {
-			s.logger.ErrorContext(ctx, "Failed to revoke token family",
-				attr.Error(err),
-				attr.String("user_uuid", token.UserUUID.String()),
-			)
+	var resp *TicketResponse
+	err := s.runInTx(ctx, func(ctx context.Context, tx bun.IDB) error {
+		// 1. Retrieve and lock refresh token row.
+		token, err := s.repo.GetRefreshTokenForUpdate(ctx, tx, hashedToken)
+		if err != nil {
+			return fmt.Errorf("invalid refresh token: %w", err)
 		}
-		return nil, fmt.Errorf("session revoked")
-	}
 
-	if time.Now().After(token.ExpiresAt) {
-		return nil, fmt.Errorf("session expired")
-	}
+		if token.Revoked {
+			s.logger.WarnContext(ctx, "Revoked token used", attr.String("token_hash", hashedToken))
+			replayedUserUUID = token.UserUUID
+			return ErrRevokedSession
+		}
 
-	// 2. Generate rotated token early so we can put its hash in the claims
-	newToken, err := generateRandomToken(32)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate rotated token: %w", err)
-	}
-	newHashed := hashToken(newToken)
+		if time.Now().After(token.ExpiresAt) {
+			return fmt.Errorf("session expired")
+		}
 
-	// 3. Load user roles/memberships
-	memberships, err := s.repo.GetClubMembershipsByUserUUID(ctx, nil, token.UserUUID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load memberships: %w", err)
-	}
+		// 2. Generate rotated token early so we can put its hash in the claims.
+		newToken, err := generateRandomToken(32)
+		if err != nil {
+			return fmt.Errorf("failed to generate rotated token: %w", err)
+		}
+		newHashed := hashToken(newToken)
 
-	var activeUUID uuid.UUID
-	var activeRole authdomain.Role = authdomain.RolePlayer
-	var clubs []authdomain.ClubRole
-	var syncRequests []SyncRequest
+		// 3. Load user roles/memberships.
+		memberships, err := s.repo.GetClubMembershipsByUserUUID(ctx, tx, token.UserUUID)
+		if err != nil {
+			return fmt.Errorf("failed to load memberships: %w", err)
+		}
 
-	if len(memberships) == 0 {
-		memberships = s.backfillClubMemberships(ctx, token.UserUUID)
-	}
+		var activeUUID uuid.UUID
+		var activeRole authdomain.Role = authdomain.RolePlayer
+		var clubs []authdomain.ClubRole
+		var syncRequests []SyncRequest
 
-	if len(memberships) > 0 {
-		// Default to first membership
-		activeUUID = memberships[0].ClubUUID
-		activeRole = authdomain.Role(memberships[0].Role)
+		if len(memberships) == 0 {
+			memberships = s.backfillClubMemberships(ctx, tx, token.UserUUID)
+		}
 
-		// If a specific active club was requested, try to find it
-		if activeClubUUID != "" {
-			if targetUUID, err := uuid.Parse(activeClubUUID); err == nil {
-				found := false
-				for _, m := range memberships {
-					if m.ClubUUID == targetUUID {
-						activeUUID = m.ClubUUID
-						activeRole = authdomain.Role(m.Role)
-						found = true
-						break
+		if len(memberships) > 0 {
+			// Default to first membership.
+			activeUUID = memberships[0].ClubUUID
+			activeRole = authdomain.Role(memberships[0].Role)
+
+			// If a specific active club was requested, try to find it.
+			if activeClubUUID != "" {
+				if targetUUID, err := uuid.Parse(activeClubUUID); err == nil {
+					found := false
+					for _, m := range memberships {
+						if m.ClubUUID == targetUUID {
+							activeUUID = m.ClubUUID
+							activeRole = authdomain.Role(m.Role)
+							found = true
+							break
+						}
+					}
+					if !found {
+						s.logger.WarnContext(ctx, "Requested active club not found in user memberships",
+							attr.String("requested_uuid", activeClubUUID),
+							attr.String("user_uuid", token.UserUUID.String()),
+						)
 					}
 				}
-				if !found {
-					s.logger.WarnContext(ctx, "Requested active club not found in user memberships",
-						attr.String("requested_uuid", activeClubUUID),
-						attr.String("user_uuid", token.UserUUID.String()),
-					)
+			}
+
+			// Get global user for fallback display name.
+			var globalDisplayName string
+			user, err := s.repo.GetUserByUUID(ctx, tx, token.UserUUID)
+			if err == nil && user != nil {
+				globalDisplayName = user.GetDisplayName()
+			}
+
+			for _, m := range memberships {
+				// Request async profile sync if:
+				// 1. display_name is NULL (never synced), OR
+				// 2. synced_at is NULL or older than ProfileSyncStaleness (stale data).
+				needsSync := m.DisplayName == nil ||
+					m.SyncedAt == nil ||
+					time.Since(*m.SyncedAt) > ProfileSyncStaleness
+
+				if needsSync && m.ExternalID != nil {
+					if gid, err := s.repo.GetDiscordGuildIDByClubUUID(ctx, tx, m.ClubUUID); err == nil {
+						syncRequests = append(syncRequests, SyncRequest{
+							UserID:  *m.ExternalID,
+							GuildID: string(gid),
+						})
+					}
 				}
+
+				clubs = append(clubs, authdomain.ClubRole{
+					ClubUUID:    m.ClubUUID,
+					Role:        authdomain.Role(m.Role),
+					DisplayName: resolveDisplayName(m.DisplayName, globalDisplayName),
+				})
 			}
 		}
 
-		// Get global user for fallback display name
-		var globalDisplayName string
-		user, err := s.repo.GetUserByUUID(ctx, nil, token.UserUUID)
-		if err == nil && user != nil {
-			globalDisplayName = user.GetDisplayName()
-		}
-
-		for _, m := range memberships {
-			// Request async profile sync if:
-			// 1. display_name is NULL (never synced), OR
-			// 2. synced_at is NULL or older than ProfileSyncStaleness (stale data)
-			needsSync := m.DisplayName == nil ||
-				m.SyncedAt == nil ||
-				time.Since(*m.SyncedAt) > ProfileSyncStaleness
-
-			if needsSync && m.ExternalID != nil {
-				if gid, err := s.repo.GetDiscordGuildIDByClubUUID(ctx, nil, m.ClubUUID); err == nil {
-					syncRequests = append(syncRequests, SyncRequest{
-						UserID:  *m.ExternalID,
-						GuildID: string(gid),
-					})
-				}
+		// Resolve Discord Guild ID from active club.
+		// This is critical for NATS permissions if the frontend subscribes using Guild ID.
+		var guildID string
+		if activeUUID != uuid.Nil {
+			if gid, err := s.repo.GetDiscordGuildIDByClubUUID(ctx, tx, activeUUID); err == nil {
+				guildID = string(gid)
+			} else {
+				s.logger.WarnContext(ctx, "Failed to resolve Discord Guild ID for club",
+					attr.String("club_uuid", activeUUID.String()),
+					attr.Error(err),
+				)
+				// Fallback to club UUID string if resolution fails, though this may not match frontend expectations.
+				guildID = activeUUID.String()
 			}
-
-			clubs = append(clubs, authdomain.ClubRole{
-				ClubUUID:    m.ClubUUID,
-				Role:        authdomain.Role(m.Role),
-				DisplayName: resolveDisplayName(m.DisplayName, globalDisplayName),
-			})
 		}
-	}
 
-	// Resolve Discord Guild ID from active club
-	// This is critical for NATS permissions if the frontend subscribes using Guild ID
-	var guildID string
-	if activeUUID != uuid.Nil {
-		if gid, err := s.repo.GetDiscordGuildIDByClubUUID(ctx, nil, activeUUID); err == nil {
-			guildID = string(gid)
-		} else {
-			s.logger.WarnContext(ctx, "Failed to resolve Discord Guild ID for club",
-				attr.String("club_uuid", activeUUID.String()),
-				attr.Error(err),
-			)
-			// Fallback to club UUID string if resolution fails, though this may not match frontend expectations
-			guildID = activeUUID.String()
+		// 4. Mint NATS ticket with hash of the new rotated refresh token.
+		claims := &authdomain.Claims{
+			UserID:           token.UserUUID.String(),
+			UserUUID:         token.UserUUID,
+			GuildID:          guildID,
+			ActiveClubUUID:   activeUUID,
+			Role:             activeRole,
+			Clubs:            clubs,
+			RefreshTokenHash: newHashed,
 		}
-	}
+		natsToken, err := s.jwtProvider.GenerateToken(claims, TicketTTL)
+		if err != nil {
+			return fmt.Errorf("failed to generate ticket: %w", err)
+		}
 
-	// 4. Mint NATS Ticket with the hash of the NEW rotated refresh token
-	claims := &authdomain.Claims{
-		UserID:           token.UserUUID.String(), // Use UUID as ID for now since we are decoupling
-		UserUUID:         token.UserUUID,
-		GuildID:          guildID,
-		ActiveClubUUID:   activeUUID,
-		Role:             activeRole,
-		Clubs:            clubs,
-		RefreshTokenHash: newHashed,
-	}
+		// 5. Rotate token atomically inside the same transaction.
+		newRefreshToken := &userdb.RefreshToken{
+			Hash:        newHashed,
+			UserUUID:    token.UserUUID,
+			TokenFamily: token.TokenFamily,
+			ExpiresAt:   time.Now().UTC().Add(RefreshTokenExpiry),
+			Revoked:     false,
+		}
 
-	// 4. Mint standard HMAC JWT as a "ticket"
-	// This ticket will be exchanged for a NATS User JWT via Auth Callout
-	natsToken, err := s.jwtProvider.GenerateToken(claims, TicketTTL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate ticket: %w", err)
-	}
+		if err := s.repo.RevokeRefreshTokenIfActive(ctx, tx, hashedToken); err != nil {
+			if errors.Is(err, userdb.ErrNoRowsAffected) {
+				return fmt.Errorf("session revoked")
+			}
+			return fmt.Errorf("failed to revoke old token: %w", err)
+		}
 
-	// 5. Finalize Token Rotation (Save new, revoke old)
-	newRefreshToken := &userdb.RefreshToken{
-		Hash:        newHashed,
-		UserUUID:    token.UserUUID,
-		TokenFamily: token.TokenFamily,
-		ExpiresAt:   time.Now().Add(RefreshTokenExpiry),
-		Revoked:     false,
-	}
-
-	err = s.runInTx(ctx, func(ctx context.Context, tx bun.IDB) error {
 		if err := s.repo.SaveRefreshToken(ctx, tx, newRefreshToken); err != nil {
 			return fmt.Errorf("failed to save rotated token: %w", err)
 		}
-		if err := s.repo.RevokeRefreshToken(ctx, tx, hashedToken); err != nil {
-			return fmt.Errorf("failed to revoke old token: %w", err)
+
+		resp = &TicketResponse{
+			NATSToken:    natsToken,
+			RefreshToken: newToken,
+			SyncRequests: syncRequests,
 		}
 		return nil
 	})
-
 	if err != nil {
+		// Revoke all user sessions in a separate transaction so it is not rolled back with the failed ticket flow.
+		if errors.Is(err, ErrRevokedSession) && replayedUserUUID != uuid.Nil {
+			if revokeErr := s.revokeAllUserTokens(ctx, replayedUserUUID); revokeErr != nil {
+				s.logger.ErrorContext(ctx, "Failed to revoke all user tokens after replay detection",
+					attr.Error(revokeErr),
+					attr.String("user_uuid", replayedUserUUID.String()),
+				)
+			}
+		}
 		return nil, err
 	}
 
-	return &TicketResponse{
-		NATSToken:    natsToken,
-		RefreshToken: newToken,
-		SyncRequests: syncRequests,
-	}, nil
+	return resp, nil
+}
+
+func (s *service) revokeAllUserTokens(ctx context.Context, userUUID uuid.UUID) error {
+	return s.runInTx(ctx, func(ctx context.Context, tx bun.IDB) error {
+		return s.repo.RevokeAllUserTokens(ctx, tx, userUUID)
+	})
 }
 
 // LogoutUser revokes the refresh token.
@@ -302,20 +313,20 @@ func (s *service) LogoutUser(ctx context.Context, rawToken string) error {
 
 // backfillClubMemberships checks for legacy guild memberships and creates
 // corresponding club memberships if the user has none yet.
-func (s *service) backfillClubMemberships(ctx context.Context, userUUID uuid.UUID) []*userdb.ClubMembership {
-	user, err := s.repo.GetUserByUUID(ctx, nil, userUUID)
+func (s *service) backfillClubMemberships(ctx context.Context, db bun.IDB, userUUID uuid.UUID) []*userdb.ClubMembership {
+	user, err := s.repo.GetUserByUUID(ctx, db, userUUID)
 	if err != nil || user == nil || user.UserID == nil {
 		return nil
 	}
 
-	legacyMemberships, err := s.repo.GetUserMemberships(ctx, nil, *user.UserID)
+	legacyMemberships, err := s.repo.GetUserMemberships(ctx, db, *user.UserID)
 	if err != nil || len(legacyMemberships) == 0 {
 		return nil
 	}
 
 	s.logger.InfoContext(ctx, "Backfilling club memberships for user", attr.String("user_uuid", userUUID.String()))
 	for _, lm := range legacyMemberships {
-		clubUUID, err := s.repo.GetClubUUIDByDiscordGuildID(ctx, nil, lm.GuildID)
+		clubUUID, err := s.repo.GetClubUUIDByDiscordGuildID(ctx, db, lm.GuildID)
 		if err != nil {
 			continue
 		}
@@ -329,13 +340,13 @@ func (s *service) backfillClubMemberships(ctx context.Context, userUUID uuid.UUI
 			ExternalID:  &extID,
 			DisplayName: &emptyName,
 		}
-		if err := s.repo.UpsertClubMembership(ctx, nil, cm); err != nil {
+		if err := s.repo.UpsertClubMembership(ctx, db, cm); err != nil {
 			s.logger.WarnContext(ctx, "Failed to backfill club membership", attr.Error(err))
 		}
 	}
 
 	// Re-fetch memberships after backfill
-	memberships, _ := s.repo.GetClubMembershipsByUserUUID(ctx, nil, userUUID)
+	memberships, _ := s.repo.GetClubMembershipsByUserUUID(ctx, db, userUUID)
 	return memberships
 }
 

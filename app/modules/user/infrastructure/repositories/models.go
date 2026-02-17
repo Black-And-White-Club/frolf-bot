@@ -84,7 +84,7 @@ type RefreshToken struct {
 type MagicLink struct {
 	bun.BaseModel `bun:"table:magic_links,alias:ml"`
 
-	Token     string     `bun:"token,pk"`
+	TokenHash string     `bun:"token,pk"` // Stores SHA-256 hash of the raw one-time token.
 	UserUUID  uuid.UUID  `bun:"user_uuid,notnull"`
 	GuildID   string     `bun:"guild_id,notnull"`
 	Role      string     `bun:"role,notnull"`

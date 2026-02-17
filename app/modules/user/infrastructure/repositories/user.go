@@ -444,7 +444,7 @@ func (r *Impl) FindByUDiscUsername(ctx context.Context, db bun.IDB, guildID shar
 		ColumnExpr("gm.role").
 		ColumnExpr("gm.joined_at").
 		Join("JOIN guild_memberships AS gm ON u.user_id = gm.user_id").
-		Where("LOWER(TRIM(u.udisc_username)) IN (LOWER(?), LOWER(?))", username, targetWithAt).
+		Where("LOWER(u.udisc_username) IN (LOWER(?), LOWER(?))", strings.TrimSpace(username), strings.TrimSpace(targetWithAt)).
 		Where("gm.guild_id = ?", guildID).
 		Limit(1).
 		Scan(ctx, uwm)
@@ -470,7 +470,7 @@ func (r *Impl) FindGlobalByUDiscUsername(ctx context.Context, db bun.IDB, userna
 	user := &User{}
 	err := db.NewSelect().
 		Model(user).
-		Where("LOWER(TRIM(u.udisc_username)) IN (LOWER(?), LOWER(?))", username, targetWithAt).
+		Where("LOWER(u.udisc_username) IN (LOWER(?), LOWER(?))", strings.TrimSpace(username), strings.TrimSpace(targetWithAt)).
 		Limit(1).
 		Scan(ctx)
 	if err != nil {
@@ -480,6 +480,29 @@ func (r *Impl) FindGlobalByUDiscUsername(ctx context.Context, db bun.IDB, userna
 		return nil, fmt.Errorf("userdb.FindGlobalByUDiscUsername: %w", err)
 	}
 	return user, nil
+}
+
+func (r *Impl) GetGlobalUsersByUDiscUsernames(ctx context.Context, db bun.IDB, usernames []string) ([]*User, error) {
+	if db == nil {
+		db = r.db
+	}
+
+	normalizedUsernames := normalizeLookupValues(usernames)
+	if len(normalizedUsernames) == 0 {
+		return []*User{}, nil
+	}
+
+	var users []*User
+	err := db.NewSelect().
+		Model(&users).
+		Where("LOWER(u.udisc_username) IN (?)", bun.In(normalizedUsernames)).
+		OrderExpr("u.id ASC").
+		Scan(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("userdb.GetGlobalUsersByUDiscUsernames: %w", err)
+	}
+
+	return users, nil
 }
 
 func (r *Impl) FindByUDiscName(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, name string) (*UserWithMembership, error) {
@@ -493,7 +516,7 @@ func (r *Impl) FindByUDiscName(ctx context.Context, db bun.IDB, guildID sharedty
 		ColumnExpr("gm.role").
 		ColumnExpr("gm.joined_at").
 		Join("JOIN guild_memberships AS gm ON u.user_id = gm.user_id").
-		Where("LOWER(TRIM(u.udisc_name)) = LOWER(?)", name).
+		Where("LOWER(u.udisc_name) = LOWER(?)", strings.TrimSpace(name)).
 		Where("gm.guild_id = ?", guildID).
 		Limit(1).
 		Scan(ctx, uwm)
@@ -510,7 +533,8 @@ func (r *Impl) GetUsersByUDiscNames(ctx context.Context, db bun.IDB, guildID sha
 	if db == nil {
 		db = r.db
 	}
-	if len(names) == 0 {
+	normalizedNames := normalizeLookupValues(names)
+	if len(normalizedNames) == 0 {
 		return nil, nil
 	}
 	var results []UserWithMembership
@@ -520,8 +544,9 @@ func (r *Impl) GetUsersByUDiscNames(ctx context.Context, db bun.IDB, guildID sha
 		ColumnExpr("gm.role").
 		ColumnExpr("gm.joined_at").
 		Join("JOIN guild_memberships AS gm ON u.user_id = gm.user_id").
-		Where("LOWER(u.udisc_name) IN (?)", bun.In(names)).
+		Where("LOWER(u.udisc_name) IN (?)", bun.In(normalizedNames)).
 		Where("gm.guild_id = ?", guildID).
+		OrderExpr("u.id ASC").
 		Scan(ctx, &results)
 	if err != nil {
 		return nil, fmt.Errorf("userdb.GetUsersByUDiscNames: %w", err)
@@ -533,7 +558,8 @@ func (r *Impl) GetUsersByUDiscUsernames(ctx context.Context, db bun.IDB, guildID
 	if db == nil {
 		db = r.db
 	}
-	if len(usernames) == 0 {
+	normalizedUsernames := normalizeLookupValues(usernames)
+	if len(normalizedUsernames) == 0 {
 		return nil, nil
 	}
 	var results []UserWithMembership
@@ -543,13 +569,33 @@ func (r *Impl) GetUsersByUDiscUsernames(ctx context.Context, db bun.IDB, guildID
 		ColumnExpr("gm.role").
 		ColumnExpr("gm.joined_at").
 		Join("JOIN guild_memberships AS gm ON u.user_id = gm.user_id").
-		Where("LOWER(u.udisc_username) IN (?)", bun.In(usernames)).
+		Where("LOWER(u.udisc_username) IN (?)", bun.In(normalizedUsernames)).
 		Where("gm.guild_id = ?", guildID).
+		OrderExpr("u.id ASC").
 		Scan(ctx, &results)
 	if err != nil {
 		return nil, fmt.Errorf("userdb.GetUsersByUDiscUsernames: %w", err)
 	}
 	return results, nil
+}
+
+func normalizeLookupValues(values []string) []string {
+	normalized := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+
+	for _, value := range values {
+		candidate := strings.ToLower(strings.TrimSpace(value))
+		if candidate == "" {
+			continue
+		}
+		if _, exists := seen[candidate]; exists {
+			continue
+		}
+		seen[candidate] = struct{}{}
+		normalized = append(normalized, candidate)
+	}
+
+	return normalized
 }
 
 // Fuzzy search by partial username or name
@@ -643,6 +689,27 @@ func (r *Impl) GetRefreshToken(ctx context.Context, db bun.IDB, hash string) (*R
 	return token, nil
 }
 
+func (r *Impl) GetRefreshTokenForUpdate(ctx context.Context, db bun.IDB, hash string) (*RefreshToken, error) {
+	if db == nil {
+		db = r.db
+	}
+
+	token := &RefreshToken{}
+	err := db.NewSelect().
+		Model(token).
+		Where("hash = ?", hash).
+		For("UPDATE").
+		Scan(ctx)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("userdb.GetRefreshTokenForUpdate: %w", err)
+	}
+
+	return token, nil
+}
+
 func (r *Impl) RevokeRefreshToken(ctx context.Context, db bun.IDB, hash string) error {
 	if db == nil {
 		db = r.db
@@ -650,12 +717,38 @@ func (r *Impl) RevokeRefreshToken(ctx context.Context, db bun.IDB, hash string) 
 	_, err := db.NewUpdate().
 		Model((*RefreshToken)(nil)).
 		Set("revoked = ?", true).
-		Set("revoked_at = ?", time.Now()).
+		Set("revoked_at = ?", time.Now().UTC()).
 		Where("hash = ?", hash).
+		Where("revoked = ?", false).
 		Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("userdb.RevokeRefreshToken: %w", err)
 	}
+	return nil
+}
+
+func (r *Impl) RevokeRefreshTokenIfActive(ctx context.Context, db bun.IDB, hash string) error {
+	if db == nil {
+		db = r.db
+	}
+
+	now := time.Now().UTC()
+	res, err := db.NewUpdate().
+		Model((*RefreshToken)(nil)).
+		Set("revoked = ?", true).
+		Set("revoked_at = ?", now).
+		Where("hash = ?", hash).
+		Where("revoked = ?", false).
+		Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("userdb.RevokeRefreshTokenIfActive: %w", err)
+	}
+
+	rows, _ := res.RowsAffected()
+	if rows == 0 {
+		return ErrNoRowsAffected
+	}
+
 	return nil
 }
 
@@ -722,6 +815,8 @@ func (r *Impl) MarkMagicLinkUsed(ctx context.Context, db bun.IDB, token string) 
 		Set("used = ?", true).
 		Set("used_at = ?", now).
 		Where("token = ?", token).
+		Where("used = ?", false).
+		Where("expires_at > ?", now).
 		Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("userdb.MarkMagicLinkUsed: %w", err)
@@ -731,4 +826,29 @@ func (r *Impl) MarkMagicLinkUsed(ctx context.Context, db bun.IDB, token string) 
 		return ErrNoRowsAffected
 	}
 	return nil
+}
+
+func (r *Impl) ConsumeMagicLink(ctx context.Context, db bun.IDB, tokenHash string, now time.Time) (*MagicLink, error) {
+	if db == nil {
+		db = r.db
+	}
+
+	ml := &MagicLink{}
+	err := db.NewRaw(`
+		UPDATE magic_links
+		SET used = TRUE,
+		    used_at = ?
+		WHERE token = ?
+		  AND used = FALSE
+		  AND expires_at > ?
+		RETURNING token, user_uuid, guild_id, role, expires_at, created_at, used, used_at
+	`, now, tokenHash, now).Scan(ctx, ml)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNoRowsAffected
+		}
+		return nil, fmt.Errorf("userdb.ConsumeMagicLink: %w", err)
+	}
+
+	return ml, nil
 }

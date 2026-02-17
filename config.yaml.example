@@ -1,5 +1,14 @@
 postgres:
   dsn: "postgres://user:password@localhost:5432/frolf_bot?sslmode=disable"
+  max_open_conns: 25
+  max_idle_conns: 25
+  conn_max_lifetime: 5m
+
+round_queue:
+  pool_max_conns: 12
+  default_workers: 50
+  round_workers: 25
+  fetch_poll_interval: 0s
 
 nats:
   url: "nats://localhost:4222"
