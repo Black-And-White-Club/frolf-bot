@@ -137,13 +137,13 @@ func NewModule(
 			// Public routes — OAuth2 login
 			r.Get("/{provider}/login", handlers.HandleHTTPOAuthLogin)
 			r.Get("/{provider}/callback", handlers.HandleHTTPOAuthCallback)
+			r.Get("/{provider}/link", handlers.HandleHTTPOAuthLinkInitiate)
 
 			// Protected routes
 			r.Group(func(r chi.Router) {
 				r.Use(authhandlers.AuthMiddleware)
 				r.Post("/ticket", handlers.HandleHTTPTicket)
 				r.Post("/logout", handlers.HandleHTTPLogout)
-				r.Post("/{provider}/link", handlers.HandleHTTPOAuthLink)
 			})
 		})
 	}

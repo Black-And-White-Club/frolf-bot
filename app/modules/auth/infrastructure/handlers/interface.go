@@ -22,5 +22,5 @@ type Handlers interface {
 	// HTTP Handlers (OAuth2)
 	HandleHTTPOAuthLogin(w http.ResponseWriter, r *http.Request)
 	HandleHTTPOAuthCallback(w http.ResponseWriter, r *http.Request)
-	HandleHTTPOAuthLink(w http.ResponseWriter, r *http.Request)
+	HandleHTTPOAuthLinkInitiate(w http.ResponseWriter, r *http.Request)
 }
