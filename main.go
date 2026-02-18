@@ -10,6 +10,7 @@ import (
 	pprof "net/http/pprof"
 	"os"
 	"os/signal"
+	"regexp"
 	"strings"
 	"syscall"
 	"time"
@@ -89,6 +90,10 @@ func isLoopbackAddr(addr string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
+// validDBName matches safe PostgreSQL database names: start with letter or underscore,
+// followed by letters, digits, or underscores only.
+var validDBName = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+
 func main() {
 	// Optionally start pprof for profiling
 	startPprofIfEnabled()
@@ -101,9 +106,7 @@ func main() {
 
 	// Auto-run migrations only if explicitly enabled (for development)
 	if os.Getenv("AUTO_MIGRATE") == "true" {
-		fmt.Println("DEBUG: AUTO_MIGRATE=true, running migrations on startup...")
 		runMigrations()
-		fmt.Println("DEBUG: Migrations completed, starting main application...")
 	}
 
 	// Create initial context
@@ -111,39 +114,30 @@ func main() {
 	defer cancel()
 
 	// --- Configuration Loading ---
-	fmt.Println("DEBUG: Starting configuration loading...")
 	cfg, err := config.LoadConfig("config.yaml")
 	if err != nil {
 		fmt.Printf("Failed to load config: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("DEBUG: Config loaded successfully. NATS_URL: %s, TEMPO_ENDPOINT: %s\n", cfg.NATS.URL, cfg.Observability.TempoEndpoint)
 
 	// --- Observability Initialization ---
-	fmt.Println("DEBUG: Starting observability initialization...")
 	obsConfig := config.ToObsConfig(cfg)
 	obsConfig.Version = "1.0.0"
 
 	obs, err := observability.Init(ctx, obsConfig)
 	if err != nil {
-		fmt.Printf("DEBUG: Observability initialization failed: %v\n", err)
-		fmt.Printf("DEBUG: Config details - Tempo: %s, Loki: %s, Metrics: %s\n",
-			obsConfig.TempoEndpoint, obsConfig.LokiURL, obsConfig.MetricsAddress)
+		fmt.Printf("Failed to initialize observability: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Println("DEBUG: Observability initialized successfully")
 
 	logger := obs.Provider.Logger
-	fmt.Println("DEBUG: About to initialize application...")
 
 	// --- Application Initialization ---
 	application := &app.App{}
 	if err := application.Initialize(ctx, cfg, *obs); err != nil {
-		fmt.Printf("DEBUG: Application initialization failed: %v\n", err)
 		logger.Error("Failed to initialize application", attr.Error(err))
 		os.Exit(1)
 	}
-	fmt.Println("DEBUG: Application initialized successfully")
 	logger.Info("Application initialized successfully")
 
 	interrupt := make(chan os.Signal, 1)
@@ -151,7 +145,6 @@ func main() {
 	defer signal.Stop(interrupt)
 
 	// --- Run Application ---
-	fmt.Println("DEBUG: Starting application run loop...")
 	runErrCh := make(chan error, 1)
 	reportRunError := func(err error) {
 		select {
@@ -163,26 +156,21 @@ func main() {
 		defer close(runErrCh)
 		defer func() {
 			if r := recover(); r != nil {
-				fmt.Printf("DEBUG: Application panicked: %v\n", r)
 				reportRunError(fmt.Errorf("application panicked: %v", r))
 			}
 		}()
 
 		logger.Info("Starting application run loop")
 		if err := application.Run(ctx); err != nil && err != context.Canceled {
-			fmt.Printf("DEBUG: Application run failed: %v\n", err)
 			reportRunError(fmt.Errorf("application run failed: %w", err))
 		} else if err == context.Canceled {
-			fmt.Println("DEBUG: Application run stopped due to context cancellation")
 			logger.Info("Application run stopped due to context cancellation")
 		} else {
-			fmt.Println("DEBUG: Application run loop finished normally (this should not happen unless context cancelled)")
 			logger.Info("Application run loop finished")
 		}
 	}()
 
 	logger.Info("Application is running. Press Ctrl+C to gracefully shut down.")
-	fmt.Println("DEBUG: Application startup complete, waiting for shutdown signal...")
 
 	exitCode := 0
 	shutdownReason := "context canceled"
@@ -190,7 +178,6 @@ func main() {
 	select {
 	case sig := <-interrupt:
 		shutdownReason = fmt.Sprintf("signal: %s", sig.String())
-		fmt.Printf("DEBUG: Received signal: %s\n", sig.String())
 		logger.Info("Received signal", attr.String("signal", sig.String()))
 		cancel()
 	case err, ok := <-runErrCh:
@@ -205,7 +192,6 @@ func main() {
 	}
 
 	logger.Info("Initiating graceful shutdown", attr.String("reason", shutdownReason))
-	fmt.Printf("DEBUG: Initiating graceful shutdown (%s)\n", shutdownReason)
 
 	// Wait for run loop to stop after cancellation.
 	select {
@@ -371,6 +357,11 @@ func ensureDatabaseExists(dsn string) {
 
 	dbNameWithArgs := parts[len(parts)-1]
 	dbName := strings.Split(dbNameWithArgs, "?")[0]
+
+	if !validDBName.MatchString(dbName) {
+		fmt.Printf("ensureDatabaseExists: unsafe database name %q, skipping\n", dbName)
+		return
+	}
 
 	// Replace dbname with "postgres" for the initial connection
 	postgresDSN := strings.Replace(dsn, "/"+dbName, "/postgres", 1)

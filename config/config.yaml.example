@@ -1,0 +1,53 @@
+postgres:
+  dsn: "postgres://user:password@localhost:5432/frolf_bot?sslmode=disable"
+  max_open_conns: 25
+  max_idle_conns: 25
+  conn_max_lifetime: 5m
+
+round_queue:
+  pool_max_conns: 12
+  default_workers: 50
+  round_workers: 25
+  fetch_poll_interval: 0s
+
+nats:
+  url: "nats://localhost:4222"
+
+jwt:
+  secret: ""        # Must be >= 32 chars; set via JWT_SECRET env var in production
+  default_ttl: 24h
+  issuer: "frolf-bot"
+  audience: "pwa"
+
+pwa:
+  base_url: "https://pwa.frolfbot.com"
+
+auth_callout:
+  enabled: false
+  subject: "$SYS.REQ.USER.AUTH"
+  # Account seed (SAA...) — used to sign user JWTs in centralized auth callout.
+  # Override via AUTH_CALLOUT_ISSUER_NKEY env var in production.
+  issuer_nkey: ""
+  signing_nkey: ""  # Unused in centralized mode
+
+# Discord OAuth2 application credentials.
+# Create an application at https://discord.com/developers/applications
+# Leave client_id/client_secret empty to disable Discord OAuth login.
+discord_oauth:
+  client_id: ""       # DISCORD_OAUTH_CLIENT_ID env var
+  client_secret: ""   # DISCORD_OAUTH_CLIENT_SECRET env var
+  redirect_url: "https://api.frolfbot.com/api/auth/discord/callback"
+
+observability:
+  loki_url: ""
+  loki_tenant_id: ""
+  metrics_address: ""
+  tempo_endpoint: ""
+  tempo_insecure: false
+  tempo_sample_rate: 0.1
+  environment: "development"
+
+http:
+  port: "8080"
+  allowed_origins:
+    - "https://pwa.frolfbot.com"

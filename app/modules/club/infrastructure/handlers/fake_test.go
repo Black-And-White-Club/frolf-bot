@@ -17,6 +17,13 @@ type FakeClubService struct {
 
 	GetClubFunc               func(ctx context.Context, clubUUID uuid.UUID) (*clubtypes.ClubInfo, error)
 	UpsertClubFromDiscordFunc func(ctx context.Context, guildID, name string, iconURL *string) (*clubtypes.ClubInfo, error)
+	GetClubSuggestionsFunc    func(ctx context.Context, userUUID uuid.UUID) ([]clubservice.ClubSuggestion, error)
+	JoinClubFunc              func(ctx context.Context, userUUID, clubUUID uuid.UUID) error
+	CreateInviteFunc          func(ctx context.Context, callerUUID, clubUUID uuid.UUID, req clubservice.CreateInviteRequest) (*clubservice.InviteInfo, error)
+	ListInvitesFunc           func(ctx context.Context, callerUUID, clubUUID uuid.UUID) ([]*clubservice.InviteInfo, error)
+	RevokeInviteFunc          func(ctx context.Context, callerUUID, clubUUID uuid.UUID, code string) error
+	GetInvitePreviewFunc      func(ctx context.Context, code string) (*clubservice.InvitePreview, error)
+	JoinByCodeFunc            func(ctx context.Context, userUUID uuid.UUID, code string) error
 }
 
 func NewFakeClubService() *FakeClubService {
@@ -45,6 +52,62 @@ func (f *FakeClubService) UpsertClubFromDiscord(ctx context.Context, guildID, na
 		return f.UpsertClubFromDiscordFunc(ctx, guildID, name, iconURL)
 	}
 	return nil, nil
+}
+
+func (f *FakeClubService) GetClubSuggestions(ctx context.Context, userUUID uuid.UUID) ([]clubservice.ClubSuggestion, error) {
+	f.record("GetClubSuggestions")
+	if f.GetClubSuggestionsFunc != nil {
+		return f.GetClubSuggestionsFunc(ctx, userUUID)
+	}
+	return nil, nil
+}
+
+func (f *FakeClubService) JoinClub(ctx context.Context, userUUID, clubUUID uuid.UUID) error {
+	f.record("JoinClub")
+	if f.JoinClubFunc != nil {
+		return f.JoinClubFunc(ctx, userUUID, clubUUID)
+	}
+	return nil
+}
+
+func (f *FakeClubService) CreateInvite(ctx context.Context, callerUUID, clubUUID uuid.UUID, req clubservice.CreateInviteRequest) (*clubservice.InviteInfo, error) {
+	f.record("CreateInvite")
+	if f.CreateInviteFunc != nil {
+		return f.CreateInviteFunc(ctx, callerUUID, clubUUID, req)
+	}
+	return nil, nil
+}
+
+func (f *FakeClubService) ListInvites(ctx context.Context, callerUUID, clubUUID uuid.UUID) ([]*clubservice.InviteInfo, error) {
+	f.record("ListInvites")
+	if f.ListInvitesFunc != nil {
+		return f.ListInvitesFunc(ctx, callerUUID, clubUUID)
+	}
+	return nil, nil
+}
+
+func (f *FakeClubService) RevokeInvite(ctx context.Context, callerUUID, clubUUID uuid.UUID, code string) error {
+	f.record("RevokeInvite")
+	if f.RevokeInviteFunc != nil {
+		return f.RevokeInviteFunc(ctx, callerUUID, clubUUID, code)
+	}
+	return nil
+}
+
+func (f *FakeClubService) GetInvitePreview(ctx context.Context, code string) (*clubservice.InvitePreview, error) {
+	f.record("GetInvitePreview")
+	if f.GetInvitePreviewFunc != nil {
+		return f.GetInvitePreviewFunc(ctx, code)
+	}
+	return nil, nil
+}
+
+func (f *FakeClubService) JoinByCode(ctx context.Context, userUUID uuid.UUID, code string) error {
+	f.record("JoinByCode")
+	if f.JoinByCodeFunc != nil {
+		return f.JoinByCodeFunc(ctx, userUUID, code)
+	}
+	return nil
 }
 
 // --- Accessors for assertions ---

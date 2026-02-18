@@ -13,7 +13,9 @@ import (
 	clubhandlers "github.com/Black-And-White-Club/frolf-bot/app/modules/club/infrastructure/handlers"
 	clubdb "github.com/Black-And-White-Club/frolf-bot/app/modules/club/infrastructure/repositories"
 	clubrouter "github.com/Black-And-White-Club/frolf-bot/app/modules/club/infrastructure/router"
+	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/go-chi/chi/v5"
 	"github.com/uptrace/bun"
 )
 
@@ -34,6 +36,8 @@ func NewClubModule(
 	helpers utils.Helpers,
 	routerCtx context.Context,
 	db *bun.DB,
+	httpRouter chi.Router,
+	userRepo userdb.Repository,
 ) (*Module, error) {
 	logger := obs.Provider.Logger
 	tracer := obs.Registry.Tracer
@@ -46,13 +50,13 @@ func NewClubModule(
 	// 2. Initialize Metrics (noop for now, real metrics wired via observability registry)
 	metrics := clubmetrics.NewNoop()
 
-	// 3. Initialize Service
-	service := clubservice.NewClubService(repo, logger, metrics, tracer, db)
+	// 3. Initialize Service (now includes userRepo for cross-module queries)
+	service := clubservice.NewClubService(repo, userRepo, logger, metrics, tracer, db)
 
-	// 3. Initialize Handlers
+	// 4. Initialize NATS event Handlers
 	handlers := clubhandlers.NewClubHandlers(service, logger, tracer)
 
-	// 4. Initialize Router
+	// 5. Initialize NATS Router
 	clubRouter := clubrouter.NewClubRouter(
 		logger,
 		router,
@@ -62,9 +66,28 @@ func NewClubModule(
 		tracer,
 	)
 
-	// 5. Configure the router with handlers
+	// 6. Configure the NATS router with handlers
 	if err := clubRouter.Configure(routerCtx, handlers); err != nil {
 		return nil, fmt.Errorf("failed to configure club router: %w", err)
+	}
+
+	// 7. Register HTTP routes for club discovery and invite management
+	if httpRouter != nil {
+		httpHandlers := clubhandlers.NewHTTPHandlers(service, userRepo, logger, tracer)
+		httpRouter.Route("/api/clubs", func(r chi.Router) {
+			// Public endpoints (no auth required)
+			r.Get("/preview", httpHandlers.HandleGetInvitePreview)
+
+			// Protected endpoints (auth middleware applied per-handler via cookie lookup)
+			r.Get("/suggestions", httpHandlers.HandleGetSuggestions)
+			r.Post("/join", httpHandlers.HandleJoinClub)
+			r.Post("/join-by-code", httpHandlers.HandleJoinByCode)
+			r.Route("/{uuid}", func(r chi.Router) {
+				r.Get("/invites", httpHandlers.HandleListInvites)
+				r.Post("/invites", httpHandlers.HandleCreateInvite)
+				r.Delete("/invites/{code}", httpHandlers.HandleRevokeInvite)
+			})
+		})
 	}
 
 	return &Module{

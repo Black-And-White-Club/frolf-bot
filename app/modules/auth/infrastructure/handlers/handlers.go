@@ -11,12 +11,14 @@ import (
 
 // AuthHandlers implements the Handlers interface for auth events.
 type AuthHandlers struct {
-	service       authservice.Service
-	eventBus      eventbus.EventBus
-	helper        utils.Helpers
-	logger        *slog.Logger
-	tracer        trace.Tracer
-	secureCookies bool
+	service         authservice.Service
+	eventBus        eventbus.EventBus
+	helper          utils.Helpers
+	logger          *slog.Logger
+	tracer          trace.Tracer
+	secureCookies   bool
+	pwaBaseURL      string
+	serverPublicKey string // NATS server public NKey for JWT signature verification
 }
 
 // NewAuthHandlers creates a new AuthHandlers instance.
@@ -27,13 +29,17 @@ func NewAuthHandlers(
 	logger *slog.Logger,
 	tracer trace.Tracer,
 	secureCookies bool,
+	pwaBaseURL string,
+	serverPublicKey string,
 ) Handlers {
 	return &AuthHandlers{
-		service:       service,
-		eventBus:      eventBus,
-		helper:        helper,
-		logger:        logger,
-		tracer:        tracer,
-		secureCookies: secureCookies,
+		service:         service,
+		eventBus:        eventBus,
+		helper:          helper,
+		logger:          logger,
+		tracer:          tracer,
+		secureCookies:   secureCookies,
+		pwaBaseURL:      pwaBaseURL,
+		serverPublicKey: serverPublicKey,
 	}
 }

@@ -3,7 +3,9 @@ package app
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
+	"net/netip"
 	"strings"
 	"sync"
 	"time"
@@ -70,7 +72,7 @@ func (app *App) Initialize(ctx context.Context, cfg *config.Config, obs observab
 	app.HTTPRouter = chi.NewRouter()
 	app.HTTPRouter.Use(chi_middleware.Logger)
 	app.HTTPRouter.Use(chi_middleware.Recoverer)
-	app.HTTPRouter.Use(chi_middleware.RealIP)
+	app.HTTPRouter.Use(TrustedRealIPMiddleware(parseTrustedProxyCIDRs(cfg.HTTP.TrustedProxyCIDRs)))
 	app.HTTPRouter.Use(SecurityHeaders)
 
 	app.registerHealthEndpoints()
@@ -201,7 +203,7 @@ func (app *App) initializeModules(ctx context.Context, routerRunCtx context.Cont
 		app.Observability.Provider.Logger.Error("Failed to initialize score module", attr.Error(err))
 		return fmt.Errorf("failed to initialize score module: %w", err)
 	}
-	if app.ClubModule, err = club.NewClubModule(ctx, app.Observability, app.EventBus, app.Router, app.Helpers, routerRunCtx, app.DB.GetDB()); err != nil {
+	if app.ClubModule, err = club.NewClubModule(ctx, app.Observability, app.EventBus, app.Router, app.Helpers, routerRunCtx, app.DB.GetDB(), app.HTTPRouter, app.DB.UserDB); err != nil {
 		app.Observability.Provider.Logger.Error("Failed to initialize club module", attr.Error(err))
 		return fmt.Errorf("failed to initialize club module: %w", err)
 	}
@@ -359,6 +361,55 @@ func (app *App) close() error {
 	}
 
 	return nil
+}
+
+// parseTrustedProxyCIDRs parses a slice of CIDR strings into netip.Prefix values,
+// silently skipping any that fail to parse.
+func parseTrustedProxyCIDRs(cidrs []string) []netip.Prefix {
+	prefixes := make([]netip.Prefix, 0, len(cidrs))
+	for _, cidr := range cidrs {
+		p, err := netip.ParsePrefix(cidr)
+		if err == nil {
+			prefixes = append(prefixes, p.Masked())
+		} else {
+			fmt.Printf("warning: skipping invalid trusted proxy CIDR %q: %v\n", cidr, err)
+		}
+	}
+	return prefixes
+}
+
+// TrustedRealIPMiddleware sets r.RemoteAddr from X-Real-IP or X-Forwarded-For
+// only when the actual TCP peer address falls within a trusted proxy CIDR.
+// This prevents clients from spoofing their IP via proxy headers.
+func TrustedRealIPMiddleware(trustedCIDRs []netip.Prefix) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			peerHost, _, err := net.SplitHostPort(r.RemoteAddr)
+			if err != nil {
+				peerHost = r.RemoteAddr
+			}
+			peerAddr, err := netip.ParseAddr(peerHost)
+			if err == nil && isInTrustedCIDRs(peerAddr, trustedCIDRs) {
+				if xrip := strings.TrimSpace(r.Header.Get("X-Real-IP")); xrip != "" {
+					r.RemoteAddr = net.JoinHostPort(xrip, "0")
+				} else if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+					if ip := strings.TrimSpace(strings.SplitN(xff, ",", 2)[0]); ip != "" {
+						r.RemoteAddr = net.JoinHostPort(ip, "0")
+					}
+				}
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func isInTrustedCIDRs(addr netip.Addr, prefixes []netip.Prefix) bool {
+	for _, p := range prefixes {
+		if p.Contains(addr) {
+			return true
+		}
+	}
+	return false
 }
 
 // SecurityHeaders adds standard security headers to the response.

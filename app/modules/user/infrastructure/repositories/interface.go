@@ -64,6 +64,13 @@ type Repository interface {
 	RevokeRefreshTokenIfActive(ctx context.Context, db bun.IDB, hash string) error
 	RevokeAllUserTokens(ctx context.Context, db bun.IDB, userUUID uuid.UUID) error
 
+	// Linked Identity operations (platform-agnostic identity)
+	FindUserByLinkedIdentity(ctx context.Context, db bun.IDB, provider, providerID string) (uuid.UUID, error)
+	CreateUserWithLinkedIdentity(ctx context.Context, db bun.IDB, provider, providerID, displayName string) (uuid.UUID, error)
+	InsertLinkedIdentity(ctx context.Context, db bun.IDB, userUUID uuid.UUID, provider, providerID, displayName string) error
+	GetLinkedIdentityByProvider(ctx context.Context, db bun.IDB, userUUID uuid.UUID, provider string) (*LinkedIdentity, error)
+	UpdateLinkedIdentityToken(ctx context.Context, db bun.IDB, provider, providerID, accessToken string, expiresAt *time.Time) error
+
 	// Magic Link operations
 	SaveMagicLink(ctx context.Context, db bun.IDB, link *MagicLink) error
 	GetMagicLink(ctx context.Context, db bun.IDB, token string) (*MagicLink, error)

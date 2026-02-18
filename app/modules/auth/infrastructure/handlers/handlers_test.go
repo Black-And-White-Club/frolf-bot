@@ -99,7 +99,7 @@ func TestAuthHandlers_HandleMagicLinkRequest(t *testing.T) {
 				return nil
 			}
 
-			h := NewAuthHandlers(fakeService, fakeEventBus, fakeHelpers, logger, tracer, false)
+			h := NewAuthHandlers(fakeService, fakeEventBus, fakeHelpers, logger, tracer, false, "", "")
 
 			data, _ := json.Marshal(tt.reqPayload)
 			msg := &nats.Msg{Data: data}
@@ -157,7 +157,7 @@ func TestAuthHandlers_HandleNATSAuthCallout(t *testing.T) {
 				tt.setupService(fakeService)
 			}
 
-			h := NewAuthHandlers(fakeService, &FakeEventBus{}, &FakeHelpers{}, logger, tracer, false)
+			h := NewAuthHandlers(fakeService, &FakeEventBus{}, &FakeHelpers{}, logger, tracer, false, "", "")
 			msg := &nats.Msg{Data: tt.reqData}
 			h.HandleNATSAuthCallout(msg)
 

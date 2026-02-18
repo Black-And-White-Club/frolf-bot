@@ -14,6 +14,9 @@ import (
 	authhandlers "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/handlers"
 	authjwt "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/jwt"
 	authnats "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/nats"
+	authoauth "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/oauth"
+	discordoauth "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/oauth/discord"
+	googleoauth "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/oauth/google"
 	authrouter "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/router"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/Black-And-White-Club/frolf-bot/config"
@@ -73,6 +76,27 @@ func NewModule(
 		DefaultTTL: cfg.JWT.DefaultTTL,
 	}
 
+	// Build OAuth2 provider registry.
+	oauthRegistry := authoauth.NewRegistry()
+	if cfg.DiscordOAuth.ClientID != "" && cfg.DiscordOAuth.ClientSecret != "" {
+		discordProvider := discordoauth.NewProvider(discordoauth.Config{
+			ClientID:     cfg.DiscordOAuth.ClientID,
+			ClientSecret: cfg.DiscordOAuth.ClientSecret,
+			RedirectURL:  cfg.DiscordOAuth.RedirectURL,
+		})
+		oauthRegistry.Register(discordProvider)
+		logger.InfoContext(ctx, "Registered Discord OAuth2 provider")
+	}
+	if cfg.GoogleOAuth.ClientID != "" && cfg.GoogleOAuth.ClientSecret != "" {
+		googleProvider := googleoauth.NewProvider(googleoauth.Config{
+			ClientID:     cfg.GoogleOAuth.ClientID,
+			ClientSecret: cfg.GoogleOAuth.ClientSecret,
+			RedirectURL:  cfg.GoogleOAuth.RedirectURL,
+		})
+		oauthRegistry.Register(googleProvider)
+		logger.InfoContext(ctx, "Registered Google OAuth2 provider")
+	}
+
 	// Create service
 	service := authservice.NewService(
 		jwtProvider,
@@ -82,6 +106,7 @@ func NewModule(
 		logger,
 		tracer,
 		db,
+		oauthRegistry,
 	)
 
 	// Use secure cookies unless in development or using localhost
@@ -91,7 +116,10 @@ func NewModule(
 	}
 
 	// Create handlers
-	handlers := authhandlers.NewAuthHandlers(service, eventBus, helper, logger, tracer, secureCookies)
+	if cfg.AuthCallout.ServerPublicKey == "" && cfg.AuthCallout.Enabled {
+		logger.WarnContext(ctx, "AUTH_CALLOUT_SERVER_PUBLIC_KEY is not set; JWT signature verification disabled")
+	}
+	handlers := authhandlers.NewAuthHandlers(service, eventBus, helper, logger, tracer, secureCookies, cfg.PWA.BaseURL, cfg.AuthCallout.ServerPublicKey)
 
 	// Create router
 	router := authrouter.NewRouter(handlers, nc)
@@ -103,14 +131,19 @@ func NewModule(
 			r.Use(authhandlers.CORSMiddleware(cfg.HTTP.AllowedOrigins))
 			r.Use(authhandlers.RateLimitMiddleware(limiter))
 
-			// Public routes
+			// Public routes — magic link
 			r.Post("/callback", handlers.HandleHTTPLogin)
+
+			// Public routes — OAuth2 login
+			r.Get("/{provider}/login", handlers.HandleHTTPOAuthLogin)
+			r.Get("/{provider}/callback", handlers.HandleHTTPOAuthCallback)
 
 			// Protected routes
 			r.Group(func(r chi.Router) {
 				r.Use(authhandlers.AuthMiddleware)
 				r.Post("/ticket", handlers.HandleHTTPTicket)
 				r.Post("/logout", handlers.HandleHTTPLogout)
+				r.Post("/{provider}/link", handlers.HandleHTTPOAuthLink)
 			})
 		})
 	}

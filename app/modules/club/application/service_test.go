@@ -70,6 +70,7 @@ func TestGetClub(t *testing.T) {
 
 			svc := NewClubService(
 				fakeRepo,
+				nil,
 				slog.Default(),
 				clubmetrics.NewNoop(),
 				nil,
@@ -161,6 +162,7 @@ func TestUpsertClubFromDiscord(t *testing.T) {
 
 			svc := NewClubService(
 				fakeRepo,
+				nil,
 				slog.Default(),
 				clubmetrics.NewNoop(),
 				nil,

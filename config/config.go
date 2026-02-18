@@ -20,13 +20,16 @@ type Config struct {
 	JWT           JWTConfig           `yaml:"jwt"`
 	PWA           PWAConfig           `yaml:"pwa"`
 	AuthCallout   AuthCalloutConfig   `yaml:"auth_callout"`
+	DiscordOAuth  DiscordOAuthConfig  `yaml:"discord_oauth"`
+	GoogleOAuth   GoogleOAuthConfig   `yaml:"google_oauth"`
 	Observability ObservabilityConfig `yaml:"observability"`
 	HTTP          HTTPConfig          `yaml:"http"`
 }
 
 type HTTPConfig struct {
-	Port           string   `yaml:"port" env:"HTTP_PORT"`
-	AllowedOrigins []string `yaml:"allowed_origins" env:"CORS_ALLOWED_ORIGINS"`
+	Port               string   `yaml:"port" env:"HTTP_PORT"`
+	AllowedOrigins     []string `yaml:"allowed_origins" env:"CORS_ALLOWED_ORIGINS"`
+	TrustedProxyCIDRs  []string `yaml:"trusted_proxy_cidrs" env:"TRUSTED_PROXY_CIDRS"`
 }
 
 // PostgresConfig holds Postgres configuration.
@@ -85,12 +88,29 @@ type PWAConfig struct {
 	BaseURL string `yaml:"base_url" env:"PWA_BASE_URL"`
 }
 
+// DiscordOAuthConfig holds Discord OAuth2 application credentials.
+// Leave ClientID/ClientSecret empty to disable Discord OAuth login.
+type DiscordOAuthConfig struct {
+	ClientID     string `yaml:"client_id"     env:"DISCORD_OAUTH_CLIENT_ID"`
+	ClientSecret string `yaml:"client_secret" env:"DISCORD_OAUTH_CLIENT_SECRET"`
+	RedirectURL  string `yaml:"redirect_url"  env:"DISCORD_OAUTH_REDIRECT_URL"`
+}
+
+// GoogleOAuthConfig holds Google OAuth2 application credentials.
+// Leave ClientID/ClientSecret empty to disable Google OAuth login.
+type GoogleOAuthConfig struct {
+	ClientID     string `yaml:"client_id"     env:"GOOGLE_OAUTH_CLIENT_ID"`
+	ClientSecret string `yaml:"client_secret" env:"GOOGLE_OAUTH_CLIENT_SECRET"`
+	RedirectURL  string `yaml:"redirect_url"  env:"GOOGLE_OAUTH_REDIRECT_URL"`
+}
+
 // AuthCalloutConfig holds NATS auth callout configuration.
 type AuthCalloutConfig struct {
-	Enabled     bool   `yaml:"enabled" env:"AUTH_CALLOUT_ENABLED"`
-	Subject     string `yaml:"subject" env:"AUTH_CALLOUT_SUBJECT"`
-	IssuerNKey  string `yaml:"issuer_nkey" env:"AUTH_CALLOUT_ISSUER_NKEY"`
-	SigningNKey string `yaml:"signing_nkey" env:"AUTH_CALLOUT_SIGNING_NKEY"`
+	Enabled         bool   `yaml:"enabled" env:"AUTH_CALLOUT_ENABLED"`
+	Subject         string `yaml:"subject" env:"AUTH_CALLOUT_SUBJECT"`
+	IssuerNKey      string `yaml:"issuer_nkey" env:"AUTH_CALLOUT_ISSUER_NKEY"`
+	SigningNKey      string `yaml:"signing_nkey" env:"AUTH_CALLOUT_SIGNING_NKEY"`
+	ServerPublicKey string `yaml:"server_public_key" env:"AUTH_CALLOUT_SERVER_PUBLIC_KEY"` // NATS server's public NKey (e.g. "NA...")
 }
 
 // ObservabilityConfig holds configuration for observability components
@@ -232,10 +252,34 @@ func LoadConfig(filename string) (*Config, error) {
 	if v := os.Getenv("AUTH_CALLOUT_SIGNING_NKEY"); v != "" {
 		cfg.AuthCallout.SigningNKey = v
 	}
+	if v := os.Getenv("AUTH_CALLOUT_SERVER_PUBLIC_KEY"); v != "" {
+		cfg.AuthCallout.ServerPublicKey = v
+	}
+	if v := os.Getenv("DISCORD_OAUTH_CLIENT_ID"); v != "" {
+		cfg.DiscordOAuth.ClientID = v
+	}
+	if v := os.Getenv("DISCORD_OAUTH_CLIENT_SECRET"); v != "" {
+		cfg.DiscordOAuth.ClientSecret = v
+	}
+	if v := os.Getenv("DISCORD_OAUTH_REDIRECT_URL"); v != "" {
+		cfg.DiscordOAuth.RedirectURL = v
+	}
+	if v := os.Getenv("GOOGLE_OAUTH_CLIENT_ID"); v != "" {
+		cfg.GoogleOAuth.ClientID = v
+	}
+	if v := os.Getenv("GOOGLE_OAUTH_CLIENT_SECRET"); v != "" {
+		cfg.GoogleOAuth.ClientSecret = v
+	}
+	if v := os.Getenv("GOOGLE_OAUTH_REDIRECT_URL"); v != "" {
+		cfg.GoogleOAuth.RedirectURL = v
+	}
 	if v := os.Getenv("CORS_ALLOWED_ORIGINS"); v != "" {
 		cfg.HTTP.AllowedOrigins = strings.Split(v, ",")
 	} else if len(cfg.HTTP.AllowedOrigins) == 0 && cfg.PWA.BaseURL != "" {
 		cfg.HTTP.AllowedOrigins = []string{cfg.PWA.BaseURL}
+	}
+	if v := os.Getenv("TRUSTED_PROXY_CIDRS"); v != "" {
+		cfg.HTTP.TrustedProxyCIDRs = strings.Split(v, ",")
 	}
 
 	applyDefaults(&cfg)
@@ -375,10 +419,22 @@ func loadConfigFromEnv() (*Config, error) {
 	}
 	cfg.AuthCallout.IssuerNKey = os.Getenv("AUTH_CALLOUT_ISSUER_NKEY")
 	cfg.AuthCallout.SigningNKey = os.Getenv("AUTH_CALLOUT_SIGNING_NKEY")
+	cfg.AuthCallout.ServerPublicKey = os.Getenv("AUTH_CALLOUT_SERVER_PUBLIC_KEY")
+
+	cfg.DiscordOAuth.ClientID = os.Getenv("DISCORD_OAUTH_CLIENT_ID")
+	cfg.DiscordOAuth.ClientSecret = os.Getenv("DISCORD_OAUTH_CLIENT_SECRET")
+	cfg.DiscordOAuth.RedirectURL = os.Getenv("DISCORD_OAUTH_REDIRECT_URL")
+
+	cfg.GoogleOAuth.ClientID = os.Getenv("GOOGLE_OAUTH_CLIENT_ID")
+	cfg.GoogleOAuth.ClientSecret = os.Getenv("GOOGLE_OAUTH_CLIENT_SECRET")
+	cfg.GoogleOAuth.RedirectURL = os.Getenv("GOOGLE_OAUTH_REDIRECT_URL")
 
 	cfg.HTTP.Port = os.Getenv("HTTP_PORT")
 	if v := os.Getenv("CORS_ALLOWED_ORIGINS"); v != "" {
 		cfg.HTTP.AllowedOrigins = strings.Split(v, ",")
+	}
+	if v := os.Getenv("TRUSTED_PROXY_CIDRS"); v != "" {
+		cfg.HTTP.TrustedProxyCIDRs = strings.Split(v, ",")
 	}
 
 	applyDefaults(&cfg)
@@ -390,7 +446,17 @@ func loadConfigFromEnv() (*Config, error) {
 	return &cfg, nil
 }
 
+var defaultTrustedProxyCIDRs = []string{
+	"127.0.0.1/32",
+	"10.0.0.0/8",
+	"172.16.0.0/12",
+	"192.168.0.0/16",
+}
+
 func applyDefaults(cfg *Config) {
+	if len(cfg.HTTP.TrustedProxyCIDRs) == 0 {
+		cfg.HTTP.TrustedProxyCIDRs = defaultTrustedProxyCIDRs
+	}
 	if cfg.Postgres.MaxOpenConns <= 0 {
 		cfg.Postgres.MaxOpenConns = defaultPostgresMaxOpenConns
 	}

@@ -28,7 +28,7 @@ func (h *AuthHandlers) HandleHTTPLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := readMagicLinkToken(r)
+	token, err := readMagicLinkToken(w, r)
 	if token == "" {
 		h.httpError(w, r, "missing token", http.StatusBadRequest, err)
 		return
@@ -60,10 +60,12 @@ type loginRequest struct {
 	Token string `json:"token"`
 }
 
-func readMagicLinkToken(r *http.Request) (string, error) {
+func readMagicLinkToken(w http.ResponseWriter, r *http.Request) (string, error) {
 	if token := strings.TrimSpace(r.Header.Get("X-Magic-Link-Token")); token != "" {
 		return token, nil
 	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 4096)
 
 	contentType := strings.ToLower(r.Header.Get("Content-Type"))
 	if strings.Contains(contentType, "application/json") {
@@ -103,7 +105,7 @@ func (h *AuthHandlers) HandleHTTPTicket(w http.ResponseWriter, r *http.Request) 
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   h.secureCookies,
-		SameSite: http.SameSiteStrictMode,
+		SameSite: http.SameSiteLaxMode,
 		Expires:  time.Now().Add(authservice.RefreshTokenExpiry),
 	})
 
@@ -127,7 +129,7 @@ func (h *AuthHandlers) HandleHTTPLogout(w http.ResponseWriter, r *http.Request) 
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   h.secureCookies,
-		SameSite: http.SameSiteStrictMode,
+		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
 	})
 

@@ -25,6 +25,22 @@ type Service interface {
 
 	// LogoutUser revokes a refresh token.
 	LogoutUser(ctx context.Context, refreshToken string) error
+
+	// InitiateOAuthLogin generates the provider redirect URL and CSRF state token.
+	InitiateOAuthLogin(ctx context.Context, provider string) (redirectURL, state string, err error)
+
+	// HandleOAuthCallback exchanges the authorization code and creates or logs in the user.
+	HandleOAuthCallback(ctx context.Context, provider, code, state string) (*LoginResponse, error)
+
+	// LinkIdentityToUser links an additional OAuth provider to an existing account.
+	// rawRefreshToken must belong to the authenticated user.
+	LinkIdentityToUser(ctx context.Context, rawRefreshToken, provider, code, state string) error
+}
+
+// OAuthCallbackState holds the state parameter used for CSRF validation in the OAuth flow.
+// It is stored in a short-lived HttpOnly cookie on the client during the flow.
+type OAuthCallbackState struct {
+	State string
 }
 
 type LoginResponse struct {

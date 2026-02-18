@@ -16,12 +16,15 @@ import (
 // ------------------------
 
 type FakeService struct {
-	GenerateMagicLinkFunc     func(ctx context.Context, userID, guildID string, role authdomain.Role) (*authservice.MagicLinkResponse, error)
-	ValidateTokenFunc         func(ctx context.Context, tokenString string) (*authdomain.Claims, error)
-	HandleNATSAuthRequestFunc func(ctx context.Context, req *authservice.NATSAuthRequest) (*authservice.NATSAuthResponse, error)
-	LoginUserFunc             func(ctx context.Context, oneTimeToken string) (*authservice.LoginResponse, error)
-	GetTicketFunc             func(ctx context.Context, refreshToken string, activeClubUUID string) (*authservice.TicketResponse, error)
-	LogoutUserFunc            func(ctx context.Context, refreshToken string) error
+	GenerateMagicLinkFunc      func(ctx context.Context, userID, guildID string, role authdomain.Role) (*authservice.MagicLinkResponse, error)
+	ValidateTokenFunc          func(ctx context.Context, tokenString string) (*authdomain.Claims, error)
+	HandleNATSAuthRequestFunc  func(ctx context.Context, req *authservice.NATSAuthRequest) (*authservice.NATSAuthResponse, error)
+	LoginUserFunc              func(ctx context.Context, oneTimeToken string) (*authservice.LoginResponse, error)
+	GetTicketFunc              func(ctx context.Context, refreshToken string, activeClubUUID string) (*authservice.TicketResponse, error)
+	LogoutUserFunc             func(ctx context.Context, refreshToken string) error
+	InitiateOAuthLoginFunc     func(ctx context.Context, provider string) (redirectURL, state string, err error)
+	HandleOAuthCallbackFunc    func(ctx context.Context, provider, code, state string) (*authservice.LoginResponse, error)
+	LinkIdentityToUserFunc     func(ctx context.Context, rawRefreshToken, provider, code, state string) error
 }
 
 func (f *FakeService) GenerateMagicLink(ctx context.Context, userID, guildID string, role authdomain.Role) (*authservice.MagicLinkResponse, error) {
@@ -62,6 +65,27 @@ func (f *FakeService) GetTicket(ctx context.Context, refreshToken string, active
 func (f *FakeService) LogoutUser(ctx context.Context, refreshToken string) error {
 	if f.LogoutUserFunc != nil {
 		return f.LogoutUserFunc(ctx, refreshToken)
+	}
+	return nil
+}
+
+func (f *FakeService) InitiateOAuthLogin(ctx context.Context, provider string) (string, string, error) {
+	if f.InitiateOAuthLoginFunc != nil {
+		return f.InitiateOAuthLoginFunc(ctx, provider)
+	}
+	return "https://discord.com/oauth2/authorize?state=fake", "fake-state", nil
+}
+
+func (f *FakeService) HandleOAuthCallback(ctx context.Context, provider, code, state string) (*authservice.LoginResponse, error) {
+	if f.HandleOAuthCallbackFunc != nil {
+		return f.HandleOAuthCallbackFunc(ctx, provider, code, state)
+	}
+	return &authservice.LoginResponse{RefreshToken: "fake-refresh-token", UserUUID: "test-uuid"}, nil
+}
+
+func (f *FakeService) LinkIdentityToUser(ctx context.Context, rawRefreshToken, provider, code, state string) error {
+	if f.LinkIdentityToUserFunc != nil {
+		return f.LinkIdentityToUserFunc(ctx, rawRefreshToken, provider, code, state)
 	}
 	return nil
 }
