@@ -14,8 +14,13 @@ type Handlers interface {
 	// HandleNATSAuthCallout handles NATS auth callout messages.
 	HandleNATSAuthCallout(msg *nats.Msg)
 
-	// HTTP Handlers
+	// HTTP Handlers (magic link + session)
 	HandleHTTPLogin(w http.ResponseWriter, r *http.Request)
 	HandleHTTPTicket(w http.ResponseWriter, r *http.Request)
 	HandleHTTPLogout(w http.ResponseWriter, r *http.Request)
+
+	// HTTP Handlers (OAuth2)
+	HandleHTTPOAuthLogin(w http.ResponseWriter, r *http.Request)
+	HandleHTTPOAuthCallback(w http.ResponseWriter, r *http.Request)
+	HandleHTTPOAuthLink(w http.ResponseWriter, r *http.Request)
 }

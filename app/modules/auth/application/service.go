@@ -2,6 +2,7 @@ package authservice
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -11,6 +12,7 @@ import (
 	authdomain "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/domain"
 	authjwt "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/jwt"
 	authnats "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/nats"
+	authoauth "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/oauth"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/permissions"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/google/uuid"
@@ -30,6 +32,7 @@ type service struct {
 	jwtProvider       authjwt.Provider
 	userJWTBuilder    authnats.UserJWTBuilder
 	permissionBuilder *permissions.Builder
+	oauthRegistry     *authoauth.Registry
 	config            Config
 	logger            *slog.Logger
 	tracer            trace.Tracer
@@ -45,12 +48,14 @@ func NewService(
 	logger *slog.Logger,
 	tracer trace.Tracer,
 	db bun.IDB,
+	oauthRegistry *authoauth.Registry,
 ) Service {
 	return &service{
 		repo:              repo,
 		jwtProvider:       jwtProvider,
 		userJWTBuilder:    userJWTBuilder,
 		permissionBuilder: permissions.NewBuilder(),
+		oauthRegistry:     oauthRegistry,
 		config:            config,
 		logger:            logger,
 		tracer:            tracer,
@@ -161,9 +166,22 @@ func (s *service) buildMagicLinkURL(token string) string {
 }
 
 func (s *service) resolveUserAndClub(ctx context.Context, userID, guildID string) (uuid.UUID, uuid.UUID, error) {
-	userUUID, err := s.repo.GetUUIDByDiscordID(ctx, nil, sharedtypes.DiscordID(userID))
+	// Look up user via the linked_identities table (platform-agnostic identity model).
+	userUUID, err := s.repo.FindUserByLinkedIdentity(ctx, nil, "discord", userID)
 	if err != nil {
-		return uuid.Nil, uuid.Nil, fmt.Errorf("failed to resolve User UUID: %w", err)
+		if !errors.Is(err, userdb.ErrNotFound) {
+			return uuid.Nil, uuid.Nil, fmt.Errorf("failed to resolve User UUID: %w", err)
+		}
+		// Bot-initiated signup: first time this Discord user interacts with frolf-bot.
+		// Create a canonical frolf-bot user and link the Discord identity.
+		userUUID, err = s.repo.CreateUserWithLinkedIdentity(ctx, nil, "discord", userID, "")
+		if err != nil {
+			return uuid.Nil, uuid.Nil, fmt.Errorf("failed to create user for discord ID %s: %w", userID, err)
+		}
+		s.logger.InfoContext(ctx, "Created new user from Discord bot interaction",
+			attr.String("discord_id", userID),
+			attr.String("user_uuid", userUUID.String()),
+		)
 	}
 
 	clubUUID, err := s.repo.GetClubUUIDByDiscordGuildID(ctx, nil, sharedtypes.GuildID(guildID))

@@ -84,7 +84,7 @@ type RefreshToken struct {
 type MagicLink struct {
 	bun.BaseModel `bun:"table:magic_links,alias:ml"`
 
-	TokenHash string     `bun:"token,pk"` // Stores SHA-256 hash of the raw one-time token.
+	TokenHash string     `bun:"token_hash,pk"` // Stores SHA-256 hash of the raw one-time token.
 	UserUUID  uuid.UUID  `bun:"user_uuid,notnull"`
 	GuildID   string     `bun:"guild_id,notnull"`
 	Role      string     `bun:"role,notnull"`
@@ -92,6 +92,20 @@ type MagicLink struct {
 	CreatedAt time.Time  `bun:"created_at,notnull,default:current_timestamp"`
 	Used      bool       `bun:"used,notnull,default:false"`
 	UsedAt    *time.Time `bun:"used_at"`
+}
+
+// LinkedIdentity represents a provider-specific credential linked to a frolf-bot user.
+// A user may have multiple linked identities (Discord, Google, email, etc.).
+type LinkedIdentity struct {
+	bun.BaseModel        `bun:"table:linked_identities,alias:li"`
+	ID                   uuid.UUID  `bun:"id,pk,type:uuid,default:gen_random_uuid()"`
+	UserUUID             uuid.UUID  `bun:"user_uuid,notnull,type:uuid"`
+	Provider             string     `bun:"provider,notnull"`    // 'discord', 'google', 'email', …
+	ProviderID           string     `bun:"provider_id,notnull"` // Discord snowflake, Google sub, email address, …
+	DisplayName          *string    `bun:"display_name"`
+	LinkedAt             time.Time  `bun:"linked_at,notnull,default:now()"`
+	AccessToken          *string    `bun:"access_token"`           // OAuth2 access token for API calls
+	AccessTokenExpiresAt *time.Time `bun:"access_token_expires_at"` // when access_token expires
 }
 
 // UserWithMembership combines user identity with guild-specific data.

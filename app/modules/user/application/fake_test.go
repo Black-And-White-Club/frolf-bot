@@ -411,5 +411,30 @@ func (f *FakeUserRepository) ConsumeMagicLink(ctx context.Context, db bun.IDB, t
 	return nil, userdb.ErrNoRowsAffected
 }
 
+func (f *FakeUserRepository) FindUserByLinkedIdentity(ctx context.Context, db bun.IDB, provider, providerID string) (uuid.UUID, error) {
+	f.record("FindUserByLinkedIdentity")
+	return uuid.Nil, userdb.ErrNotFound
+}
+
+func (f *FakeUserRepository) CreateUserWithLinkedIdentity(ctx context.Context, db bun.IDB, provider, providerID, displayName string) (uuid.UUID, error) {
+	f.record("CreateUserWithLinkedIdentity")
+	return uuid.New(), nil
+}
+
+func (f *FakeUserRepository) InsertLinkedIdentity(ctx context.Context, db bun.IDB, userUUID uuid.UUID, provider, providerID, displayName string) error {
+	f.record("InsertLinkedIdentity")
+	return nil
+}
+
+func (f *FakeUserRepository) GetLinkedIdentityByProvider(ctx context.Context, db bun.IDB, userUUID uuid.UUID, provider string) (*userdb.LinkedIdentity, error) {
+	f.record("GetLinkedIdentityByProvider")
+	return nil, userdb.ErrNotFound
+}
+
+func (f *FakeUserRepository) UpdateLinkedIdentityToken(ctx context.Context, db bun.IDB, provider, providerID, accessToken string, expiresAt *time.Time) error {
+	f.record("UpdateLinkedIdentityToken")
+	return nil
+}
+
 // Ensure the fake actually satisfies the interface
 var _ userdb.Repository = (*FakeUserRepository)(nil)

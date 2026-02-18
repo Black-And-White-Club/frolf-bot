@@ -129,7 +129,7 @@ func TestAuthHandlers_HandleHTTPLogin(t *testing.T) {
 			if tt.setupService != nil {
 				tt.setupService(fakeService)
 			}
-			h := NewAuthHandlers(fakeService, &FakeEventBus{}, &FakeHelpers{}, logger, tracer, tt.secureCookies)
+			h := NewAuthHandlers(fakeService, &FakeEventBus{}, &FakeHelpers{}, logger, tracer, tt.secureCookies, "", "")
 			req := httptest.NewRequest(http.MethodPost, tt.url, bytes.NewBufferString(tt.body))
 			if tt.body != "" {
 				req.Header.Set("Content-Type", "application/json")
@@ -189,7 +189,7 @@ func TestAuthHandlers_HandleHTTPTicket(t *testing.T) {
 			if tt.setupService != nil {
 				tt.setupService(fakeService)
 			}
-			h := NewAuthHandlers(fakeService, &FakeEventBus{}, &FakeHelpers{}, logger, tracer, false)
+			h := NewAuthHandlers(fakeService, &FakeEventBus{}, &FakeHelpers{}, logger, tracer, false, "", "")
 			req := httptest.NewRequest("GET", "/api/auth/ticket", nil)
 			if tt.cookieValue != "" {
 				req.AddCookie(&http.Cookie{Name: RefreshTokenCookie, Value: tt.cookieValue})
@@ -244,7 +244,7 @@ func TestAuthHandlers_HandleHTTPLogout(t *testing.T) {
 					return nil
 				}
 			}
-			h := NewAuthHandlers(fakeService, &FakeEventBus{}, &FakeHelpers{}, logger, tracer, false)
+			h := NewAuthHandlers(fakeService, &FakeEventBus{}, &FakeHelpers{}, logger, tracer, false, "", "")
 			req := httptest.NewRequest("POST", "/api/auth/logout", nil)
 			if tt.cookieValue != "" {
 				req.AddCookie(&http.Cookie{Name: RefreshTokenCookie, Value: tt.cookieValue})

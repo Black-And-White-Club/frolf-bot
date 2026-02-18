@@ -768,6 +768,131 @@ func (r *Impl) RevokeAllUserTokens(ctx context.Context, db bun.IDB, userUUID uui
 	return nil
 }
 
+// --- LINKED IDENTITY METHODS ---
+
+func (r *Impl) FindUserByLinkedIdentity(ctx context.Context, db bun.IDB, provider, providerID string) (uuid.UUID, error) {
+	if db == nil {
+		db = r.db
+	}
+	var li LinkedIdentity
+	err := db.NewSelect().
+		Model(&li).
+		Column("user_uuid").
+		Where("provider = ? AND provider_id = ?", provider, providerID).
+		Scan(ctx)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return uuid.Nil, ErrNotFound
+		}
+		return uuid.Nil, fmt.Errorf("userdb.FindUserByLinkedIdentity: %w", err)
+	}
+	return li.UserUUID, nil
+}
+
+func (r *Impl) CreateUserWithLinkedIdentity(ctx context.Context, db bun.IDB, provider, providerID, displayName string) (uuid.UUID, error) {
+	effectiveDB := db
+	if effectiveDB == nil {
+		effectiveDB = r.db
+	}
+
+	doWork := func(ctx context.Context, txDB bun.IDB) (uuid.UUID, error) {
+		user := &User{}
+		if _, err := txDB.NewInsert().Model(user).Returning("uuid").Exec(ctx); err != nil {
+			return uuid.Nil, fmt.Errorf("failed to create user: %w", err)
+		}
+
+		var dn *string
+		if displayName != "" {
+			dn = &displayName
+		}
+		li := &LinkedIdentity{
+			UserUUID:    user.UUID,
+			Provider:    provider,
+			ProviderID:  providerID,
+			DisplayName: dn,
+		}
+		if _, err := txDB.NewInsert().Model(li).Exec(ctx); err != nil {
+			return uuid.Nil, fmt.Errorf("failed to insert linked identity: %w", err)
+		}
+		return user.UUID, nil
+	}
+
+	// If we have a *bun.DB, wrap in a transaction; otherwise use the provided tx directly.
+	if bunDB, ok := effectiveDB.(*bun.DB); ok {
+		var userUUID uuid.UUID
+		err := bunDB.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+			var err error
+			userUUID, err = doWork(ctx, tx)
+			return err
+		})
+		if err != nil {
+			return uuid.Nil, fmt.Errorf("userdb.CreateUserWithLinkedIdentity: %w", err)
+		}
+		return userUUID, nil
+	}
+
+	// Already in a transaction (or test mock).
+	userUUID, err := doWork(ctx, effectiveDB)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("userdb.CreateUserWithLinkedIdentity: %w", err)
+	}
+	return userUUID, nil
+}
+
+func (r *Impl) GetLinkedIdentityByProvider(ctx context.Context, db bun.IDB, userUUID uuid.UUID, provider string) (*LinkedIdentity, error) {
+	if db == nil {
+		db = r.db
+	}
+	li := &LinkedIdentity{}
+	err := db.NewSelect().
+		Model(li).
+		Where("user_uuid = ? AND provider = ?", userUUID, provider).
+		Scan(ctx)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("userdb.GetLinkedIdentityByProvider: %w", err)
+	}
+	return li, nil
+}
+
+func (r *Impl) UpdateLinkedIdentityToken(ctx context.Context, db bun.IDB, provider, providerID, accessToken string, expiresAt *time.Time) error {
+	if db == nil {
+		db = r.db
+	}
+	_, err := db.NewUpdate().
+		Model((*LinkedIdentity)(nil)).
+		Set("access_token = ?", accessToken).
+		Set("access_token_expires_at = ?", expiresAt).
+		Where("provider = ? AND provider_id = ?", provider, providerID).
+		Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("userdb.UpdateLinkedIdentityToken: %w", err)
+	}
+	return nil
+}
+
+func (r *Impl) InsertLinkedIdentity(ctx context.Context, db bun.IDB, userUUID uuid.UUID, provider, providerID, displayName string) error {
+	if db == nil {
+		db = r.db
+	}
+	var dn *string
+	if displayName != "" {
+		dn = &displayName
+	}
+	li := &LinkedIdentity{
+		UserUUID:    userUUID,
+		Provider:    provider,
+		ProviderID:  providerID,
+		DisplayName: dn,
+	}
+	if _, err := db.NewInsert().Model(li).Exec(ctx); err != nil {
+		return fmt.Errorf("userdb.InsertLinkedIdentity: %w", err)
+	}
+	return nil
+}
+
 // --- HELPERS ---
 
 func normalizeNullablePointer(val *string) *string {
@@ -795,7 +920,7 @@ func (r *Impl) GetMagicLink(ctx context.Context, db bun.IDB, token string) (*Mag
 		db = r.db
 	}
 	ml := &MagicLink{}
-	err := db.NewSelect().Model(ml).Where("token = ?", token).Scan(ctx)
+	err := db.NewSelect().Model(ml).Where("token_hash = ?", token).Scan(ctx)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
@@ -814,7 +939,7 @@ func (r *Impl) MarkMagicLinkUsed(ctx context.Context, db bun.IDB, token string) 
 		Model((*MagicLink)(nil)).
 		Set("used = ?", true).
 		Set("used_at = ?", now).
-		Where("token = ?", token).
+		Where("token_hash = ?", token).
 		Where("used = ?", false).
 		Where("expires_at > ?", now).
 		Exec(ctx)
@@ -838,10 +963,10 @@ func (r *Impl) ConsumeMagicLink(ctx context.Context, db bun.IDB, tokenHash strin
 		UPDATE magic_links
 		SET used = TRUE,
 		    used_at = ?
-		WHERE token = ?
+		WHERE token_hash = ?
 		  AND used = FALSE
 		  AND expires_at > ?
-		RETURNING token, user_uuid, guild_id, role, expires_at, created_at, used, used_at
+		RETURNING token_hash, user_uuid, guild_id, role, expires_at, created_at, used, used_at
 	`, now, tokenHash, now).Scan(ctx, ml)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

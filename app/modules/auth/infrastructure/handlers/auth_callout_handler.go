@@ -7,11 +7,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	authservice "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/application"
 	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nkeys"
 )
 
 var (
@@ -147,9 +149,8 @@ func tokenFingerprint(token string) string {
 }
 
 // decodeAuthRequestJWT decodes a NATS auth callout JWT and extracts the claims.
-// Signature verification is intentionally skipped because NATS server is a trusted
-// sender and has already validated the request before forwarding it via the auth
-// callout mechanism.
+// When serverPublicKey is configured, the JWT signature is verified using the
+// NATS server's public NKey before the claims are trusted.
 func (h *AuthHandlers) decodeAuthRequestJWT(token string) (*AuthorizationRequestClaims, error) {
 	// JWT format: header.payload.signature
 	parts := strings.Split(token, ".")
@@ -157,7 +158,22 @@ func (h *AuthHandlers) decodeAuthRequestJWT(token string) (*AuthorizationRequest
 		return nil, ErrInvalidJWTFormat
 	}
 
-	// Decode the payload (claims) — signature not verified; see function comment.
+	// Verify signature when a server public key is configured.
+	if h.serverPublicKey != "" {
+		kp, err := nkeys.FromPublicKey(h.serverPublicKey)
+		if err != nil {
+			return nil, fmt.Errorf("invalid server public key config: %w", err)
+		}
+		sig, err := base64.RawURLEncoding.DecodeString(parts[2])
+		if err != nil {
+			return nil, fmt.Errorf("invalid jwt signature encoding: %w", err)
+		}
+		if err := kp.Verify([]byte(parts[0]+"."+parts[1]), sig); err != nil {
+			return nil, fmt.Errorf("jwt signature verification failed: %w", err)
+		}
+	}
+
+	// Decode the payload (claims).
 	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
 		// Try standard base64 with padding

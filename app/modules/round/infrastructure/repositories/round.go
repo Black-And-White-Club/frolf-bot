@@ -3,6 +3,7 @@ package rounddb
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -579,11 +580,18 @@ func (r *Impl) GetUpcomingRoundsByParticipant(ctx context.Context, db bun.IDB, g
 		db = r.db
 	}
 	var localRounds []*Round
-	err := db.NewSelect().
+	type participantFilter struct {
+		UserID string `json:"user_id"`
+	}
+	filter, err := json.Marshal([]participantFilter{{UserID: string(userID)}})
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal participant filter: %w", err)
+	}
+	err = db.NewSelect().
 		Model(&localRounds).
 		ExcludeColumn("file_data").
 		Where("state = ? AND guild_id = ?", roundtypes.RoundStateUpcoming, guildID).
-		Where("participants @> ?", fmt.Sprintf(`[{"user_id": "%s"}]`, userID)).
+		Where("participants @> ?", string(filter)).
 		Scan(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get upcoming rounds by participant: %w", err)

@@ -52,6 +52,13 @@ type FakeRepository struct {
 	RevokeRefreshTokenIfActiveFn func(ctx context.Context, db bun.IDB, hash string) error
 	RevokeAllUserTokensFn        func(ctx context.Context, db bun.IDB, userUUID uuid.UUID) error
 
+	// Linked Identity operations
+	FindUserByLinkedIdentityFn      func(ctx context.Context, db bun.IDB, provider, providerID string) (uuid.UUID, error)
+	CreateUserWithLinkedIdentityFn  func(ctx context.Context, db bun.IDB, provider, providerID, displayName string) (uuid.UUID, error)
+	InsertLinkedIdentityFn          func(ctx context.Context, db bun.IDB, userUUID uuid.UUID, provider, providerID, displayName string) error
+	GetLinkedIdentityByProviderFn   func(ctx context.Context, db bun.IDB, userUUID uuid.UUID, provider string) (*LinkedIdentity, error)
+	UpdateLinkedIdentityTokenFn     func(ctx context.Context, db bun.IDB, provider, providerID, accessToken string, expiresAt *time.Time) error
+
 	// Magic Link operations
 	SaveMagicLinkFn     func(ctx context.Context, db bun.IDB, link *MagicLink) error
 	GetMagicLinkFn      func(ctx context.Context, db bun.IDB, token string) (*MagicLink, error)
@@ -316,4 +323,39 @@ func (f *FakeRepository) ConsumeMagicLink(ctx context.Context, db bun.IDB, token
 		return f.ConsumeMagicLinkFn(ctx, db, tokenHash, now)
 	}
 	return nil, ErrNoRowsAffected
+}
+
+func (f *FakeRepository) FindUserByLinkedIdentity(ctx context.Context, db bun.IDB, provider, providerID string) (uuid.UUID, error) {
+	if f.FindUserByLinkedIdentityFn != nil {
+		return f.FindUserByLinkedIdentityFn(ctx, db, provider, providerID)
+	}
+	return uuid.Nil, ErrNotFound
+}
+
+func (f *FakeRepository) CreateUserWithLinkedIdentity(ctx context.Context, db bun.IDB, provider, providerID, displayName string) (uuid.UUID, error) {
+	if f.CreateUserWithLinkedIdentityFn != nil {
+		return f.CreateUserWithLinkedIdentityFn(ctx, db, provider, providerID, displayName)
+	}
+	return uuid.New(), nil
+}
+
+func (f *FakeRepository) InsertLinkedIdentity(ctx context.Context, db bun.IDB, userUUID uuid.UUID, provider, providerID, displayName string) error {
+	if f.InsertLinkedIdentityFn != nil {
+		return f.InsertLinkedIdentityFn(ctx, db, userUUID, provider, providerID, displayName)
+	}
+	return nil
+}
+
+func (f *FakeRepository) GetLinkedIdentityByProvider(ctx context.Context, db bun.IDB, userUUID uuid.UUID, provider string) (*LinkedIdentity, error) {
+	if f.GetLinkedIdentityByProviderFn != nil {
+		return f.GetLinkedIdentityByProviderFn(ctx, db, userUUID, provider)
+	}
+	return nil, ErrNotFound
+}
+
+func (f *FakeRepository) UpdateLinkedIdentityToken(ctx context.Context, db bun.IDB, provider, providerID, accessToken string, expiresAt *time.Time) error {
+	if f.UpdateLinkedIdentityTokenFn != nil {
+		return f.UpdateLinkedIdentityTokenFn(ctx, db, provider, providerID, accessToken, expiresAt)
+	}
+	return nil
 }
