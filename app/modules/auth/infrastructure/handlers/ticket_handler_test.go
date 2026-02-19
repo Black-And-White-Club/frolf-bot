@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	authservice "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/application"
+	"github.com/ThreeDotsLabs/watermill/message"
 	"go.opentelemetry.io/otel/trace/noop"
 )
 
@@ -149,33 +150,100 @@ func TestAuthHandlers_HandleHTTPTicket(t *testing.T) {
 		name         string
 		cookieValue  string
 		setupService func(*FakeService)
-		verify       func(t *testing.T, rr *httptest.ResponseRecorder)
+		setupBus     func(*FakeEventBus) *[]string // returns pointer to collected topics
+		verify       func(t *testing.T, rr *httptest.ResponseRecorder, publishedTopics *[]string)
 	}{
 		{
-			name:        "success",
+			name:        "success without sync requests",
 			cookieValue: "old-token",
 			setupService: func(s *FakeService) {
 				s.GetTicketFunc = func(ctx context.Context, rt string, clubID string) (*authservice.TicketResponse, error) {
 					return &authservice.TicketResponse{NATSToken: "nats-jwt", RefreshToken: "rotated-token"}, nil
 				}
 			},
-			verify: func(t *testing.T, rr *httptest.ResponseRecorder) {
+			verify: func(t *testing.T, rr *httptest.ResponseRecorder, publishedTopics *[]string) {
 				if rr.Code != http.StatusOK {
 					t.Errorf("expected status 200, got %d", rr.Code)
 				}
-				// Check rotated cookie
 				cookies := rr.Result().Cookies()
 				for _, c := range cookies {
 					if c.Name == RefreshTokenCookie && c.Value != "rotated-token" {
 						t.Errorf("expected rotated cookie, got %s", c.Value)
 					}
 				}
+				if publishedTopics != nil && len(*publishedTopics) != 0 {
+					t.Errorf("expected no sync events published, got %d", len(*publishedTopics))
+				}
+			},
+		},
+		{
+			name:        "dispatches sync requests on ticket",
+			cookieValue: "old-token",
+			setupService: func(s *FakeService) {
+				s.GetTicketFunc = func(ctx context.Context, rt string, clubID string) (*authservice.TicketResponse, error) {
+					return &authservice.TicketResponse{
+						NATSToken:    "nats-jwt",
+						RefreshToken: "rotated-token",
+						SyncRequests: []authservice.SyncRequest{
+							{UserID: "user-111", GuildID: "guild-222"},
+							{UserID: "user-333", GuildID: "guild-444"},
+						},
+					}, nil
+				}
+			},
+			setupBus: func(bus *FakeEventBus) *[]string {
+				topics := &[]string{}
+				bus.PublishFunc = func(topic string, msgs ...*message.Message) error {
+					*topics = append(*topics, topic)
+					return nil
+				}
+				return topics
+			},
+			verify: func(t *testing.T, rr *httptest.ResponseRecorder, publishedTopics *[]string) {
+				if rr.Code != http.StatusOK {
+					t.Errorf("expected status 200, got %d", rr.Code)
+				}
+				if publishedTopics == nil || len(*publishedTopics) != 2 {
+					t.Fatalf("expected 2 sync events published, got %v", publishedTopics)
+				}
+				for i, topic := range *publishedTopics {
+					if topic != "user.profile.sync.request.v1" {
+						t.Errorf("published[%d] topic = %q, want user.profile.sync.request.v1", i, topic)
+					}
+				}
+			},
+		},
+		{
+			name:        "publish failure is tolerated (best-effort)",
+			cookieValue: "old-token",
+			setupService: func(s *FakeService) {
+				s.GetTicketFunc = func(ctx context.Context, rt string, clubID string) (*authservice.TicketResponse, error) {
+					return &authservice.TicketResponse{
+						NATSToken:    "nats-jwt",
+						RefreshToken: "rotated-token",
+						SyncRequests: []authservice.SyncRequest{
+							{UserID: "user-111", GuildID: "guild-222"},
+						},
+					}, nil
+				}
+			},
+			setupBus: func(bus *FakeEventBus) *[]string {
+				bus.PublishFunc = func(topic string, msgs ...*message.Message) error {
+					return errors.New("bus unavailable")
+				}
+				return nil
+			},
+			verify: func(t *testing.T, rr *httptest.ResponseRecorder, _ *[]string) {
+				// Must still return 200 even if publish failed
+				if rr.Code != http.StatusOK {
+					t.Errorf("expected status 200 despite publish error, got %d", rr.Code)
+				}
 			},
 		},
 		{
 			name:        "missing cookie",
 			cookieValue: "",
-			verify: func(t *testing.T, rr *httptest.ResponseRecorder) {
+			verify: func(t *testing.T, rr *httptest.ResponseRecorder, _ *[]string) {
 				if rr.Code != http.StatusUnauthorized {
 					t.Errorf("expected status 401, got %d", rr.Code)
 				}
@@ -189,14 +257,19 @@ func TestAuthHandlers_HandleHTTPTicket(t *testing.T) {
 			if tt.setupService != nil {
 				tt.setupService(fakeService)
 			}
-			h := NewAuthHandlers(fakeService, &FakeEventBus{}, &FakeHelpers{}, logger, tracer, false, "", "")
+			fakeBus := &FakeEventBus{}
+			var publishedTopics *[]string
+			if tt.setupBus != nil {
+				publishedTopics = tt.setupBus(fakeBus)
+			}
+			h := NewAuthHandlers(fakeService, fakeBus, &FakeHelpers{}, logger, tracer, false, "", "")
 			req := httptest.NewRequest("GET", "/api/auth/ticket", nil)
 			if tt.cookieValue != "" {
 				req.AddCookie(&http.Cookie{Name: RefreshTokenCookie, Value: tt.cookieValue})
 			}
 			rr := httptest.NewRecorder()
 			h.HandleHTTPTicket(rr, req)
-			tt.verify(t, rr)
+			tt.verify(t, rr, publishedTopics)
 		})
 	}
 }

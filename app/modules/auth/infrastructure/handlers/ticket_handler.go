@@ -7,8 +7,12 @@ import (
 	"strings"
 	"time"
 
+	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	authservice "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/application"
+	"github.com/ThreeDotsLabs/watermill"
+	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 const (
@@ -108,6 +112,30 @@ func (h *AuthHandlers) HandleHTTPTicket(w http.ResponseWriter, r *http.Request) 
 		SameSite: http.SameSiteLaxMode,
 		Expires:  time.Now().Add(authservice.RefreshTokenExpiry),
 	})
+
+	// Dispatch profile/role sync requests (non-blocking, best-effort).
+	for _, sr := range resp.SyncRequests {
+		syncPayload := userevents.UserProfileSyncRequestPayloadV1{
+			UserID:  sharedtypes.DiscordID(sr.UserID),
+			GuildID: sharedtypes.GuildID(sr.GuildID),
+		}
+		payloadBytes, _ := json.Marshal(syncPayload)
+		syncMsg := message.NewMessage(watermill.NewUUID(), payloadBytes)
+		syncMsg.Metadata.Set("topic", userevents.UserProfileSyncRequestTopicV1)
+		syncMsg.Metadata.Set("user_id", sr.UserID)
+		syncMsg.Metadata.Set("guild_id", sr.GuildID)
+
+		if err := h.eventBus.Publish(userevents.UserProfileSyncRequestTopicV1, syncMsg); err != nil {
+			h.logger.WarnContext(ctx, "Failed to publish profile sync request",
+				attr.Error(err),
+				attr.String("user_id", sr.UserID),
+			)
+		} else {
+			h.logger.InfoContext(ctx, "Published profile sync request",
+				attr.String("user_id", sr.UserID),
+			)
+		}
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{

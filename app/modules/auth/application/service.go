@@ -79,6 +79,7 @@ const (
 	DefaultTokenTTL      = 24 * time.Hour
 	RefreshTokenExpiry   = 30 * 24 * time.Hour
 	ProfileSyncStaleness = 24 * time.Hour // Re-sync display name from Discord if older than this
+	RoleSyncStaleness    = 1 * time.Hour  // Re-sync Discord role if older than this (more frequent than display name)
 )
 
 // GenerateMagicLink generates a magic link URL for the given user and guild.

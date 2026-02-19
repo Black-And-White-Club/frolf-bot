@@ -195,7 +195,12 @@ func (s *service) GetTicket(ctx context.Context, rawToken string, activeClubUUID
 					m.SyncedAt == nil ||
 					time.Since(*m.SyncedAt) > ProfileSyncStaleness
 
-				if needsSync && m.ExternalID != nil {
+				// Also trigger sync for role checks on a shorter interval.
+				// SyncMember handles both profile and role in a single call.
+				needsRoleSync := m.SyncedAt == nil ||
+					time.Since(*m.SyncedAt) > RoleSyncStaleness
+
+				if (needsSync || needsRoleSync) && m.ExternalID != nil {
 					if gid, err := s.repo.GetDiscordGuildIDByClubUUID(ctx, tx, m.ClubUUID); err == nil {
 						syncRequests = append(syncRequests, SyncRequest{
 							UserID:  *m.ExternalID,
