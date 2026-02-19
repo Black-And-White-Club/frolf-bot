@@ -170,22 +170,61 @@ func (s *service) resolveUserAndClub(ctx context.Context, userID, guildID string
 	userUUID, err := s.repo.FindUserByLinkedIdentity(ctx, nil, "discord", userID)
 	if err != nil {
 		if !errors.Is(err, userdb.ErrNotFound) {
+			s.logger.ErrorContext(ctx, "Failed to look up linked identity",
+				attr.String("discord_id", userID),
+				attr.Error(err),
+			)
 			return uuid.Nil, uuid.Nil, fmt.Errorf("failed to resolve User UUID: %w", err)
 		}
-		// Bot-initiated signup: first time this Discord user interacts with frolf-bot.
-		// Create a canonical frolf-bot user and link the Discord identity.
-		userUUID, err = s.repo.CreateUserWithLinkedIdentity(ctx, nil, "discord", userID, "")
-		if err != nil {
-			return uuid.Nil, uuid.Nil, fmt.Errorf("failed to create user for discord ID %s: %w", userID, err)
+
+		// No linked identity found. Check if a bot-created account exists for this
+		// Discord ID (users.user_id column) — mirrors the HandleOAuthCallback fallback.
+		existingUUID, discordErr := s.repo.GetUUIDByDiscordID(ctx, nil, sharedtypes.DiscordID(userID))
+		if discordErr == nil {
+			// Bot-created account found — bridge it by inserting the linked identity.
+			if linkErr := s.repo.InsertLinkedIdentity(ctx, nil, existingUUID, "discord", userID, ""); linkErr != nil {
+				// Non-fatal: a concurrent request may have inserted it already.
+				s.logger.WarnContext(ctx, "Failed to backfill linked identity for bot-created user (continuing)",
+					attr.String("discord_id", userID),
+					attr.String("user_uuid", existingUUID.String()),
+					attr.Error(linkErr),
+				)
+			} else {
+				s.logger.InfoContext(ctx, "Backfilled linked identity for bot-created user",
+					attr.String("discord_id", userID),
+					attr.String("user_uuid", existingUUID.String()),
+				)
+			}
+			userUUID = existingUUID
+		} else if !errors.Is(discordErr, userdb.ErrNotFound) {
+			s.logger.ErrorContext(ctx, "Failed legacy Discord ID lookup",
+				attr.String("discord_id", userID),
+				attr.Error(discordErr),
+			)
+			return uuid.Nil, uuid.Nil, fmt.Errorf("failed legacy discord id lookup for %s: %w", userID, discordErr)
+		} else {
+			// Truly new user — not in the system via bot or OAuth before.
+			userUUID, err = s.repo.CreateUserWithLinkedIdentity(ctx, nil, "discord", userID, "")
+			if err != nil {
+				s.logger.ErrorContext(ctx, "Failed to create new user from Discord bot interaction",
+					attr.String("discord_id", userID),
+					attr.Error(err),
+				)
+				return uuid.Nil, uuid.Nil, fmt.Errorf("failed to create user for discord ID %s: %w", userID, err)
+			}
+			s.logger.InfoContext(ctx, "Created new user from Discord bot interaction",
+				attr.String("discord_id", userID),
+				attr.String("user_uuid", userUUID.String()),
+			)
 		}
-		s.logger.InfoContext(ctx, "Created new user from Discord bot interaction",
-			attr.String("discord_id", userID),
-			attr.String("user_uuid", userUUID.String()),
-		)
 	}
 
 	clubUUID, err := s.repo.GetClubUUIDByDiscordGuildID(ctx, nil, sharedtypes.GuildID(guildID))
 	if err != nil {
+		s.logger.ErrorContext(ctx, "Failed to resolve club UUID by guild ID",
+			attr.String("guild_id", guildID),
+			attr.Error(err),
+		)
 		return uuid.Nil, uuid.Nil, fmt.Errorf("failed to resolve Club UUID: %w", err)
 	}
 
