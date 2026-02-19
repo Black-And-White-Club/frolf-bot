@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	authdomain "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/domain"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/google/uuid"
@@ -157,7 +158,7 @@ func (s *service) GetTicket(ctx context.Context, rawToken string, activeClubUUID
 		if len(memberships) > 0 {
 			// Default to first membership.
 			activeUUID = memberships[0].ClubUUID
-			activeRole = authdomain.Role(memberships[0].Role)
+			activeRole = toAuthRole(memberships[0].Role)
 
 			// If a specific active club was requested, try to find it.
 			if activeClubUUID != "" {
@@ -166,7 +167,7 @@ func (s *service) GetTicket(ctx context.Context, rawToken string, activeClubUUID
 					for _, m := range memberships {
 						if m.ClubUUID == targetUUID {
 							activeUUID = m.ClubUUID
-							activeRole = authdomain.Role(m.Role)
+							activeRole = toAuthRole(m.Role)
 							found = true
 							break
 						}
@@ -211,7 +212,7 @@ func (s *service) GetTicket(ctx context.Context, rawToken string, activeClubUUID
 
 				clubs = append(clubs, authdomain.ClubRole{
 					ClubUUID:    m.ClubUUID,
-					Role:        authdomain.Role(m.Role),
+					Role:        toAuthRole(m.Role),
 					DisplayName: resolveDisplayName(m.DisplayName, globalDisplayName),
 				})
 			}
@@ -364,6 +365,22 @@ func (s *service) backfillClubMemberships(ctx context.Context, db bun.IDB, userU
 	// Re-fetch memberships after backfill
 	memberships, _ := s.repo.GetClubMembershipsByUserUUID(ctx, db, userUUID)
 	return memberships
+}
+
+// toAuthRole converts a DB role string (sharedtypes.UserRoleEnum) to the lowercase
+// authdomain.Role used in JWTs and NATS permissions. The DB stores capitalized values
+// ("Admin", "Editor", "User") while authdomain uses lowercase ("admin", "editor", "player").
+func toAuthRole(dbRole sharedtypes.UserRoleEnum) authdomain.Role {
+	switch dbRole {
+	case sharedtypes.UserRoleAdmin:
+		return authdomain.RoleAdmin
+	case sharedtypes.UserRoleEditor:
+		return authdomain.RoleEditor
+	case sharedtypes.UserRoleUser:
+		return authdomain.RolePlayer
+	default:
+		return authdomain.RoleViewer
+	}
 }
 
 // resolveDisplayName returns the club display name if present, otherwise fallback.
