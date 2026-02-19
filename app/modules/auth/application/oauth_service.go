@@ -253,6 +253,17 @@ func (s *service) UnlinkProvider(ctx context.Context, rawRefreshToken, providerN
 		return fmt.Errorf("failed to fetch linked providers: %w", err)
 	}
 
+	linked := false
+	for _, p := range providers {
+		if p == providerName {
+			linked = true
+			break
+		}
+	}
+	if !linked {
+		return fmt.Errorf("provider %s is not linked to this account", providerName)
+	}
+
 	if len(providers) <= 1 {
 		return fmt.Errorf("cannot unlink the only connected provider")
 	}
