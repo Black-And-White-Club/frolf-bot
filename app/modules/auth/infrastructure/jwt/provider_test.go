@@ -31,6 +31,16 @@ func TestProvider_GenerateAndValidateToken(t *testing.T) {
 		RefreshTokenHash: "fake-hash",
 	}
 
+	claimsWithProviders := &authdomain.Claims{
+		UserID:           "user-123",
+		UserUUID:         userUUID,
+		ActiveClubUUID:   clubUUID,
+		GuildID:          "guild-456",
+		Role:             authdomain.RolePlayer,
+		RefreshTokenHash: "fake-hash",
+		LinkedProviders:  []string{"discord", "google"},
+	}
+
 	tests := []struct {
 		name        string
 		setupClaims *authdomain.Claims
@@ -56,6 +66,20 @@ func TestProvider_GenerateAndValidateToken(t *testing.T) {
 				}
 				if validated.RefreshTokenHash != claims.RefreshTokenHash {
 					t.Errorf("expected RefreshTokenHash %s, got %s", claims.RefreshTokenHash, validated.RefreshTokenHash)
+				}
+			},
+		},
+		{
+			name:        "linked providers round-trip",
+			setupClaims: claimsWithProviders,
+			ttl:         1 * time.Hour,
+			provider:    p,
+			verify: func(t *testing.T, validated *authdomain.Claims) {
+				if len(validated.LinkedProviders) != 2 {
+					t.Fatalf("expected 2 linked providers, got %d", len(validated.LinkedProviders))
+				}
+				if validated.LinkedProviders[0] != "discord" || validated.LinkedProviders[1] != "google" {
+					t.Errorf("expected [discord google], got %v", validated.LinkedProviders)
 				}
 			},
 		},

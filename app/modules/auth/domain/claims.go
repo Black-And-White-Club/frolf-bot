@@ -19,9 +19,10 @@ type Claims struct {
 	UserUUID         uuid.UUID
 	ActiveClubUUID   uuid.UUID
 	Clubs            []ClubRole
-	GuildID          string // Legacy Discord Guild ID (kept for compatibility)
-	Role             Role   // Legacy Role (kept for compatibility, refers to ActiveClubUUID)
-	RefreshTokenHash string // Hash of the refresh token used to mint this ticket
+	GuildID          string   // Legacy Discord Guild ID (kept for compatibility)
+	Role             Role     // Legacy Role (kept for compatibility, refers to ActiveClubUUID)
+	LinkedProviders  []string // OAuth providers linked to this account (e.g. ["discord", "google"])
+	RefreshTokenHash string   // Hash of the refresh token used to mint this ticket
 	ExpiresAt        time.Time
 	IssuedAt         time.Time
 }

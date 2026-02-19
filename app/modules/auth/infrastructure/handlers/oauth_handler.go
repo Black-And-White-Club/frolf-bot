@@ -165,7 +165,7 @@ func (h *AuthHandlers) HandleHTTPOAuthCallback(w http.ResponseWriter, r *http.Re
 			return
 		}
 
-		http.Redirect(w, r, h.pwaBaseURL+"/account", http.StatusFound)
+		http.Redirect(w, r, h.pwaBaseURL+"/account?success=linked", http.StatusFound)
 		return
 	}
 

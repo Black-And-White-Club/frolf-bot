@@ -228,7 +228,17 @@ func (s *service) GetTicket(ctx context.Context, rawToken string, activeClubUUID
 			}
 		}
 
-		// 4. Mint NATS ticket with hash of the new rotated refresh token.
+		// 4. Fetch linked providers for this user.
+		linkedProviders, err := s.repo.GetLinkedProvidersByUserUUID(ctx, tx, token.UserUUID)
+		if err != nil {
+			s.logger.WarnContext(ctx, "Failed to fetch linked providers",
+				attr.String("user_uuid", token.UserUUID.String()),
+				attr.Error(err),
+			)
+			linkedProviders = nil
+		}
+
+		// 5. Mint NATS ticket with hash of the new rotated refresh token.
 		claims := &authdomain.Claims{
 			UserID:           token.UserUUID.String(),
 			UserUUID:         token.UserUUID,
@@ -236,6 +246,7 @@ func (s *service) GetTicket(ctx context.Context, rawToken string, activeClubUUID
 			ActiveClubUUID:   activeUUID,
 			Role:             activeRole,
 			Clubs:            clubs,
+			LinkedProviders:  linkedProviders,
 			RefreshTokenHash: newHashed,
 		}
 		natsToken, err := s.jwtProvider.GenerateToken(claims, TicketTTL)
@@ -243,7 +254,7 @@ func (s *service) GetTicket(ctx context.Context, rawToken string, activeClubUUID
 			return fmt.Errorf("failed to generate ticket: %w", err)
 		}
 
-		// 5. Rotate token atomically inside the same transaction.
+		// 6. Rotate token atomically inside the same transaction.
 		newRefreshToken := &userdb.RefreshToken{
 			Hash:        newHashed,
 			UserUUID:    token.UserUUID,
