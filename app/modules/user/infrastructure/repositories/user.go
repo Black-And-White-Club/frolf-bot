@@ -861,18 +861,14 @@ func (r *Impl) GetLinkedProvidersByUserUUID(ctx context.Context, db bun.IDB, use
 	if db == nil {
 		db = r.db
 	}
-	var identities []LinkedIdentity
+	var providers []string
 	err := db.NewSelect().
-		Model(&identities).
+		Model((*LinkedIdentity)(nil)).
 		Column("provider").
 		Where("user_uuid = ?", userUUID).
-		Scan(ctx)
+		Scan(ctx, &providers)
 	if err != nil {
 		return nil, fmt.Errorf("userdb.GetLinkedProvidersByUserUUID: %w", err)
-	}
-	providers := make([]string, len(identities))
-	for i, li := range identities {
-		providers[i] = li.Provider
 	}
 	return providers, nil
 }
