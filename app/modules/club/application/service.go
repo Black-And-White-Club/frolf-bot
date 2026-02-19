@@ -285,9 +285,9 @@ func (s *ClubService) JoinClub(ctx context.Context, userUUID, clubUUID uuid.UUID
 		if g.ID == *club.DiscordGuildID {
 			found = true
 			if g.hasManageGuild() {
-				role = "admin"
+				role = sharedtypes.UserRoleAdmin
 			} else {
-				role = "player"
+				role = sharedtypes.UserRoleUser
 			}
 			break
 		}
@@ -506,8 +506,7 @@ func (s *ClubService) requireAdminOrEditor(ctx context.Context, userUUID, clubUU
 		}
 		return fmt.Errorf("failed to check membership: %w", err)
 	}
-	role := string(membership.Role)
-	if role != "admin" && role != "editor" {
+	if membership.Role != sharedtypes.UserRoleAdmin && membership.Role != sharedtypes.UserRoleEditor {
 		return fmt.Errorf("forbidden: requires admin or editor role")
 	}
 	return nil

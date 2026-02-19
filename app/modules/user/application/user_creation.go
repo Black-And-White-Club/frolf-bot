@@ -106,36 +106,23 @@ func (s *UserService) executeCreateUser(
 
 		if membership != nil {
 			// User exists and is in the guild.
-			// Ensure club membership exists (backfill if needed due to previous failures)
+			// Ensure club membership exists, carrying the real guild role so that
+			// club-level auth (requireAdminOrEditor) sees the correct value.
 			clubUUID, err := s.repo.GetClubUUIDByDiscordGuildID(ctx, db, guildID)
 			if err != nil {
 				s.logger.WarnContext(ctx, "Failed to resolve Club UUID for membership check (returning user)",
 					attr.String("guild_id", string(guildID)),
 					attr.Error(err))
 			} else {
-				// Upsert club membership to ensure it exists
 				extID := string(userID)
-				// We don't overwrite role or display name for existing members to preserve their state
-				// but we ensure the record exists.
-				// Use a dedicated Upsert that respects existing values if needed,
-				// or just rely on the existing UpsertClubMembership logic which is an UPSERT.
 				emptyName := ""
 				cmParams := &userdb.ClubMembership{
 					ClubUUID:    clubUUID,
 					UserUUID:    user.UUID,
-					Role:        "player",
-					JoinedAt:    membership.JoinedAt, // Use guild join time
+					Role:        membership.Role, // carry the real guild role
+					JoinedAt:    membership.JoinedAt,
 					ExternalID:  &extID,
 					DisplayName: &emptyName,
-				}
-
-				// Fetch existing first to preserve role?
-				// UpsertClubMembership in repo: "Set role = EXCLUDED.role".
-				// So if we pass "player", we might overwrite "admin".
-				// We should fetch existing club membership first.
-				existingCM, err := s.repo.GetClubMembership(ctx, db, user.UUID, clubUUID)
-				if err == nil && existingCM != nil {
-					cmParams.Role = existingCM.Role
 				}
 
 				if err := s.repo.UpsertClubMembership(ctx, db, cmParams); err != nil {
@@ -157,7 +144,8 @@ func (s *UserService) executeCreateUser(
 
 		// (No changes needed below here as the flow continues for new guild members)
 
-		// New Club Membership for existing user
+		// New Club Membership for existing user joining a new guild.
+		// Use UserRoleUser — they just joined, matching what we wrote to guild_memberships above.
 		clubUUID, err := s.repo.GetClubUUIDByDiscordGuildID(ctx, db, guildID)
 		if err != nil {
 			s.logger.WarnContext(ctx, "Failed to resolve Club UUID for membership creation (existing user)",
@@ -169,7 +157,7 @@ func (s *UserService) executeCreateUser(
 			membership := &userdb.ClubMembership{
 				ClubUUID:    clubUUID,
 				UserUUID:    user.UUID,
-				Role:        "player",
+				Role:        sharedtypes.UserRoleUser, // matches guild_memberships default
 				JoinedAt:    time.Now(),
 				ExternalID:  &extID,
 				DisplayName: &emptyName,
@@ -205,9 +193,7 @@ func (s *UserService) executeCreateUser(
 		return UserResult{}, fmt.Errorf("failed to create guild membership: %w", err)
 	}
 
-	// New Club Membership
-	// Try to resolve Club UUID from Guild ID. If it fails (e.g. race condition), log and continue.
-	// The system should eventually converge or require a manual sync/setup.
+	// New Club Membership — use UserRoleUser, matching what we wrote to guild_memberships above.
 	clubUUID, err := s.repo.GetClubUUIDByDiscordGuildID(ctx, db, guildID)
 	if err != nil {
 		s.logger.WarnContext(ctx, "Failed to resolve Club UUID for membership creation",
@@ -219,10 +205,10 @@ func (s *UserService) executeCreateUser(
 		membership := &userdb.ClubMembership{
 			ClubUUID:    clubUUID,
 			UserUUID:    newUser.UUID,
-			Role:        "player", // Default role
+			Role:        sharedtypes.UserRoleUser, // matches guild_memberships default
 			JoinedAt:    newUser.CreatedAt,
 			ExternalID:  &extID,
-			DisplayName: &emptyName, // Will be backfilled/updated later
+			DisplayName: &emptyName,
 		}
 		if err := s.repo.UpsertClubMembership(ctx, db, membership); err != nil {
 			s.logger.ErrorContext(ctx, "Failed to create club membership",
