@@ -110,11 +110,7 @@ func (h *AuthHandlers) HandleHTTPOAuthUnlink(w http.ResponseWriter, r *http.Requ
 	}
 
 	if err := h.service.UnlinkProvider(r.Context(), cookie.Value, provider); err != nil {
-		status := http.StatusInternalServerError
-		if err.Error() == "cannot unlink the only connected provider" {
-			status = http.StatusConflict
-		}
-		h.httpError(w, r, err.Error(), status, err)
+		h.httpError(w, r, err.Error(), http.StatusInternalServerError, err)
 		return
 	}
 

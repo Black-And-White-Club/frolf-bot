@@ -264,10 +264,6 @@ func (s *service) UnlinkProvider(ctx context.Context, rawRefreshToken, providerN
 		return fmt.Errorf("provider %s is not linked to this account", providerName)
 	}
 
-	if len(providers) <= 1 {
-		return fmt.Errorf("cannot unlink the only connected provider")
-	}
-
 	if err := s.repo.DeleteLinkedIdentity(ctx, nil, userUUID, providerName); err != nil {
 		return fmt.Errorf("failed to unlink provider: %w", err)
 	}
