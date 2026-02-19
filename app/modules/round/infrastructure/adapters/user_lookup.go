@@ -165,6 +165,28 @@ func (a *UserLookupAdapter) ResolveByNormalizedNames(ctx context.Context, db bun
 		}
 	}
 
+	// 4) Global display-name fallback for still-unmatched keys
+	// This handles users who have udisc_name set but no guild_memberships row,
+	// e.g. users who registered via the new OAuth flow before joining the guild.
+	globalNameKeys := stillUnmatched(requested, resolved)
+	globalNameUsers, err := a.userDB.GetGlobalUsersByUDiscNames(ctx, db, globalNameKeys)
+	if err != nil {
+		return nil, err
+	}
+	for _, user := range globalNameUsers {
+		if user == nil || user.UDiscName == nil {
+			continue
+		}
+		key := normalize(*user.UDiscName)
+		if _, ok := requested[key]; !ok {
+			continue
+		}
+		if _, matched := resolved[key]; matched {
+			continue
+		}
+		resolved[key] = user.GetUserID()
+	}
+
 	return resolved, nil
 }
 
@@ -207,6 +229,17 @@ func expandUsernameLookupValues(requested map[string]struct{}, resolved map[stri
 	}
 
 	return setKeys(candidateSet)
+}
+
+// stillUnmatched returns the set of requested keys that have not yet been resolved.
+func stillUnmatched(requested map[string]struct{}, resolved map[string]sharedtypes.DiscordID) []string {
+	keys := make([]string, 0)
+	for key := range requested {
+		if _, matched := resolved[key]; !matched {
+			keys = append(keys, key)
+		}
+	}
+	return keys
 }
 
 func usernameResolutionKeys(rawUsername string) []string {

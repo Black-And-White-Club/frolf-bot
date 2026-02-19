@@ -37,6 +37,7 @@ type FakeRepository struct {
 	FindByUDiscUsernameFn            func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, username string) (*UserWithMembership, error)
 	FindGlobalByUDiscUsernameFn      func(ctx context.Context, db bun.IDB, username string) (*User, error)
 	GetGlobalUsersByUDiscUsernamesFn func(ctx context.Context, db bun.IDB, usernames []string) ([]*User, error)
+	GetGlobalUsersByUDiscNamesFn     func(ctx context.Context, db bun.IDB, names []string) ([]*User, error)
 	FindByUDiscNameFn                func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, name string) (*UserWithMembership, error)
 	GetUsersByUDiscNamesFn           func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, names []string) ([]UserWithMembership, error)
 	GetUsersByUDiscUsernamesFn       func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, usernames []string) ([]UserWithMembership, error)
@@ -246,6 +247,13 @@ func (f *FakeRepository) FindGlobalByUDiscUsername(ctx context.Context, db bun.I
 func (f *FakeRepository) GetGlobalUsersByUDiscUsernames(ctx context.Context, db bun.IDB, usernames []string) ([]*User, error) {
 	if f.GetGlobalUsersByUDiscUsernamesFn != nil {
 		return f.GetGlobalUsersByUDiscUsernamesFn(ctx, db, usernames)
+	}
+	return []*User{}, nil
+}
+
+func (f *FakeRepository) GetGlobalUsersByUDiscNames(ctx context.Context, db bun.IDB, names []string) ([]*User, error) {
+	if f.GetGlobalUsersByUDiscNamesFn != nil {
+		return f.GetGlobalUsersByUDiscNamesFn(ctx, db, names)
 	}
 	return []*User{}, nil
 }

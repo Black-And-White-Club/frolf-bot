@@ -67,8 +67,10 @@ func (b *Builder) ForRole(claims *authdomain.Claims) *Permissions {
 			clubPerms = b.viewerPermissions(clubUUID, guildID)
 		case authdomain.RolePlayer, authdomain.Role("User"):
 			clubPerms = b.playerPermissions(clubUUID, userUUID, guildID, userID)
-		case authdomain.RoleEditor, authdomain.Role("Editor"), authdomain.RoleAdmin:
+		case authdomain.RoleEditor, authdomain.Role("Editor"):
 			clubPerms = b.editorPermissions(clubUUID, userUUID, guildID, userID)
+		case authdomain.RoleAdmin:
+			clubPerms = b.adminPermissions(clubUUID, userUUID, guildID, userID)
 		default:
 			clubPerms = b.viewerPermissions(clubUUID, guildID)
 		}
@@ -217,4 +219,27 @@ func (b *Builder) editorPermissions(clubUUID, userUUID, guildID, userID string) 
 			Allow: pubAllow,
 		},
 	}
+}
+
+// adminPermissions returns full permissions for admins, extending editor permissions
+// with the ability to publish admin operations and subscribe to their feedback topics.
+// Admin subjects do not carry a guildId suffix; guild scoping is done via payload.guild_id.
+func (b *Builder) adminPermissions(clubUUID, userUUID, guildID, userID string) *Permissions {
+	editor := b.editorPermissions(clubUUID, userUUID, guildID, userID)
+
+	// Admin-only publish subjects (no guildId suffix — backend subscribes without it)
+	editor.Publish.Allow = append(editor.Publish.Allow,
+		"leaderboard.batch.tag.assignment.requested.v1",
+		"leaderboard.manual.point.adjustment.v1",
+	)
+
+	// Admin-only subscribe subjects for operation feedback (no guildId suffix)
+	editor.Subscribe.Allow = append(editor.Subscribe.Allow,
+		"leaderboard.batch.tag.assigned.v1",
+		"leaderboard.batch.tag.assignment.failed.v1",
+		"leaderboard.manual.point.adjustment.success.v1",
+		"leaderboard.manual.point.adjustment.failed.v1",
+	)
+
+	return editor
 }

@@ -505,6 +505,29 @@ func (r *Impl) GetGlobalUsersByUDiscUsernames(ctx context.Context, db bun.IDB, u
 	return users, nil
 }
 
+func (r *Impl) GetGlobalUsersByUDiscNames(ctx context.Context, db bun.IDB, names []string) ([]*User, error) {
+	if db == nil {
+		db = r.db
+	}
+
+	normalizedNames := normalizeLookupValues(names)
+	if len(normalizedNames) == 0 {
+		return []*User{}, nil
+	}
+
+	var users []*User
+	err := db.NewSelect().
+		Model(&users).
+		Where("LOWER(u.udisc_name) IN (?)", bun.In(normalizedNames)).
+		OrderExpr("u.id ASC").
+		Scan(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("userdb.GetGlobalUsersByUDiscNames: %w", err)
+	}
+
+	return users, nil
+}
+
 func (r *Impl) FindByUDiscName(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, name string) (*UserWithMembership, error) {
 	if db == nil {
 		db = r.db
