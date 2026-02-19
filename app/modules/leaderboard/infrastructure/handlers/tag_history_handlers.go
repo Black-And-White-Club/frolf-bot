@@ -92,7 +92,7 @@ func (h *LeaderboardHandlers) HandleTagListRequest(
 	ctx context.Context,
 	payload *leaderboardevents.TagListRequestedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	tagList, err := h.service.GetTagList(ctx, sharedtypes.GuildID(payload.GuildID))
+	tagList, err := h.service.GetTagList(ctx, sharedtypes.GuildID(payload.GuildID), payload.ClubUUID)
 	if err != nil {
 		h.logger.ErrorContext(ctx, "failed to get tag list",
 			slog.String("guild_id", payload.GuildID),

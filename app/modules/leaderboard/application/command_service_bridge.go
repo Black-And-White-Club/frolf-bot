@@ -60,11 +60,12 @@ func (s *LeaderboardService) GetTagHistory(ctx context.Context, guildID sharedty
 
 // GetTagList returns the master tag list for a guild.
 // Delegates to GetTaggedMembers — same underlying data, distinct semantic name for the PWA.
-func (s *LeaderboardService) GetTagList(ctx context.Context, guildID sharedtypes.GuildID) ([]TaggedMemberView, error) {
+// GetTagList returns the master tag list for a guild (optionally filtered by club).
+func (s *LeaderboardService) GetTagList(ctx context.Context, guildID sharedtypes.GuildID, clubUUID *string) ([]TaggedMemberView, error) {
 	if s.commandPipeline == nil {
 		return nil, ErrCommandPipelineUnavailable
 	}
-	return s.commandPipeline.GetTaggedMembers(ctx, string(guildID))
+	return s.commandPipeline.GetTaggedMembers(ctx, string(guildID), clubUUID)
 }
 
 // GenerateTagGraphPNG generates a PNG chart of a member's tag history.

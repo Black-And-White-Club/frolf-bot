@@ -37,7 +37,7 @@ type FakeService struct {
 
 	// Tag History
 	GetTagHistoryFunc       func(ctx context.Context, guildID sharedtypes.GuildID, memberID string, limit int) ([]leaderboardservice.TagHistoryView, error)
-	GetTagListFunc          func(ctx context.Context, guildID sharedtypes.GuildID) ([]leaderboardservice.TaggedMemberView, error)
+	GetTagListFunc          func(ctx context.Context, guildID sharedtypes.GuildID, clubUUID *string) ([]leaderboardservice.TaggedMemberView, error)
 	GenerateTagGraphPNGFunc func(ctx context.Context, guildID sharedtypes.GuildID, memberID string) ([]byte, error)
 
 	// Admin Operations
@@ -206,10 +206,10 @@ func (f *FakeService) GetTagHistory(ctx context.Context, guildID sharedtypes.Gui
 	return nil, nil
 }
 
-func (f *FakeService) GetTagList(ctx context.Context, guildID sharedtypes.GuildID) ([]leaderboardservice.TaggedMemberView, error) {
+func (f *FakeService) GetTagList(ctx context.Context, guildID sharedtypes.GuildID, clubUUID *string) ([]leaderboardservice.TaggedMemberView, error) {
 	f.record("GetTagList")
 	if f.GetTagListFunc != nil {
-		return f.GetTagListFunc(ctx, guildID)
+		return f.GetTagListFunc(ctx, guildID, clubUUID)
 	}
 	return nil, nil
 }

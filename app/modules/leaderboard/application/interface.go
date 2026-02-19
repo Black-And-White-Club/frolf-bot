@@ -112,8 +112,8 @@ type Service interface {
 	// GetTagHistory returns tag history for a member or all members.
 	GetTagHistory(ctx context.Context, guildID sharedtypes.GuildID, memberID string, limit int) ([]TagHistoryView, error)
 
-	// GetTagList returns the master tag list for a guild.
-	GetTagList(ctx context.Context, guildID sharedtypes.GuildID) ([]TaggedMemberView, error)
+	// GetTagList returns the master tag list for a guild (optionally filtered by club).
+	GetTagList(ctx context.Context, guildID sharedtypes.GuildID, clubUUID *string) ([]TaggedMemberView, error)
 
 	// GenerateTagGraphPNG generates a PNG chart of a member's tag history.
 	GenerateTagGraphPNG(ctx context.Context, guildID sharedtypes.GuildID, memberID string) ([]byte, error)

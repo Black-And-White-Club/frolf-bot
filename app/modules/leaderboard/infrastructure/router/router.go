@@ -234,7 +234,7 @@ func (r *LeaderboardRouter) RegisterHandlers(ctx context.Context, handlers leade
 	// TAG HISTORY REQUEST-REPLY
 	registerHandler(deps, leaderboardevents.LeaderboardTagHistoryRequestedV1, handlers.HandleTagHistoryRequest)
 	registerHandler(deps, leaderboardevents.LeaderboardTagGraphRequestedV1, handlers.HandleTagGraphRequest)
-	registerHandler(deps, leaderboardevents.LeaderboardTagListRequestedV1, handlers.HandleTagListRequest)
+	registerHandler(deps, "leaderboard.tag.list.requested.v1.>", handlers.HandleTagListRequest)
 
 	// INFRASTRUCTURE
 	registerHandler(deps, guildevents.GuildConfigCreatedV1, handlers.HandleGuildConfigCreated)

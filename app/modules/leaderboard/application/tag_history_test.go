@@ -102,7 +102,7 @@ func TestLeaderboardService_GetTagList(t *testing.T) {
 		{
 			name: "returns sorted tag list",
 			setupFake: func(f *FakeCommandPipeline) {
-				f.GetTaggedFunc = func(ctx context.Context, guildID string) ([]TaggedMemberView, error) {
+				f.GetTaggedFunc = func(ctx context.Context, guildID string, clubUUID *string) ([]TaggedMemberView, error) {
 					return []TaggedMemberView{
 						{MemberID: "user-2", Tag: 2},
 						{MemberID: "user-1", Tag: 1},
@@ -114,7 +114,7 @@ func TestLeaderboardService_GetTagList(t *testing.T) {
 		{
 			name: "returns empty list when no tagged members",
 			setupFake: func(f *FakeCommandPipeline) {
-				f.GetTaggedFunc = func(ctx context.Context, guildID string) ([]TaggedMemberView, error) {
+				f.GetTaggedFunc = func(ctx context.Context, guildID string, clubUUID *string) ([]TaggedMemberView, error) {
 					return []TaggedMemberView{}, nil
 				}
 			},
@@ -123,7 +123,7 @@ func TestLeaderboardService_GetTagList(t *testing.T) {
 		{
 			name: "pipeline error propagates",
 			setupFake: func(f *FakeCommandPipeline) {
-				f.GetTaggedFunc = func(ctx context.Context, guildID string) ([]TaggedMemberView, error) {
+				f.GetTaggedFunc = func(ctx context.Context, guildID string, clubUUID *string) ([]TaggedMemberView, error) {
 					return nil, errors.New("db error")
 				}
 			},
@@ -146,7 +146,7 @@ func TestLeaderboardService_GetTagList(t *testing.T) {
 				svc = &LeaderboardService{}
 			}
 
-			got, err := svc.GetTagList(context.Background(), guildID)
+			got, err := svc.GetTagList(context.Background(), guildID, nil)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("GetTagList() error = %v, wantErr %v", err, tt.wantErr)
 			}

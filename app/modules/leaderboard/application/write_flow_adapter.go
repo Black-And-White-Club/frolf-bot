@@ -40,8 +40,8 @@ func (p *serviceCommandPipeline) ResetTags(ctx context.Context, guildID string, 
 	return p.service.resetTagsCore(ctx, guildID, finishOrder)
 }
 
-func (p *serviceCommandPipeline) GetTaggedMembers(ctx context.Context, guildID string) ([]TaggedMemberView, error) {
-	return p.service.getTaggedMembersCore(ctx, guildID)
+func (p *serviceCommandPipeline) GetTaggedMembers(ctx context.Context, guildID string, clubUUID *string) ([]TaggedMemberView, error) {
+	return p.service.GetTaggedMembers(ctx, sharedtypes.GuildID(guildID), clubUUID)
 }
 
 func (p *serviceCommandPipeline) GetMemberTag(ctx context.Context, guildID, memberID string) (int, bool, error) {

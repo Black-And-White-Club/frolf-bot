@@ -208,7 +208,7 @@ type FakeCommandPipeline struct {
 	StartSeasonFunc         func(ctx context.Context, guildID, seasonID, seasonName string) error
 	EndSeasonFunc           func(ctx context.Context, guildID string) error
 	ResetTagsFunc           func(ctx context.Context, guildID string, finishOrder []string) ([]leaderboarddomain.TagChange, error)
-	GetTaggedFunc           func(ctx context.Context, guildID string) ([]TaggedMemberView, error)
+	GetTaggedFunc           func(ctx context.Context, guildID string, clubUUID *string) ([]TaggedMemberView, error)
 	GetMemberTagFunc        func(ctx context.Context, guildID, memberID string) (int, bool, error)
 	CheckTagFunc            func(ctx context.Context, guildID, memberID string, tagNumber int) (bool, string, error)
 	GetTagHistoryFunc       func(ctx context.Context, guildID, memberID string, limit int) ([]TagHistoryView, error)
@@ -256,9 +256,9 @@ func (f *FakeCommandPipeline) ResetTags(ctx context.Context, guildID string, fin
 	return nil, nil
 }
 
-func (f *FakeCommandPipeline) GetTaggedMembers(ctx context.Context, guildID string) ([]TaggedMemberView, error) {
+func (f *FakeCommandPipeline) GetTaggedMembers(ctx context.Context, guildID string, clubUUID *string) ([]TaggedMemberView, error) {
 	if f.GetTaggedFunc != nil {
-		return f.GetTaggedFunc(ctx, guildID)
+		return f.GetTaggedFunc(ctx, guildID, clubUUID)
 	}
 	return nil, nil
 }

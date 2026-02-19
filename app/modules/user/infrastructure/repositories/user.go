@@ -305,9 +305,13 @@ func (r *Impl) GetClubMembershipsByUserUUID(ctx context.Context, db bun.IDB, use
 	}
 	var memberships []*ClubMembership
 	err := db.NewSelect().
-		Model(&memberships).
-		Where("user_uuid = ?", userUUID).
-		Scan(ctx)
+		TableExpr("club_memberships AS cm").
+		ColumnExpr("cm.*").
+		Join("JOIN clubs c ON c.uuid = cm.club_uuid").
+		Join("LEFT JOIN guild_configs g ON g.guild_id = c.discord_guild_id").
+		Where("cm.user_uuid = ?", userUUID).
+		Where("(c.discord_guild_id IS NULL OR g.guild_id IS NULL OR g.is_active = true)").
+		Scan(ctx, &memberships)
 	if err != nil {
 		return nil, fmt.Errorf("userdb.GetClubMembershipsByUserUUID: %w", err)
 	}

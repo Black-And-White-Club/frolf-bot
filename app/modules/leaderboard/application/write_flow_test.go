@@ -32,6 +32,13 @@ type fakeLeagueMemberRepo struct {
 	bulkUpsertCalls       [][]leaderboarddb.LeagueMember
 }
 
+func (f *fakeLeagueMemberRepo) GetTaggedMembers(ctx context.Context, db bun.IDB, guildID string, clubUUID *string) ([]leaderboarddb.LeagueMember, error) {
+	if f.getMembersByGuildFunc != nil {
+		return f.getMembersByGuildFunc(ctx, db, guildID)
+	}
+	return nil, nil
+}
+
 func (f *fakeLeagueMemberRepo) GetMembersByGuild(ctx context.Context, db bun.IDB, guildID string) ([]leaderboarddb.LeagueMember, error) {
 	if f.getMembersByGuildFunc != nil {
 		return f.getMembersByGuildFunc(ctx, db, guildID)

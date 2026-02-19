@@ -32,7 +32,7 @@ type CommandPipeline interface {
 	StartSeason(ctx context.Context, guildID, seasonID, seasonName string) error
 	EndSeason(ctx context.Context, guildID string) error
 	ResetTags(ctx context.Context, guildID string, finishOrder []string) ([]leaderboarddomain.TagChange, error)
-	GetTaggedMembers(ctx context.Context, guildID string) ([]TaggedMemberView, error)
+	GetTaggedMembers(ctx context.Context, guildID string, clubUUID *string) ([]TaggedMemberView, error)
 	GetMemberTag(ctx context.Context, guildID, memberID string) (int, bool, error)
 	CheckTagAvailability(ctx context.Context, guildID, memberID string, tagNumber int) (bool, string, error)
 

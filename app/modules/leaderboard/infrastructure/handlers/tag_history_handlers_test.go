@@ -160,7 +160,7 @@ func TestLeaderboardHandlers_HandleTagListRequest(t *testing.T) {
 			name:    "success with members",
 			payload: &leaderboardevents.TagListRequestedPayloadV1{GuildID: string(guildID)},
 			setupFake: func(f *FakeService) {
-				f.GetTagListFunc = func(ctx context.Context, g sharedtypes.GuildID) ([]leaderboardservice.TaggedMemberView, error) {
+				f.GetTagListFunc = func(ctx context.Context, g sharedtypes.GuildID, clubUUID *string) ([]leaderboardservice.TaggedMemberView, error) {
 					return []leaderboardservice.TaggedMemberView{
 						{MemberID: "user-1", Tag: 1},
 						{MemberID: "user-2", Tag: 2},
@@ -173,7 +173,7 @@ func TestLeaderboardHandlers_HandleTagListRequest(t *testing.T) {
 			name:    "success with empty list",
 			payload: &leaderboardevents.TagListRequestedPayloadV1{GuildID: string(guildID)},
 			setupFake: func(f *FakeService) {
-				f.GetTagListFunc = func(ctx context.Context, g sharedtypes.GuildID) ([]leaderboardservice.TaggedMemberView, error) {
+				f.GetTagListFunc = func(ctx context.Context, g sharedtypes.GuildID, clubUUID *string) ([]leaderboardservice.TaggedMemberView, error) {
 					return []leaderboardservice.TaggedMemberView{}, nil
 				}
 			},
@@ -183,7 +183,7 @@ func TestLeaderboardHandlers_HandleTagListRequest(t *testing.T) {
 			name:    "service error returns failure topic",
 			payload: &leaderboardevents.TagListRequestedPayloadV1{GuildID: string(guildID)},
 			setupFake: func(f *FakeService) {
-				f.GetTagListFunc = func(ctx context.Context, g sharedtypes.GuildID) ([]leaderboardservice.TaggedMemberView, error) {
+				f.GetTagListFunc = func(ctx context.Context, g sharedtypes.GuildID, clubUUID *string) ([]leaderboardservice.TaggedMemberView, error) {
 					return nil, errors.New("db error")
 				}
 			},

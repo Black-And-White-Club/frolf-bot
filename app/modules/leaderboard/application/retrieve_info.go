@@ -3,6 +3,7 @@ package leaderboardservice
 import (
 	"context"
 	"database/sql"
+	"fmt"
 
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
@@ -27,7 +28,7 @@ func (s *LeaderboardService) GetLeaderboard(
 			return results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error]{}, ErrCommandPipelineUnavailable
 		}
 
-		taggedMembers, err := s.commandPipeline.GetTaggedMembers(ctx, string(guildID))
+		taggedMembers, err := s.commandPipeline.GetTaggedMembers(ctx, string(guildID), nil)
 		if err != nil {
 			return results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error]{}, err
 		}
@@ -47,6 +48,34 @@ func (s *LeaderboardService) GetLeaderboard(
 
 		return results.SuccessResult[[]leaderboardtypes.LeaderboardEntry, error](entries), nil
 	})
+}
+
+// GetTaggedMembers returns the current normalized tag state for a guild, sorted by tag (optionally filtered by club).
+func (s *LeaderboardService) GetTaggedMembers(ctx context.Context, guildID sharedtypes.GuildID, clubUUID *string) ([]TaggedMemberView, error) {
+	// 5. Get current tags (pass s.db)
+	repoMembers, err := s.memberRepo.GetTaggedMembers(ctx, s.db, string(guildID), clubUUID)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to get tagged members",
+			"guild_id", guildID,
+			"club_uuid", clubUUID,
+			"error", err.Error(),
+		)
+		return nil, fmt.Errorf("failed to get tagged members: %w", err)
+	}
+
+	// Map DB model to Service View Model
+	members := make([]TaggedMemberView, 0, len(repoMembers))
+	for _, m := range repoMembers {
+		if m.CurrentTag == nil {
+			continue // Should be filtered by query but safe to check
+		}
+		members = append(members, TaggedMemberView{
+			MemberID: m.MemberID,
+			Tag:      *m.CurrentTag,
+		})
+	}
+
+	return members, nil
 }
 
 // GetTagByUserID returns the tag number for a given user.

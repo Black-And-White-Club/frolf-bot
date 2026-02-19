@@ -27,7 +27,7 @@ func TestLeaderboardService_GetLeaderboard(t *testing.T) {
 		{
 			name: "Successfully retrieves leaderboard",
 			setupPipeline: func(p *FakeCommandPipeline) {
-				p.GetTaggedFunc = func(ctx context.Context, guildID string) ([]TaggedMemberView, error) {
+				p.GetTaggedFunc = func(ctx context.Context, guildID string, clubUUID *string) ([]TaggedMemberView, error) {
 					return []TaggedMemberView{
 						{MemberID: "user1", Tag: 1},
 						{MemberID: "user2", Tag: 2},
@@ -39,8 +39,8 @@ func TestLeaderboardService_GetLeaderboard(t *testing.T) {
 		{
 			name: "Pipeline failure bubbles up",
 			setupPipeline: func(p *FakeCommandPipeline) {
-				p.GetTaggedFunc = func(ctx context.Context, guildID string) ([]TaggedMemberView, error) {
-					return nil, errors.New("lookup failed")
+				p.GetTaggedFunc = func(ctx context.Context, guildID string, clubUUID *string) ([]TaggedMemberView, error) {
+					return nil, errors.New("db error")
 				}
 			},
 			wantErr: true,

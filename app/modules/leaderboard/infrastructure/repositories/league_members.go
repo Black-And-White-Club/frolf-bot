@@ -12,6 +12,9 @@ import (
 
 // LeagueMemberRepository defines operations on the league_members table.
 type LeagueMemberRepository interface {
+	// GetTaggedMembers returns all members with assigned tags for a guild (optionally filtered by club).
+	GetTaggedMembers(ctx context.Context, db bun.IDB, guildID string, clubUUID *string) ([]LeagueMember, error)
+
 	// GetMembersByGuild retrieves all members with tags for a guild.
 	GetMembersByGuild(ctx context.Context, db bun.IDB, guildID string) ([]LeagueMember, error)
 
@@ -46,6 +49,30 @@ type LeagueMemberRepo struct{}
 
 func NewLeagueMemberRepo() LeagueMemberRepository {
 	return &LeagueMemberRepo{}
+}
+
+// GetTaggedMembers returns all members with assigned tags for a guild (optionally filtered by club).
+func (r *LeagueMemberRepo) GetTaggedMembers(ctx context.Context, db bun.IDB, guildID string, clubUUID *string) ([]LeagueMember, error) {
+	var members []LeagueMember
+
+	query := db.NewSelect().
+		Model(&members).
+		Where("lm.guild_id = ?", guildID). // Assuming 'lm' alias for LeagueMember table
+		Where("lm.current_tag IS NOT NULL").
+		Order("lm.current_tag ASC")
+
+	if clubUUID != nil {
+		// Join with users and club_memberships to filter by club
+		query.Join("JOIN users u ON u.user_id = lm.member_id").
+			Join("JOIN club_memberships cm ON cm.user_uuid = u.uuid").
+			Where("cm.club_uuid = ?", *clubUUID)
+	}
+
+	err := query.Scan(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("leaguemember.GetTaggedMembers: %w", err)
+	}
+	return members, nil
 }
 
 func (r *LeagueMemberRepo) GetMembersByGuild(ctx context.Context, db bun.IDB, guildID string) ([]LeagueMember, error) {

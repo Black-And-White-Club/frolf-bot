@@ -599,34 +599,6 @@ func (s *LeaderboardService) endSeasonCore(ctx context.Context, guildID string) 
 	return nil
 }
 
-// GetTaggedMembers returns the current normalized tag state for a guild, sorted by tag.
-func (s *LeaderboardService) getTaggedMembersCore(ctx context.Context, guildID string) ([]TaggedMemberView, error) {
-	members, err := s.memberRepo.GetMembersByGuild(ctx, s.db, guildID)
-	if err != nil {
-		return nil, fmt.Errorf("LeaderboardService.GetTaggedMembers: %w", err)
-	}
-
-	views := make([]TaggedMemberView, 0, len(members))
-	for _, member := range members {
-		if member.CurrentTag == nil || *member.CurrentTag <= 0 {
-			continue
-		}
-		views = append(views, TaggedMemberView{
-			MemberID: member.MemberID,
-			Tag:      *member.CurrentTag,
-		})
-	}
-
-	slices.SortFunc(views, func(a, b TaggedMemberView) int {
-		if c := cmp.Compare(a.Tag, b.Tag); c != 0 {
-			return c
-		}
-		return cmp.Compare(a.MemberID, b.MemberID)
-	})
-
-	return views, nil
-}
-
 // GetMemberTag returns a member's current normalized tag for a guild.
 func (s *LeaderboardService) getMemberTagCore(ctx context.Context, guildID, memberID string) (int, bool, error) {
 	member, err := s.memberRepo.GetMemberByID(ctx, s.db, guildID, memberID)
