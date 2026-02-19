@@ -52,8 +52,10 @@ func (s *LeaderboardService) GetLeaderboard(
 
 // GetTaggedMembers returns the current normalized tag state for a guild, sorted by tag (optionally filtered by club).
 func (s *LeaderboardService) GetTaggedMembers(ctx context.Context, guildID sharedtypes.GuildID, clubUUID *string) ([]TaggedMemberView, error) {
+	s.logger.DebugContext(ctx, "leaderboard: about to call memberRepo.GetTaggedMembers", "guild_id", guildID)
 	// 5. Get current tags (pass s.db)
 	repoMembers, err := s.memberRepo.GetTaggedMembers(ctx, s.db, string(guildID), clubUUID)
+	s.logger.DebugContext(ctx, "leaderboard: finished memberRepo.GetTaggedMembers", "guild_id", guildID, "member_count", len(repoMembers), "err", err)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to get tagged members",
 			"guild_id", guildID,
