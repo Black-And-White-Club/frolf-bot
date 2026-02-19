@@ -40,6 +40,7 @@ type Repository interface {
 	GetClubMembershipsByUserUUIDs(ctx context.Context, db bun.IDB, userUUIDs []uuid.UUID) ([]*ClubMembership, error)
 	UpsertClubMembership(ctx context.Context, db bun.IDB, membership *ClubMembership) error
 	GetClubMembershipByExternalID(ctx context.Context, db bun.IDB, externalID string, clubUUID uuid.UUID) (*ClubMembership, error)
+	UpdateClubMembershipRoleByDiscordIDs(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, role sharedtypes.UserRoleEnum) error
 
 	// Guild-scoped operations
 	GetUserByUserID(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID) (*UserWithMembership, error)

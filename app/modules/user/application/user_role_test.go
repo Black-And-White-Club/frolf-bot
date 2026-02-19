@@ -34,11 +34,14 @@ func TestUserService_UpdateUserRoleInDatabase(t *testing.T) {
 		verify         func(t *testing.T, res results.OperationResult[bool, error], infraErr error)
 	}{
 		{
-			name:    "success",
+			name:    "success - both writes succeed",
 			userID:  testUserID,
 			newRole: testRole,
 			setupFake: func(f *FakeUserRepository) {
 				f.UpdateUserRoleFunc = func(ctx context.Context, db bun.IDB, uID sharedtypes.DiscordID, gID sharedtypes.GuildID, role sharedtypes.UserRoleEnum) error {
+					return nil
+				}
+				f.UpdateClubMembershipRoleByDiscordIDsFn = func(ctx context.Context, db bun.IDB, uID sharedtypes.DiscordID, gID sharedtypes.GuildID, role sharedtypes.UserRoleEnum) error {
 					return nil
 				}
 			},
@@ -48,6 +51,52 @@ func TestUserService_UpdateUserRoleInDatabase(t *testing.T) {
 				}
 				if res.Success == nil || !*res.Success {
 					t.Errorf("expected success result true, got %v", res.Success)
+				}
+			},
+		},
+		{
+			// Club membership row doesn't exist yet (backfill pending).
+			// Should warn and still return a success result — not a domain or infra failure.
+			name:    "success - club membership not found (ErrNoRowsAffected logged as warn)",
+			userID:  testUserID,
+			newRole: testRole,
+			setupFake: func(f *FakeUserRepository) {
+				f.UpdateUserRoleFunc = func(ctx context.Context, db bun.IDB, uID sharedtypes.DiscordID, gID sharedtypes.GuildID, role sharedtypes.UserRoleEnum) error {
+					return nil
+				}
+				f.UpdateClubMembershipRoleByDiscordIDsFn = func(ctx context.Context, db bun.IDB, uID sharedtypes.DiscordID, gID sharedtypes.GuildID, role sharedtypes.UserRoleEnum) error {
+					return userdb.ErrNoRowsAffected
+				}
+			},
+			verify: func(t *testing.T, res results.OperationResult[bool, error], infraErr error) {
+				if infraErr != nil {
+					t.Fatalf("unexpected infra error: %v", infraErr)
+				}
+				if res.Success == nil || !*res.Success {
+					t.Errorf("expected success result true even when club membership missing, got %v", res.Success)
+				}
+			},
+		},
+		{
+			// Club membership update fails with a non-sentinel error (e.g. DB unavailable).
+			// Should warn (JWT may be stale) but still return a success result — best-effort.
+			name:    "success - club membership update hard failure (warn, JWT may be stale)",
+			userID:  testUserID,
+			newRole: testRole,
+			setupFake: func(f *FakeUserRepository) {
+				f.UpdateUserRoleFunc = func(ctx context.Context, db bun.IDB, uID sharedtypes.DiscordID, gID sharedtypes.GuildID, role sharedtypes.UserRoleEnum) error {
+					return nil
+				}
+				f.UpdateClubMembershipRoleByDiscordIDsFn = func(ctx context.Context, db bun.IDB, uID sharedtypes.DiscordID, gID sharedtypes.GuildID, role sharedtypes.UserRoleEnum) error {
+					return errors.New("club db unavailable")
+				}
+			},
+			verify: func(t *testing.T, res results.OperationResult[bool, error], infraErr error) {
+				if infraErr != nil {
+					t.Fatalf("expected best-effort — club membership failure must not propagate as infra error, got %v", infraErr)
+				}
+				if res.Success == nil || !*res.Success {
+					t.Errorf("expected success result true despite club membership failure, got %v", res.Success)
 				}
 			},
 		},

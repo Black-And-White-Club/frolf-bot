@@ -429,6 +429,32 @@ func (r *Impl) UpdateUserRole(ctx context.Context, db bun.IDB, userID sharedtype
 	return r.UpdateMembershipRole(ctx, db, userID, guildID, role)
 }
 
+// UpdateClubMembershipRoleByDiscordIDs updates the role in club_memberships for a user
+// identified by their Discord user ID and guild ID, resolving UUIDs via subqueries.
+// Returns ErrNoRowsAffected if no matching club membership exists (e.g. backfill not yet run).
+func (r *Impl) UpdateClubMembershipRoleByDiscordIDs(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, role sharedtypes.UserRoleEnum) error {
+	if db == nil {
+		db = r.db
+	}
+	if !role.IsValid() {
+		return fmt.Errorf("invalid user role: %s", role)
+	}
+	res, err := db.NewUpdate().
+		TableExpr("club_memberships").
+		Set("role = ?", role).
+		Where("user_uuid = (SELECT uuid FROM users WHERE user_id = ?)", userID).
+		Where("club_uuid = (SELECT uuid FROM clubs WHERE discord_guild_id = ?)", guildID).
+		Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("userdb.UpdateClubMembershipRoleByDiscordIDs: %w", err)
+	}
+	rows, _ := res.RowsAffected()
+	if rows == 0 {
+		return ErrNoRowsAffected
+	}
+	return nil
+}
+
 // --- SEARCH METHODS ---
 
 func (r *Impl) FindByUDiscUsername(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, username string) (*UserWithMembership, error) {

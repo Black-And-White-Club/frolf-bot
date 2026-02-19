@@ -27,9 +27,10 @@ type FakeRepository struct {
 
 	GetClubMembershipFn             func(ctx context.Context, db bun.IDB, userUUID, clubUUID uuid.UUID) (*ClubMembership, error)
 	UpsertClubMembershipFn          func(ctx context.Context, db bun.IDB, membership *ClubMembership) error
-	GetClubMembershipByExternalIDFn func(ctx context.Context, db bun.IDB, externalID string, clubUUID uuid.UUID) (*ClubMembership, error)
-	GetClubMembershipsByUserUUIDFn  func(ctx context.Context, db bun.IDB, userUUID uuid.UUID) ([]*ClubMembership, error)
-	GetClubMembershipsByUserUUIDsFn func(ctx context.Context, db bun.IDB, userUUIDs []uuid.UUID) ([]*ClubMembership, error)
+	GetClubMembershipByExternalIDFn              func(ctx context.Context, db bun.IDB, externalID string, clubUUID uuid.UUID) (*ClubMembership, error)
+	GetClubMembershipsByUserUUIDFn               func(ctx context.Context, db bun.IDB, userUUID uuid.UUID) ([]*ClubMembership, error)
+	GetClubMembershipsByUserUUIDsFn              func(ctx context.Context, db bun.IDB, userUUIDs []uuid.UUID) ([]*ClubMembership, error)
+	UpdateClubMembershipRoleByDiscordIDsFn       func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, role sharedtypes.UserRoleEnum) error
 
 	GetUserByUserIDFn                func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID) (*UserWithMembership, error)
 	GetUserRoleFn                    func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID) (sharedtypes.UserRoleEnum, error)
@@ -144,6 +145,13 @@ func (f *FakeRepository) GetClubMembershipsByUserUUIDs(ctx context.Context, db b
 		return f.GetClubMembershipsByUserUUIDsFn(ctx, db, userUUIDs)
 	}
 	return nil, nil
+}
+
+func (f *FakeRepository) UpdateClubMembershipRoleByDiscordIDs(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, role sharedtypes.UserRoleEnum) error {
+	if f.UpdateClubMembershipRoleByDiscordIDsFn != nil {
+		return f.UpdateClubMembershipRoleByDiscordIDsFn(ctx, db, userID, guildID, role)
+	}
+	return nil
 }
 
 func (f *FakeRepository) GetUserGlobal(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID) (*User, error) {

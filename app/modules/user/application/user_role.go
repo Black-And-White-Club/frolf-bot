@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
@@ -53,7 +54,7 @@ func (s *UserService) executeUpdateUserRole(
 		return results.FailureResult[bool](ErrInvalidRole), nil
 	}
 
-	// 2. Repository Call
+	// 2. Update legacy guild_memberships table.
 	err := s.repo.UpdateUserRole(ctx, db, userID, guildID, newRole)
 	if err != nil {
 		// If user not found, return domain failure (nil error)
@@ -64,6 +65,23 @@ func (s *UserService) executeUpdateUserRole(
 		return results.OperationResult[bool, error]{}, fmt.Errorf("failed to update user role: %w", err)
 	}
 
-	// 3. Success
+	// 3. Also update club_memberships (new identity abstraction) so JWT role claims stay in sync.
+	// Best-effort: ErrNoRowsAffected means no club membership exists yet (backfill pending).
+	if clubErr := s.repo.UpdateClubMembershipRoleByDiscordIDs(ctx, db, userID, guildID, newRole); clubErr != nil {
+		if errors.Is(clubErr, userdb.ErrNoRowsAffected) {
+			s.logger.WarnContext(ctx, "No club membership found when updating role; backfill may not have run yet",
+				attr.String("user_id", string(userID)),
+				attr.String("guild_id", string(guildID)),
+			)
+		} else {
+			s.logger.WarnContext(ctx, "Failed to update club membership role; JWT role may be stale until next profile sync",
+				attr.Error(clubErr),
+				attr.String("user_id", string(userID)),
+				attr.String("guild_id", string(guildID)),
+			)
+		}
+	}
+
+	// 4. Success
 	return results.SuccessResult[bool, error](true), nil
 }

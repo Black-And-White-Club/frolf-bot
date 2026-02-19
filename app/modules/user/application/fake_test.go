@@ -51,11 +51,12 @@ type FakeUserRepository struct {
 	GetUserMembershipsFunc    func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID) ([]*userdb.GuildMembership, error)
 
 	// Club membership operations
-	GetClubMembershipFn             func(ctx context.Context, db bun.IDB, userUUID, clubUUID uuid.UUID) (*userdb.ClubMembership, error)
-	GetClubMembershipsByUserUUIDFn  func(ctx context.Context, db bun.IDB, userUUID uuid.UUID) ([]*userdb.ClubMembership, error)
-	UpsertClubMembershipFn          func(ctx context.Context, db bun.IDB, membership *userdb.ClubMembership) error
-	GetClubMembershipByExternalIDFn func(ctx context.Context, db bun.IDB, externalID string, clubUUID uuid.UUID) (*userdb.ClubMembership, error)
-	GetClubMembershipsByUserUUIDsFn func(ctx context.Context, db bun.IDB, userUUIDs []uuid.UUID) ([]*userdb.ClubMembership, error)
+	GetClubMembershipFn                        func(ctx context.Context, db bun.IDB, userUUID, clubUUID uuid.UUID) (*userdb.ClubMembership, error)
+	GetClubMembershipsByUserUUIDFn             func(ctx context.Context, db bun.IDB, userUUID uuid.UUID) ([]*userdb.ClubMembership, error)
+	UpsertClubMembershipFn                     func(ctx context.Context, db bun.IDB, membership *userdb.ClubMembership) error
+	GetClubMembershipByExternalIDFn            func(ctx context.Context, db bun.IDB, externalID string, clubUUID uuid.UUID) (*userdb.ClubMembership, error)
+	GetClubMembershipsByUserUUIDsFn            func(ctx context.Context, db bun.IDB, userUUIDs []uuid.UUID) ([]*userdb.ClubMembership, error)
+	UpdateClubMembershipRoleByDiscordIDsFn     func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, role sharedtypes.UserRoleEnum) error
 
 	// Guild-scoped operations
 	GetUserByUserIDFunc                func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID) (*userdb.UserWithMembership, error)
@@ -461,6 +462,14 @@ func (f *FakeUserRepository) DeleteLinkedIdentity(ctx context.Context, db bun.ID
 	f.record("DeleteLinkedIdentity")
 	if f.DeleteLinkedIdentityFn != nil {
 		return f.DeleteLinkedIdentityFn(ctx, db, userUUID, provider)
+	}
+	return nil
+}
+
+func (f *FakeUserRepository) UpdateClubMembershipRoleByDiscordIDs(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, role sharedtypes.UserRoleEnum) error {
+	f.record("UpdateClubMembershipRoleByDiscordIDs")
+	if f.UpdateClubMembershipRoleByDiscordIDsFn != nil {
+		return f.UpdateClubMembershipRoleByDiscordIDsFn(ctx, db, userID, guildID, role)
 	}
 	return nil
 }
