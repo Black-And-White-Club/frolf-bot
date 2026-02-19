@@ -119,8 +119,8 @@ func TestAuthHandlers_HandleHTTPOAuthLinkInitiate(t *testing.T) {
 				if !linkCookie.HttpOnly {
 					t.Error("expected link_mode cookie to be HttpOnly")
 				}
-				if linkCookie.MaxAge != 300 {
-					t.Errorf("expected link_mode MaxAge=300, got %d", linkCookie.MaxAge)
+				if linkCookie.MaxAge != 360 {
+					t.Errorf("expected link_mode MaxAge=360, got %d", linkCookie.MaxAge)
 				}
 			},
 		},
@@ -271,7 +271,7 @@ func TestAuthHandlers_HandleHTTPOAuthCallback(t *testing.T) {
 			},
 		},
 		{
-			name:   "link mode — success clears link_mode cookie and redirects to account",
+			name:   "link mode — success clears link_mode cookie and redirects to account with success param",
 			rawURL: "/api/auth/discord/callback?state=" + testState + "&code=" + testCode,
 			setupCookies: func(req *http.Request) {
 				req.AddCookie(&http.Cookie{Name: oauthStateCookie, Value: testState})
@@ -282,8 +282,8 @@ func TestAuthHandlers_HandleHTTPOAuthCallback(t *testing.T) {
 				if rr.Code != http.StatusFound {
 					t.Errorf("expected 302, got %d", rr.Code)
 				}
-				if loc := rr.Header().Get("Location"); loc != pwaBase+"/account" {
-					t.Errorf("expected redirect to %s/account, got %s", pwaBase, loc)
+				if loc := rr.Header().Get("Location"); loc != pwaBase+"/account?success=linked" {
+					t.Errorf("expected redirect to %s/account?success=linked, got %s", pwaBase, loc)
 				}
 				// link_mode cookie should be cleared (MaxAge=-1)
 				cleared := findCookie(rr, linkModeCookie)

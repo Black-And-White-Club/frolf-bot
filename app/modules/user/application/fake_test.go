@@ -85,6 +85,9 @@ type FakeUserRepository struct {
 	GetMagicLinkFn      func(ctx context.Context, db bun.IDB, token string) (*userdb.MagicLink, error)
 	MarkMagicLinkUsedFn func(ctx context.Context, db bun.IDB, token string) error
 	ConsumeMagicLinkFn  func(ctx context.Context, db bun.IDB, tokenHash string, now time.Time) (*userdb.MagicLink, error)
+
+	// Linked identity operations
+	GetLinkedProvidersByUserUUIDFn func(ctx context.Context, db bun.IDB, userUUID uuid.UUID) ([]string, error)
 }
 
 // Trace returns the sequence of method calls made to the fake.
@@ -434,6 +437,14 @@ func (f *FakeUserRepository) GetLinkedIdentityByProvider(ctx context.Context, db
 func (f *FakeUserRepository) UpdateLinkedIdentityToken(ctx context.Context, db bun.IDB, provider, providerID, accessToken string, expiresAt *time.Time) error {
 	f.record("UpdateLinkedIdentityToken")
 	return nil
+}
+
+func (f *FakeUserRepository) GetLinkedProvidersByUserUUID(ctx context.Context, db bun.IDB, userUUID uuid.UUID) ([]string, error) {
+	f.record("GetLinkedProvidersByUserUUID")
+	if f.GetLinkedProvidersByUserUUIDFn != nil {
+		return f.GetLinkedProvidersByUserUUIDFn(ctx, db, userUUID)
+	}
+	return nil, nil
 }
 
 // Ensure the fake actually satisfies the interface

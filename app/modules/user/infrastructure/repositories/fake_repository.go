@@ -57,6 +57,7 @@ type FakeRepository struct {
 	CreateUserWithLinkedIdentityFn  func(ctx context.Context, db bun.IDB, provider, providerID, displayName string) (uuid.UUID, error)
 	InsertLinkedIdentityFn          func(ctx context.Context, db bun.IDB, userUUID uuid.UUID, provider, providerID, displayName string) error
 	GetLinkedIdentityByProviderFn   func(ctx context.Context, db bun.IDB, userUUID uuid.UUID, provider string) (*LinkedIdentity, error)
+	GetLinkedProvidersByUserUUIDFn  func(ctx context.Context, db bun.IDB, userUUID uuid.UUID) ([]string, error)
 	UpdateLinkedIdentityTokenFn     func(ctx context.Context, db bun.IDB, provider, providerID, accessToken string, expiresAt *time.Time) error
 
 	// Magic Link operations
@@ -351,6 +352,13 @@ func (f *FakeRepository) GetLinkedIdentityByProvider(ctx context.Context, db bun
 		return f.GetLinkedIdentityByProviderFn(ctx, db, userUUID, provider)
 	}
 	return nil, ErrNotFound
+}
+
+func (f *FakeRepository) GetLinkedProvidersByUserUUID(ctx context.Context, db bun.IDB, userUUID uuid.UUID) ([]string, error) {
+	if f.GetLinkedProvidersByUserUUIDFn != nil {
+		return f.GetLinkedProvidersByUserUUIDFn(ctx, db, userUUID)
+	}
+	return nil, nil
 }
 
 func (f *FakeRepository) UpdateLinkedIdentityToken(ctx context.Context, db bun.IDB, provider, providerID, accessToken string, expiresAt *time.Time) error {

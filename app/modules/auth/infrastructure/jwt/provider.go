@@ -16,6 +16,7 @@ type pwaClaims struct {
 	UserUUID         string                `json:"user_uuid,omitempty"`
 	ActiveClubUUID   string                `json:"active_club_uuid,omitempty"`
 	Clubs            []authdomain.ClubRole `json:"clubs,omitempty"`
+	LinkedProviders  []string              `json:"linked_providers,omitempty"`
 	RefreshTokenHash string                `json:"rt_hash,omitempty"`
 	Guild            string                `json:"guild,omitempty"` // Legacy Discord Guild ID
 	Role             string                `json:"role,omitempty"`  // Legacy Role
@@ -53,6 +54,7 @@ func (p *provider) GenerateToken(domainClaims *authdomain.Claims, ttl time.Durat
 		UserUUID:         domainClaims.UserUUID.String(),
 		ActiveClubUUID:   domainClaims.ActiveClubUUID.String(),
 		Clubs:            domainClaims.Clubs,
+		LinkedProviders:  domainClaims.LinkedProviders,
 		RefreshTokenHash: domainClaims.RefreshTokenHash,
 		Guild:            domainClaims.GuildID,
 		Role:             string(domainClaims.Role),
@@ -109,6 +111,7 @@ func (p *provider) ValidateToken(tokenString string) (*authdomain.Claims, error)
 		GuildID:          claims.Guild,
 		Role:             authdomain.Role(claims.Role),
 		Clubs:            claims.Clubs,
+		LinkedProviders:  claims.LinkedProviders,
 	}
 
 	if claims.UserUUID != "" {

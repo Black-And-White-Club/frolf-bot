@@ -857,6 +857,22 @@ func (r *Impl) GetLinkedIdentityByProvider(ctx context.Context, db bun.IDB, user
 	return li, nil
 }
 
+func (r *Impl) GetLinkedProvidersByUserUUID(ctx context.Context, db bun.IDB, userUUID uuid.UUID) ([]string, error) {
+	if db == nil {
+		db = r.db
+	}
+	var providers []string
+	err := db.NewSelect().
+		Model((*LinkedIdentity)(nil)).
+		Column("provider").
+		Where("user_uuid = ?", userUUID).
+		Scan(ctx, &providers)
+	if err != nil {
+		return nil, fmt.Errorf("userdb.GetLinkedProvidersByUserUUID: %w", err)
+	}
+	return providers, nil
+}
+
 func (r *Impl) UpdateLinkedIdentityToken(ctx context.Context, db bun.IDB, provider, providerID, accessToken string, expiresAt *time.Time) error {
 	if db == nil {
 		db = r.db
