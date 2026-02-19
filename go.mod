@@ -142,5 +142,3 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 	mellium.im/sasl v0.3.2 // indirect
 )
-
-replace github.com/Black-And-White-Club/frolf-bot-shared => ../frolf-bot-shared
