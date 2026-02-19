@@ -237,6 +237,37 @@ func (s *service) LinkIdentityToUser(ctx context.Context, rawRefreshToken, provi
 	return nil
 }
 
+// UnlinkProvider removes an OAuth provider identity from the user's account.
+// The user must have at least one other linked identity remaining.
+func (s *service) UnlinkProvider(ctx context.Context, rawRefreshToken, providerName string) error {
+	ctx, span := s.tracer.Start(ctx, "AuthService.UnlinkProvider")
+	defer span.End()
+
+	userUUID, err := s.getUserUUIDFromRefreshToken(ctx, rawRefreshToken)
+	if err != nil {
+		return err
+	}
+
+	providers, err := s.repo.GetLinkedProvidersByUserUUID(ctx, nil, userUUID)
+	if err != nil {
+		return fmt.Errorf("failed to fetch linked providers: %w", err)
+	}
+
+	if len(providers) <= 1 {
+		return fmt.Errorf("cannot unlink the only connected provider")
+	}
+
+	if err := s.repo.DeleteLinkedIdentity(ctx, nil, userUUID, providerName); err != nil {
+		return fmt.Errorf("failed to unlink provider: %w", err)
+	}
+
+	s.logger.InfoContext(ctx, "Unlinked provider from user",
+		attr.String("provider", providerName),
+		attr.String("user_uuid", userUUID.String()),
+	)
+	return nil
+}
+
 // getUserUUIDFromRefreshToken is a private helper used by other oauth service methods.
 // It validates the refresh token and returns the associated user UUID.
 func (s *service) getUserUUIDFromRefreshToken(ctx context.Context, rawToken string) (uuid.UUID, error) {

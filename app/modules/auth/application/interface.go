@@ -35,6 +35,10 @@ type Service interface {
 	// LinkIdentityToUser links an additional OAuth provider to an existing account.
 	// rawRefreshToken must belong to the authenticated user.
 	LinkIdentityToUser(ctx context.Context, rawRefreshToken, provider, code, state string) error
+
+	// UnlinkProvider removes an OAuth provider identity from the user's account.
+	// Returns an error if it is the user's only linked identity.
+	UnlinkProvider(ctx context.Context, rawRefreshToken, provider string) error
 }
 
 // OAuthCallbackState holds the state parameter used for CSRF validation in the OAuth flow.

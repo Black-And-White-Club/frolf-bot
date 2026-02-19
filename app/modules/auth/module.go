@@ -138,6 +138,7 @@ func NewModule(
 			r.Get("/{provider}/login", handlers.HandleHTTPOAuthLogin)
 			r.Get("/{provider}/callback", handlers.HandleHTTPOAuthCallback)
 			r.Get("/{provider}/link", handlers.HandleHTTPOAuthLinkInitiate)
+			r.Delete("/{provider}/unlink", handlers.HandleHTTPOAuthUnlink)
 
 			// Protected routes
 			r.Group(func(r chi.Router) {

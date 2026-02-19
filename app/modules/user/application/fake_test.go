@@ -88,6 +88,7 @@ type FakeUserRepository struct {
 
 	// Linked identity operations
 	GetLinkedProvidersByUserUUIDFn func(ctx context.Context, db bun.IDB, userUUID uuid.UUID) ([]string, error)
+	DeleteLinkedIdentityFn        func(ctx context.Context, db bun.IDB, userUUID uuid.UUID, provider string) error
 }
 
 // Trace returns the sequence of method calls made to the fake.
@@ -445,6 +446,14 @@ func (f *FakeUserRepository) GetLinkedProvidersByUserUUID(ctx context.Context, d
 		return f.GetLinkedProvidersByUserUUIDFn(ctx, db, userUUID)
 	}
 	return nil, nil
+}
+
+func (f *FakeUserRepository) DeleteLinkedIdentity(ctx context.Context, db bun.IDB, userUUID uuid.UUID, provider string) error {
+	f.record("DeleteLinkedIdentity")
+	if f.DeleteLinkedIdentityFn != nil {
+		return f.DeleteLinkedIdentityFn(ctx, db, userUUID, provider)
+	}
+	return nil
 }
 
 // Ensure the fake actually satisfies the interface

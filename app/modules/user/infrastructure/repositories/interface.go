@@ -70,6 +70,7 @@ type Repository interface {
 	InsertLinkedIdentity(ctx context.Context, db bun.IDB, userUUID uuid.UUID, provider, providerID, displayName string) error
 	GetLinkedIdentityByProvider(ctx context.Context, db bun.IDB, userUUID uuid.UUID, provider string) (*LinkedIdentity, error)
 	GetLinkedProvidersByUserUUID(ctx context.Context, db bun.IDB, userUUID uuid.UUID) ([]string, error)
+	DeleteLinkedIdentity(ctx context.Context, db bun.IDB, userUUID uuid.UUID, provider string) error
 	UpdateLinkedIdentityToken(ctx context.Context, db bun.IDB, provider, providerID, accessToken string, expiresAt *time.Time) error
 
 	// Magic Link operations

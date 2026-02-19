@@ -96,6 +96,31 @@ func (h *AuthHandlers) HandleHTTPOAuthLinkInitiate(w http.ResponseWriter, r *htt
 	http.Redirect(w, r, redirectURL, http.StatusFound)
 }
 
+// HandleHTTPOAuthUnlink removes an OAuth provider identity from the authenticated user's account.
+// Requires a valid refresh_token cookie. Returns 409 if the user only has one linked provider.
+//
+// DELETE /api/auth/{provider}/unlink
+func (h *AuthHandlers) HandleHTTPOAuthUnlink(w http.ResponseWriter, r *http.Request) {
+	provider := chi.URLParam(r, "provider")
+
+	cookie, err := r.Cookie(RefreshTokenCookie)
+	if err != nil || cookie.Value == "" {
+		h.httpError(w, r, "not authenticated", http.StatusUnauthorized, nil)
+		return
+	}
+
+	if err := h.service.UnlinkProvider(r.Context(), cookie.Value, provider); err != nil {
+		status := http.StatusInternalServerError
+		if err.Error() == "cannot unlink the only connected provider" {
+			status = http.StatusConflict
+		}
+		h.httpError(w, r, err.Error(), status, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // HandleHTTPOAuthCallback completes the OAuth2 authorization code flow.
 // It validates the CSRF state cookie, exchanges the code for user identity,
 // creates or logs in the user, and sets a refresh token cookie.

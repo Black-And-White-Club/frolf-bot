@@ -25,6 +25,7 @@ type FakeService struct {
 	InitiateOAuthLoginFunc     func(ctx context.Context, provider string) (redirectURL, state string, err error)
 	HandleOAuthCallbackFunc    func(ctx context.Context, provider, code, state string) (*authservice.LoginResponse, error)
 	LinkIdentityToUserFunc     func(ctx context.Context, rawRefreshToken, provider, code, state string) error
+	UnlinkProviderFunc         func(ctx context.Context, rawRefreshToken, provider string) error
 }
 
 func (f *FakeService) GenerateMagicLink(ctx context.Context, userID, guildID string, role authdomain.Role) (*authservice.MagicLinkResponse, error) {
@@ -86,6 +87,13 @@ func (f *FakeService) HandleOAuthCallback(ctx context.Context, provider, code, s
 func (f *FakeService) LinkIdentityToUser(ctx context.Context, rawRefreshToken, provider, code, state string) error {
 	if f.LinkIdentityToUserFunc != nil {
 		return f.LinkIdentityToUserFunc(ctx, rawRefreshToken, provider, code, state)
+	}
+	return nil
+}
+
+func (f *FakeService) UnlinkProvider(ctx context.Context, rawRefreshToken, provider string) error {
+	if f.UnlinkProviderFunc != nil {
+		return f.UnlinkProviderFunc(ctx, rawRefreshToken, provider)
 	}
 	return nil
 }

@@ -857,6 +857,20 @@ func (r *Impl) GetLinkedIdentityByProvider(ctx context.Context, db bun.IDB, user
 	return li, nil
 }
 
+func (r *Impl) DeleteLinkedIdentity(ctx context.Context, db bun.IDB, userUUID uuid.UUID, provider string) error {
+	if db == nil {
+		db = r.db
+	}
+	_, err := db.NewDelete().
+		Model((*LinkedIdentity)(nil)).
+		Where("user_uuid = ? AND provider = ?", userUUID, provider).
+		Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("userdb.DeleteLinkedIdentity: %w", err)
+	}
+	return nil
+}
+
 func (r *Impl) GetLinkedProvidersByUserUUID(ctx context.Context, db bun.IDB, userUUID uuid.UUID) ([]string, error) {
 	if db == nil {
 		db = r.db
