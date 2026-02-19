@@ -67,7 +67,10 @@ func (h *LeaderboardHandlers) HandleGetLeaderboardRequest(
 	// Check for reply_to subject for Request-Reply pattern
 	topic := leaderboardevents.GetLeaderboardResponseV1
 	if replyTo, ok := ctx.Value(handlerwrapper.CtxKeyReplyTo).(string); ok && replyTo != "" {
+		h.logger.DebugContext(ctx, "leaderboard: reply_to found in context", "reply_to", replyTo, "leaderboard_count", len(leaderboard))
 		topic = replyTo
+	} else {
+		h.logger.WarnContext(ctx, "leaderboard: no reply_to in context, publishing to static topic", "topic", topic, "leaderboard_count", len(leaderboard))
 	}
 
 	results := []handlerwrapper.Result{{Topic: topic, Payload: resp}}
