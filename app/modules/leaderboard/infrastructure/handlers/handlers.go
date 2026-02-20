@@ -10,7 +10,6 @@ import (
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	leaderboardmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/leaderboard"
-	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
@@ -63,15 +62,15 @@ func (h *LeaderboardHandlers) mapSuccessResults(
 	guildID sharedtypes.GuildID,
 	requestorID sharedtypes.DiscordID,
 	batchID string,
-	resultData leaderboardtypes.LeaderboardData,
+	requests []sharedtypes.TagAssignmentRequest,
 	source sharedtypes.ServiceUpdateSource,
 	replyTo string,
 ) []handlerwrapper.Result {
-	assignments := make([]leaderboardevents.TagAssignmentInfoV1, 0, len(resultData))
-	for _, entry := range resultData {
+	assignments := make([]leaderboardevents.TagAssignmentInfoV1, 0, len(requests))
+	for _, req := range requests {
 		assignments = append(assignments, leaderboardevents.TagAssignmentInfoV1{
-			UserID:    entry.UserID,
-			TagNumber: entry.TagNumber,
+			UserID:    req.UserID,
+			TagNumber: req.TagNumber,
 		})
 	}
 

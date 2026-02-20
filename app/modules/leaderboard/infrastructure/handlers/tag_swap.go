@@ -85,5 +85,11 @@ func (h *LeaderboardHandlers) HandleTagSwapRequested(
 
 	// 5. Success Path (Immediate Swap)
 	replyTo, _ := ctx.Value(handlerwrapper.CtxKeyReplyTo).(string)
-	return h.mapSuccessResults(payload.GuildID, payload.RequestorID, "manual-swap", *result.Success, "tag_swap", replyTo), nil
+
+	requests := []sharedtypes.TagAssignmentRequest{
+		{UserID: payload.TargetID, TagNumber: requestorTag},
+		{UserID: payload.RequestorID, TagNumber: targetTag},
+	}
+
+	return h.mapSuccessResults(payload.GuildID, payload.RequestorID, "manual-swap", requests, "tag_swap", replyTo), nil
 }
