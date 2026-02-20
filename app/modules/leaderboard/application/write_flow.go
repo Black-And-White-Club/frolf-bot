@@ -670,7 +670,7 @@ func (s *LeaderboardService) applyTagAssignmentsInTx(
 ) (leaderboardtypes.LeaderboardData, error) {
 	dedup := make(map[string]int, len(requests))
 	for _, req := range requests {
-		if req.TagNumber <= 0 {
+		if req.TagNumber < 0 {
 			return nil, fmt.Errorf("invalid tag number %d for user %s", req.TagNumber, req.UserID)
 		}
 		dedup[string(req.UserID)] = int(req.TagNumber)
@@ -740,6 +740,9 @@ func (s *LeaderboardService) applyTagAssignmentsInTx(
 	}
 
 	for _, assignment := range assignments {
+		if assignment.tag == 0 {
+			continue
+		}
 		holderID, occupied := currentTagUser[assignment.tag]
 		if !occupied || holderID == assignment.memberID {
 			continue
@@ -778,6 +781,9 @@ func (s *LeaderboardService) applyTagAssignmentsInTx(
 
 	upserts := make([]leaderboarddb.LeagueMember, 0, len(assignments))
 	for _, assignment := range assignments {
+		if assignment.tag == 0 {
+			continue // Already cleared in clearRows
+		}
 		tag := assignment.tag
 		upserts = append(upserts, leaderboarddb.LeagueMember{
 			GuildID:    guildID,
