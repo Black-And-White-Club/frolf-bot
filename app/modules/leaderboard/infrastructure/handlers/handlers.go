@@ -66,17 +66,24 @@ func (h *LeaderboardHandlers) mapSuccessResults(
 	source sharedtypes.ServiceUpdateSource,
 	replyTo string,
 ) []handlerwrapper.Result {
+	// Build assignments for the success event, excluding removals (TagNumber=0).
+	// Removals are not tag assignments; including them causes consumers (e.g. Discord)
+	// to treat tag #0 as a real tag.
 	assignments := make([]leaderboardevents.TagAssignmentInfoV1, 0, len(requests))
 	for _, req := range requests {
+		if req.TagNumber == 0 {
+			continue
+		}
 		assignments = append(assignments, leaderboardevents.TagAssignmentInfoV1{
 			UserID:    req.UserID,
 			TagNumber: req.TagNumber,
 		})
 	}
 
+	// changedTags for round-sync includes removals (tag=0 means "user lost their tag").
 	changedTags := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber)
-	for _, a := range assignments {
-		changedTags[a.UserID] = a.TagNumber
+	for _, req := range requests {
+		changedTags[req.UserID] = req.TagNumber
 	}
 
 	topic := leaderboardevents.LeaderboardBatchTagAssignedV1

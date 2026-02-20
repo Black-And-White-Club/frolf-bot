@@ -455,3 +455,161 @@ func TestAdjustPoints_LockFailureBubblesUp(t *testing.T) {
 		t.Fatalf("expected lock acquisition error")
 	}
 }
+
+func TestApplyTagAssignmentsInTx_TagRemoval_ReleasesTagHistory(t *testing.T) {
+	repo := NewFakeLeaderboardRepo()
+	members := &fakeLeagueMemberRepo{}
+	tags := &fakeTagHistoryRepo{}
+	svc := newWriteFlowTestService(repo, members, tags, &fakeRoundOutcomeRepo{})
+
+	// u1 currently holds tag #5
+	tag5 := 5
+	members.getMembersByIDsFunc = func(ctx context.Context, db bun.IDB, guildID string, memberIDs []string) ([]leaderboarddb.LeagueMember, error) {
+		return []leaderboarddb.LeagueMember{
+			{GuildID: guildID, MemberID: "u1", CurrentTag: &tag5},
+		}, nil
+	}
+
+	_, err := svc.applyTagAssignmentsInTx(
+		context.Background(),
+		bun.Tx{},
+		"guild-1",
+		[]sharedtypes.TagAssignmentRequest{
+			{UserID: "u1", TagNumber: 0},
+		},
+		sharedtypes.ServiceUpdateSourceTagSwap,
+		sharedtypes.RoundID(uuid.New()),
+	)
+	if err != nil {
+		t.Fatalf("applyTagAssignmentsInTx returned error: %v", err)
+	}
+
+	if len(tags.lastBulkInserted) != 1 {
+		t.Fatalf("expected 1 tag history entry, got %d: %+v", len(tags.lastBulkInserted), tags.lastBulkInserted)
+	}
+
+	entry := tags.lastBulkInserted[0]
+	if entry.TagNumber != 5 {
+		t.Errorf("expected TagNumber=5 (the released tag), got %d", entry.TagNumber)
+	}
+	if entry.OldMemberID == nil || *entry.OldMemberID != "u1" {
+		t.Errorf("expected OldMemberID=u1, got %v", entry.OldMemberID)
+	}
+	if entry.NewMemberID != "" {
+		t.Errorf("expected empty NewMemberID (released), got %q", entry.NewMemberID)
+	}
+}
+
+func TestApplyTagAssignmentsInTx_TagRemoval_MemberWithNoTag(t *testing.T) {
+	repo := NewFakeLeaderboardRepo()
+	members := &fakeLeagueMemberRepo{}
+	tags := &fakeTagHistoryRepo{}
+	svc := newWriteFlowTestService(repo, members, tags, &fakeRoundOutcomeRepo{})
+
+	// u1 has no tag
+	members.getMembersByIDsFunc = func(ctx context.Context, db bun.IDB, guildID string, memberIDs []string) ([]leaderboarddb.LeagueMember, error) {
+		return []leaderboarddb.LeagueMember{
+			{GuildID: guildID, MemberID: "u1", CurrentTag: nil},
+		}, nil
+	}
+
+	_, err := svc.applyTagAssignmentsInTx(
+		context.Background(),
+		bun.Tx{},
+		"guild-1",
+		[]sharedtypes.TagAssignmentRequest{
+			{UserID: "u1", TagNumber: 0},
+		},
+		sharedtypes.ServiceUpdateSourceTagSwap,
+		sharedtypes.RoundID(uuid.New()),
+	)
+	if err != nil {
+		t.Fatalf("applyTagAssignmentsInTx returned error: %v", err)
+	}
+
+	if len(tags.lastBulkInserted) != 0 {
+		t.Errorf("expected no history entries when removing tag from untagged member, got %d: %+v",
+			len(tags.lastBulkInserted), tags.lastBulkInserted)
+	}
+}
+
+func TestApplyTagAssignmentsInTx_MixedBatch_AssignmentAndRemoval(t *testing.T) {
+	repo := NewFakeLeaderboardRepo()
+	members := &fakeLeagueMemberRepo{}
+	tags := &fakeTagHistoryRepo{}
+	svc := newWriteFlowTestService(repo, members, tags, &fakeRoundOutcomeRepo{})
+
+	tag3 := 3
+	tag5 := 5
+	// u1 holds tag #3, u2 holds tag #5
+	members.getMembersByIDsFunc = func(ctx context.Context, db bun.IDB, guildID string, memberIDs []string) ([]leaderboarddb.LeagueMember, error) {
+		return []leaderboarddb.LeagueMember{
+			{GuildID: guildID, MemberID: "u1", CurrentTag: &tag3},
+			{GuildID: guildID, MemberID: "u2", CurrentTag: &tag5},
+		}, nil
+	}
+	// tag=0 and tag=7 are unoccupied
+	members.getMembersByTagsFunc = func(ctx context.Context, db bun.IDB, guildID string, requestedTags []int) ([]leaderboarddb.LeagueMember, error) {
+		return nil, nil
+	}
+	// After batch: u1 has tag=7, u2 has no tag
+	tag7 := 7
+	members.getMembersByGuildFunc = func(ctx context.Context, db bun.IDB, guildID string) ([]leaderboarddb.LeagueMember, error) {
+		return []leaderboarddb.LeagueMember{
+			{GuildID: guildID, MemberID: "u1", CurrentTag: &tag7},
+			{GuildID: guildID, MemberID: "u2", CurrentTag: nil},
+		}, nil
+	}
+
+	_, err := svc.applyTagAssignmentsInTx(
+		context.Background(),
+		bun.Tx{},
+		"guild-1",
+		[]sharedtypes.TagAssignmentRequest{
+			{UserID: "u1", TagNumber: 7},
+			{UserID: "u2", TagNumber: 0},
+		},
+		sharedtypes.ServiceUpdateSourceTagSwap,
+		sharedtypes.RoundID(uuid.New()),
+	)
+	if err != nil {
+		t.Fatalf("applyTagAssignmentsInTx returned error: %v", err)
+	}
+
+	if len(tags.lastBulkInserted) != 2 {
+		t.Fatalf("expected 2 tag history entries, got %d: %+v", len(tags.lastBulkInserted), tags.lastBulkInserted)
+	}
+
+	// Entries are sorted by TagNumber: tag#5 (release) < tag#7 (assignment)
+	release := tags.lastBulkInserted[0]
+	assignment := tags.lastBulkInserted[1]
+
+	// Release entry uses the OLD tag number (#5), not tag=0
+	if release.TagNumber != 5 {
+		t.Errorf("release entry: expected TagNumber=5 (old tag), got %d", release.TagNumber)
+	}
+	if release.OldMemberID == nil || *release.OldMemberID != "u2" {
+		t.Errorf("release entry: expected OldMemberID=u2, got %v", release.OldMemberID)
+	}
+	if release.NewMemberID != "" {
+		t.Errorf("release entry: expected empty NewMemberID, got %q", release.NewMemberID)
+	}
+
+	// Assignment entry records u1 receiving tag #7
+	if assignment.TagNumber != 7 {
+		t.Errorf("assignment entry: expected TagNumber=7, got %d", assignment.TagNumber)
+	}
+	if assignment.NewMemberID != "u1" {
+		t.Errorf("assignment entry: expected NewMemberID=u1, got %q", assignment.NewMemberID)
+	}
+	if assignment.OldMemberID != nil {
+		t.Errorf("assignment entry: expected nil OldMemberID (tag was unoccupied), got %v", assignment.OldMemberID)
+	}
+
+	// tag=0 must never appear in history
+	for _, e := range tags.lastBulkInserted {
+		if e.TagNumber == 0 {
+			t.Errorf("tag=0 must not appear in tag history, but found entry: %+v", e)
+		}
+	}
+}

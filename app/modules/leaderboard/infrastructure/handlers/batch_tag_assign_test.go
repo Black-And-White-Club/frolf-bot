@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"testing"
 
+	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
@@ -316,6 +317,85 @@ func TestLeaderboardHandlers_HandleRoundBasedAssignment(t *testing.T) {
 			if tt.validate != nil {
 				tt.validate(t, res)
 			}
+		})
+	}
+}
+
+func TestMapSuccessResults_TagRemovalBehavior(t *testing.T) {
+	testGuildID := sharedtypes.GuildID("test-guild-123")
+	testBatchID := uuid.New().String()
+
+	tests := []struct {
+		name            string
+		requests        []sharedtypes.TagAssignmentRequest
+		wantAssignCount int
+		wantAssignLen   int
+		wantChangedTags map[sharedtypes.DiscordID]sharedtypes.TagNumber
+	}{
+		{
+			name: "Pure removal: tag=0 excluded from Assignments, present in ChangedTags",
+			requests: []sharedtypes.TagAssignmentRequest{
+				{UserID: "user-1", TagNumber: 0},
+			},
+			wantAssignCount: 0,
+			wantAssignLen:   0,
+			wantChangedTags: map[sharedtypes.DiscordID]sharedtypes.TagNumber{
+				"user-1": 0,
+			},
+		},
+		{
+			name: "Mixed batch: only real assignments in Assignments, removal tracked in ChangedTags",
+			requests: []sharedtypes.TagAssignmentRequest{
+				{UserID: "user-1", TagNumber: 5},
+				{UserID: "user-2", TagNumber: 0},
+			},
+			wantAssignCount: 1,
+			wantAssignLen:   1,
+			wantChangedTags: map[sharedtypes.DiscordID]sharedtypes.TagNumber{
+				"user-1": 5,
+				"user-2": 0,
+			},
+		},
+		{
+			name: "Pure assignment: all entries visible in Assignments",
+			requests: []sharedtypes.TagAssignmentRequest{
+				{UserID: "user-1", TagNumber: 3},
+			},
+			wantAssignCount: 1,
+			wantAssignLen:   1,
+			wantChangedTags: map[sharedtypes.DiscordID]sharedtypes.TagNumber{
+				"user-1": 3,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := &LeaderboardHandlers{}
+			res := h.mapSuccessResults(
+				testGuildID,
+				"",
+				testBatchID,
+				tt.requests,
+				sharedtypes.ServiceUpdateSourceTagSwap,
+				"",
+			)
+
+			assert.Len(t, res, 2)
+
+			batchPayload, ok := res[0].Payload.(*leaderboardevents.LeaderboardBatchTagAssignedPayloadV1)
+			assert.True(t, ok, "first result should be LeaderboardBatchTagAssignedPayloadV1")
+			assert.Equal(t, leaderboardevents.LeaderboardBatchTagAssignedV1, res[0].Topic)
+			assert.Equal(t, tt.wantAssignCount, batchPayload.AssignmentCount)
+			assert.Len(t, batchPayload.Assignments, tt.wantAssignLen)
+			for _, a := range batchPayload.Assignments {
+				assert.NotEqual(t, sharedtypes.TagNumber(0), a.TagNumber, "tag=0 must never appear in Assignments")
+			}
+
+			syncPayload, ok := res[1].Payload.(*sharedevents.SyncRoundsTagRequestPayloadV1)
+			assert.True(t, ok, "second result should be SyncRoundsTagRequestPayloadV1")
+			assert.Equal(t, sharedevents.SyncRoundsTagRequestV1, res[1].Topic)
+			assert.Equal(t, tt.wantChangedTags, syncPayload.ChangedTags)
 		})
 	}
 }

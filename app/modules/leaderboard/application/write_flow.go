@@ -816,10 +816,15 @@ func (s *LeaderboardService) applyTagAssignmentsInTx(
 	}
 
 	historyEntries := make([]leaderboarddb.TagHistoryEntry, 0, len(afterTagUser))
+
+	// Record tag assignments: tags that now have a new positive holder.
 	for tag, newMemberID := range afterTagUser {
+		if tag <= 0 {
+			continue // tag=0 means "removed"; handled separately below
+		}
 		oldMemberID, hadOld := beforeTagUser[tag]
 		if hadOld && oldMemberID == newMemberID {
-			continue
+			continue // no change
 		}
 
 		var oldPtr *string
@@ -833,6 +838,28 @@ func (s *LeaderboardService) applyTagAssignmentsInTx(
 			TagNumber:   tag,
 			OldMemberID: oldPtr,
 			NewMemberID: newMemberID,
+			Reason:      reason,
+			Metadata:    "{}",
+		})
+	}
+
+	// Record tag releases: members whose tag was removed (new tag = 0).
+	// Write the entry against the OLD tag number so history is meaningful.
+	for memberID, newTag := range afterUserTag {
+		if newTag != 0 {
+			continue
+		}
+		oldTag, hadTag := currentUserTag[memberID]
+		if !hadTag || oldTag <= 0 {
+			continue // didn't have a tag before, nothing to release
+		}
+		oID := memberID
+		historyEntries = append(historyEntries, leaderboarddb.TagHistoryEntry{
+			GuildID:     guildID,
+			RoundID:     roundID,
+			TagNumber:   oldTag,
+			OldMemberID: &oID,
+			NewMemberID: "", // empty string = released, no new holder
 			Reason:      reason,
 			Metadata:    "{}",
 		})
