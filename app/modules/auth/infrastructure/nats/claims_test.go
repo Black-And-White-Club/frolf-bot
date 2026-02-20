@@ -32,12 +32,12 @@ func TestAuthorizationResponsePayload_JSON(t *testing.T) {
 	// We should be careful. The AuthorizationResponsePayload is inside "nats" field.
 	// Let's verify the structure more robustly.
 
-	var decoded map[string]interface{}
+	var decoded map[string]any
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		t.Fatalf("failed to unmarshal JSON: %v", err)
 	}
 
-	natsPayload, ok := decoded["nats"].(map[string]interface{})
+	natsPayload, ok := decoded["nats"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected 'nats' field to be a map, got %T", decoded["nats"])
 	}

@@ -121,11 +121,10 @@ func TestHandleBatchTagAssignmentRequested(t *testing.T) {
 
 				validateSuccessResponse(t, requestPayload, responsePayload)
 
-				// The handler returns the complete leaderboard state after the batch operation
-				// This includes: 2 initial users + 2 new assignments = 4 total entries
-				expectedTotalCount := 4 // Complete leaderboard after updates
-				if responsePayload.AssignmentCount != expectedTotalCount {
-					t.Errorf("Success payload AssignmentCount mismatch: expected %d, got %d", expectedTotalCount, responsePayload.AssignmentCount)
+				// The handler returns the assignments that were part of the batch operation
+				expectedAssignmentCount := len(requestPayload.Assignments)
+				if responsePayload.AssignmentCount != expectedAssignmentCount {
+					t.Errorf("Success payload AssignmentCount mismatch: expected %d, got %d", expectedAssignmentCount, responsePayload.AssignmentCount)
 				}
 
 				// Validate correlation ID

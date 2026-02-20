@@ -15,16 +15,16 @@ import (
 type FakeClubRepo struct {
 	trace []string
 
-	GetByUUIDFunc                  func(ctx context.Context, db bun.IDB, clubUUID uuid.UUID) (*clubdb.Club, error)
-	GetByDiscordGuildIDFunc        func(ctx context.Context, db bun.IDB, guildID string) (*clubdb.Club, error)
-	GetClubsByDiscordGuildIDsFunc  func(ctx context.Context, db bun.IDB, guildIDs []string) ([]*clubdb.Club, error)
-	UpsertFunc                     func(ctx context.Context, db bun.IDB, club *clubdb.Club) error
-	UpdateNameFunc                 func(ctx context.Context, db bun.IDB, clubUUID uuid.UUID, name string) error
-	CreateInviteFunc               func(ctx context.Context, db bun.IDB, invite *clubdb.ClubInvite) error
-	GetInviteByCodeFunc            func(ctx context.Context, db bun.IDB, code string) (*clubdb.ClubInvite, error)
-	GetInvitesByClubFunc           func(ctx context.Context, db bun.IDB, clubUUID uuid.UUID) ([]*clubdb.ClubInvite, error)
-	RevokeInviteFunc               func(ctx context.Context, db bun.IDB, clubUUID uuid.UUID, code string) error
-	IncrementInviteUseCountFunc    func(ctx context.Context, db bun.IDB, code string) error
+	GetByUUIDFunc                 func(ctx context.Context, db bun.IDB, clubUUID uuid.UUID) (*clubdb.Club, error)
+	GetByDiscordGuildIDFunc       func(ctx context.Context, db bun.IDB, guildID string) (*clubdb.Club, error)
+	GetClubsByDiscordGuildIDsFunc func(ctx context.Context, db bun.IDB, guildIDs []string) ([]*clubdb.Club, error)
+	UpsertFunc                    func(ctx context.Context, db bun.IDB, club *clubdb.Club) error
+	UpdateNameFunc                func(ctx context.Context, db bun.IDB, clubUUID uuid.UUID, name string) error
+	CreateInviteFunc              func(ctx context.Context, db bun.IDB, invite *clubdb.ClubInvite) error
+	GetInviteByCodeFunc           func(ctx context.Context, db bun.IDB, code string) (*clubdb.ClubInvite, error)
+	GetInvitesByClubFunc          func(ctx context.Context, db bun.IDB, clubUUID uuid.UUID) ([]*clubdb.ClubInvite, error)
+	RevokeInviteFunc              func(ctx context.Context, db bun.IDB, clubUUID uuid.UUID, code string) error
+	IncrementInviteUseCountFunc   func(ctx context.Context, db bun.IDB, code string) error
 }
 
 func NewFakeClubRepo() *FakeClubRepo {

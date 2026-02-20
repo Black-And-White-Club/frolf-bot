@@ -51,12 +51,12 @@ type FakeUserRepository struct {
 	GetUserMembershipsFunc    func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID) ([]*userdb.GuildMembership, error)
 
 	// Club membership operations
-	GetClubMembershipFn                        func(ctx context.Context, db bun.IDB, userUUID, clubUUID uuid.UUID) (*userdb.ClubMembership, error)
-	GetClubMembershipsByUserUUIDFn             func(ctx context.Context, db bun.IDB, userUUID uuid.UUID) ([]*userdb.ClubMembership, error)
-	UpsertClubMembershipFn                     func(ctx context.Context, db bun.IDB, membership *userdb.ClubMembership) error
-	GetClubMembershipByExternalIDFn            func(ctx context.Context, db bun.IDB, externalID string, clubUUID uuid.UUID) (*userdb.ClubMembership, error)
-	GetClubMembershipsByUserUUIDsFn            func(ctx context.Context, db bun.IDB, userUUIDs []uuid.UUID) ([]*userdb.ClubMembership, error)
-	UpdateClubMembershipRoleByDiscordIDsFn     func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, role sharedtypes.UserRoleEnum) error
+	GetClubMembershipFn                    func(ctx context.Context, db bun.IDB, userUUID, clubUUID uuid.UUID) (*userdb.ClubMembership, error)
+	GetClubMembershipsByUserUUIDFn         func(ctx context.Context, db bun.IDB, userUUID uuid.UUID) ([]*userdb.ClubMembership, error)
+	UpsertClubMembershipFn                 func(ctx context.Context, db bun.IDB, membership *userdb.ClubMembership) error
+	GetClubMembershipByExternalIDFn        func(ctx context.Context, db bun.IDB, externalID string, clubUUID uuid.UUID) (*userdb.ClubMembership, error)
+	GetClubMembershipsByUserUUIDsFn        func(ctx context.Context, db bun.IDB, userUUIDs []uuid.UUID) ([]*userdb.ClubMembership, error)
+	UpdateClubMembershipRoleByDiscordIDsFn func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, role sharedtypes.UserRoleEnum) error
 
 	// Guild-scoped operations
 	GetUserByUserIDFunc                func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID) (*userdb.UserWithMembership, error)
@@ -90,7 +90,7 @@ type FakeUserRepository struct {
 
 	// Linked identity operations
 	GetLinkedProvidersByUserUUIDFn func(ctx context.Context, db bun.IDB, userUUID uuid.UUID) ([]string, error)
-	DeleteLinkedIdentityFn        func(ctx context.Context, db bun.IDB, userUUID uuid.UUID, provider string) error
+	DeleteLinkedIdentityFn         func(ctx context.Context, db bun.IDB, userUUID uuid.UUID, provider string) error
 }
 
 // Trace returns the sequence of method calls made to the fake.

@@ -25,12 +25,12 @@ type FakeRepository struct {
 	UpdateMembershipRoleFn  func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, role sharedtypes.UserRoleEnum) error
 	GetUserMembershipsFn    func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID) ([]*GuildMembership, error)
 
-	GetClubMembershipFn             func(ctx context.Context, db bun.IDB, userUUID, clubUUID uuid.UUID) (*ClubMembership, error)
-	UpsertClubMembershipFn          func(ctx context.Context, db bun.IDB, membership *ClubMembership) error
-	GetClubMembershipByExternalIDFn              func(ctx context.Context, db bun.IDB, externalID string, clubUUID uuid.UUID) (*ClubMembership, error)
-	GetClubMembershipsByUserUUIDFn               func(ctx context.Context, db bun.IDB, userUUID uuid.UUID) ([]*ClubMembership, error)
-	GetClubMembershipsByUserUUIDsFn              func(ctx context.Context, db bun.IDB, userUUIDs []uuid.UUID) ([]*ClubMembership, error)
-	UpdateClubMembershipRoleByDiscordIDsFn       func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, role sharedtypes.UserRoleEnum) error
+	GetClubMembershipFn                    func(ctx context.Context, db bun.IDB, userUUID, clubUUID uuid.UUID) (*ClubMembership, error)
+	UpsertClubMembershipFn                 func(ctx context.Context, db bun.IDB, membership *ClubMembership) error
+	GetClubMembershipByExternalIDFn        func(ctx context.Context, db bun.IDB, externalID string, clubUUID uuid.UUID) (*ClubMembership, error)
+	GetClubMembershipsByUserUUIDFn         func(ctx context.Context, db bun.IDB, userUUID uuid.UUID) ([]*ClubMembership, error)
+	GetClubMembershipsByUserUUIDsFn        func(ctx context.Context, db bun.IDB, userUUIDs []uuid.UUID) ([]*ClubMembership, error)
+	UpdateClubMembershipRoleByDiscordIDsFn func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, role sharedtypes.UserRoleEnum) error
 
 	GetUserByUserIDFn                func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID) (*UserWithMembership, error)
 	GetUserRoleFn                    func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID) (sharedtypes.UserRoleEnum, error)
@@ -55,13 +55,13 @@ type FakeRepository struct {
 	RevokeAllUserTokensFn        func(ctx context.Context, db bun.IDB, userUUID uuid.UUID) error
 
 	// Linked Identity operations
-	FindUserByLinkedIdentityFn      func(ctx context.Context, db bun.IDB, provider, providerID string) (uuid.UUID, error)
-	CreateUserWithLinkedIdentityFn  func(ctx context.Context, db bun.IDB, provider, providerID, displayName string) (uuid.UUID, error)
-	InsertLinkedIdentityFn          func(ctx context.Context, db bun.IDB, userUUID uuid.UUID, provider, providerID, displayName string) error
-	GetLinkedIdentityByProviderFn   func(ctx context.Context, db bun.IDB, userUUID uuid.UUID, provider string) (*LinkedIdentity, error)
-	GetLinkedProvidersByUserUUIDFn  func(ctx context.Context, db bun.IDB, userUUID uuid.UUID) ([]string, error)
-	DeleteLinkedIdentityFn          func(ctx context.Context, db bun.IDB, userUUID uuid.UUID, provider string) error
-	UpdateLinkedIdentityTokenFn     func(ctx context.Context, db bun.IDB, provider, providerID, accessToken string, expiresAt *time.Time) error
+	FindUserByLinkedIdentityFn     func(ctx context.Context, db bun.IDB, provider, providerID string) (uuid.UUID, error)
+	CreateUserWithLinkedIdentityFn func(ctx context.Context, db bun.IDB, provider, providerID, displayName string) (uuid.UUID, error)
+	InsertLinkedIdentityFn         func(ctx context.Context, db bun.IDB, userUUID uuid.UUID, provider, providerID, displayName string) error
+	GetLinkedIdentityByProviderFn  func(ctx context.Context, db bun.IDB, userUUID uuid.UUID, provider string) (*LinkedIdentity, error)
+	GetLinkedProvidersByUserUUIDFn func(ctx context.Context, db bun.IDB, userUUID uuid.UUID) ([]string, error)
+	DeleteLinkedIdentityFn         func(ctx context.Context, db bun.IDB, userUUID uuid.UUID, provider string) error
+	UpdateLinkedIdentityTokenFn    func(ctx context.Context, db bun.IDB, provider, providerID, accessToken string, expiresAt *time.Time) error
 
 	// Magic Link operations
 	SaveMagicLinkFn     func(ctx context.Context, db bun.IDB, link *MagicLink) error

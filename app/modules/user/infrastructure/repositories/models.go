@@ -104,7 +104,7 @@ type LinkedIdentity struct {
 	ProviderID           string     `bun:"provider_id,notnull"` // Discord snowflake, Google sub, email address, …
 	DisplayName          *string    `bun:"display_name"`
 	LinkedAt             time.Time  `bun:"linked_at,notnull,default:now()"`
-	AccessToken          *string    `bun:"access_token"`           // OAuth2 access token for API calls
+	AccessToken          *string    `bun:"access_token"`            // OAuth2 access token for API calls
 	AccessTokenExpiresAt *time.Time `bun:"access_token_expires_at"` // when access_token expires
 }
 

@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	authoauth "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/oauth"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	authoauth "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/oauth"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/google/uuid"
 	"github.com/uptrace/bun"
@@ -18,8 +18,8 @@ import (
 
 // fakeProvider is a minimal OAuth provider stub for testing.
 type fakeProvider struct {
-	name        string
-	exchangeFn  func(ctx context.Context, code string) (*authoauth.UserInfo, error)
+	name       string
+	exchangeFn func(ctx context.Context, code string) (*authoauth.UserInfo, error)
 }
 
 func (f *fakeProvider) Name() string { return f.name }

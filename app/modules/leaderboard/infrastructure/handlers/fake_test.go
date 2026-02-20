@@ -349,15 +349,15 @@ func (f *FakeUserService) GetClubUUIDByDiscordGuildID(ctx context.Context, guild
 // FakeHelpers implements utils.Helpers for testing
 type FakeHelpers struct{}
 
-func (f *FakeHelpers) CreateResultMessage(originalMsg *message.Message, payload interface{}, topic string) (*message.Message, error) {
+func (f *FakeHelpers) CreateResultMessage(originalMsg *message.Message, payload any, topic string) (*message.Message, error) {
 	return message.NewMessage("test-id", nil), nil
 }
 
-func (f *FakeHelpers) CreateNewMessage(payload interface{}, topic string) (*message.Message, error) {
+func (f *FakeHelpers) CreateNewMessage(payload any, topic string) (*message.Message, error) {
 	return message.NewMessage("test-id", nil), nil
 }
 
-func (f *FakeHelpers) UnmarshalPayload(msg *message.Message, payload interface{}) error {
+func (f *FakeHelpers) UnmarshalPayload(msg *message.Message, payload any) error {
 	return nil
 }
 

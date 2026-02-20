@@ -16,16 +16,16 @@ import (
 // ------------------------
 
 type FakeService struct {
-	GenerateMagicLinkFunc      func(ctx context.Context, userID, guildID string, role authdomain.Role) (*authservice.MagicLinkResponse, error)
-	ValidateTokenFunc          func(ctx context.Context, tokenString string) (*authdomain.Claims, error)
-	HandleNATSAuthRequestFunc  func(ctx context.Context, req *authservice.NATSAuthRequest) (*authservice.NATSAuthResponse, error)
-	LoginUserFunc              func(ctx context.Context, oneTimeToken string) (*authservice.LoginResponse, error)
-	GetTicketFunc              func(ctx context.Context, refreshToken string, activeClubUUID string) (*authservice.TicketResponse, error)
-	LogoutUserFunc             func(ctx context.Context, refreshToken string) error
-	InitiateOAuthLoginFunc     func(ctx context.Context, provider string) (redirectURL, state string, err error)
-	HandleOAuthCallbackFunc    func(ctx context.Context, provider, code, state string) (*authservice.LoginResponse, error)
-	LinkIdentityToUserFunc     func(ctx context.Context, rawRefreshToken, provider, code, state string) error
-	UnlinkProviderFunc         func(ctx context.Context, rawRefreshToken, provider string) error
+	GenerateMagicLinkFunc     func(ctx context.Context, userID, guildID string, role authdomain.Role) (*authservice.MagicLinkResponse, error)
+	ValidateTokenFunc         func(ctx context.Context, tokenString string) (*authdomain.Claims, error)
+	HandleNATSAuthRequestFunc func(ctx context.Context, req *authservice.NATSAuthRequest) (*authservice.NATSAuthResponse, error)
+	LoginUserFunc             func(ctx context.Context, oneTimeToken string) (*authservice.LoginResponse, error)
+	GetTicketFunc             func(ctx context.Context, refreshToken string, activeClubUUID string) (*authservice.TicketResponse, error)
+	LogoutUserFunc            func(ctx context.Context, refreshToken string) error
+	InitiateOAuthLoginFunc    func(ctx context.Context, provider string) (redirectURL, state string, err error)
+	HandleOAuthCallbackFunc   func(ctx context.Context, provider, code, state string) (*authservice.LoginResponse, error)
+	LinkIdentityToUserFunc    func(ctx context.Context, rawRefreshToken, provider, code, state string) error
+	UnlinkProviderFunc        func(ctx context.Context, rawRefreshToken, provider string) error
 }
 
 func (f *FakeService) GenerateMagicLink(ctx context.Context, userID, guildID string, role authdomain.Role) (*authservice.MagicLinkResponse, error) {
@@ -146,20 +146,20 @@ func (f *FakeEventBus) SubscribeForTest(ctx context.Context, topic string) (<-ch
 // ------------------------
 
 type FakeHelpers struct {
-	CreateNewMessageFunc func(payload interface{}, topic string) (*message.Message, error)
+	CreateNewMessageFunc func(payload any, topic string) (*message.Message, error)
 }
 
-func (f *FakeHelpers) CreateResultMessage(originalMsg *message.Message, payload interface{}, topic string) (*message.Message, error) {
+func (f *FakeHelpers) CreateResultMessage(originalMsg *message.Message, payload any, topic string) (*message.Message, error) {
 	return message.NewMessage("test-id", nil), nil
 }
 
-func (f *FakeHelpers) CreateNewMessage(payload interface{}, topic string) (*message.Message, error) {
+func (f *FakeHelpers) CreateNewMessage(payload any, topic string) (*message.Message, error) {
 	if f.CreateNewMessageFunc != nil {
 		return f.CreateNewMessageFunc(payload, topic)
 	}
 	return message.NewMessage("test-id", nil), nil
 }
 
-func (f *FakeHelpers) UnmarshalPayload(msg *message.Message, payload interface{}) error {
+func (f *FakeHelpers) UnmarshalPayload(msg *message.Message, payload any) error {
 	return nil
 }
