@@ -65,6 +65,7 @@ func (h *LeaderboardHandlers) mapSuccessResults(
 	batchID string,
 	resultData leaderboardtypes.LeaderboardData,
 	source sharedtypes.ServiceUpdateSource,
+	replyTo string,
 ) []handlerwrapper.Result {
 	assignments := make([]leaderboardevents.TagAssignmentInfoV1, 0, len(resultData))
 	for _, entry := range resultData {
@@ -79,9 +80,14 @@ func (h *LeaderboardHandlers) mapSuccessResults(
 		changedTags[a.UserID] = a.TagNumber
 	}
 
+	topic := leaderboardevents.LeaderboardBatchTagAssignedV1
+	if replyTo != "" {
+		topic = replyTo
+	}
+
 	return []handlerwrapper.Result{
 		{
-			Topic: leaderboardevents.LeaderboardBatchTagAssignedV1,
+			Topic: topic,
 			Payload: &leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
 				GuildID:          guildID,
 				RequestingUserID: requestorID,

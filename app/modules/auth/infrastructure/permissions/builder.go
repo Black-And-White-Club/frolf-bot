@@ -164,6 +164,11 @@ func publishPatterns(clubUUID, guildID string, includeParticipant bool) []string
 		patterns = append(patterns,
 			fmt.Sprintf("round.list.request.v1.%s", id),
 			fmt.Sprintf("leaderboard.snapshot.request.v1.%s", id),
+			fmt.Sprintf("leaderboard.tag.list.requested.v1.%s", id),
+			fmt.Sprintf("leaderboard.tag.history.requested.v1.%s", id),
+			fmt.Sprintf("leaderboard.tag.graph.requested.v1.%s", id),
+			fmt.Sprintf("season.list.requested.v1.%s", id),
+			fmt.Sprintf("season.standings.requested.v1.%s", id),
 		)
 		if includeParticipant {
 			// Participant actions

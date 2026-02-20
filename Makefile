@@ -33,7 +33,7 @@ rollback-all:
 # Default to loading from .env file if DATABASE_URL is not set
 DB_URL ?= $(shell [ -f .env ] && grep '^DATABASE_URL=' .env | cut -d '=' -f2- | tr -d '"' || echo "")
 ifeq ($(DB_URL),)
-	$(error DATABASE_URL not found. Please set DATABASE_URL environment variable or create .env file with DATABASE_URL)
+$(error DATABASE_URL not found. Please set DATABASE_URL environment variable or create .env file with DATABASE_URL)
 endif
 
 # Parse DATABASE_URL for psql components (for river-clean)

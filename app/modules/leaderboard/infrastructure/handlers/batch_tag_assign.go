@@ -63,7 +63,8 @@ func (h *LeaderboardHandlers) HandleBatchTagAssignmentRequested(
 		return nil, *result.Failure
 	}
 
-	results := h.mapSuccessResults(payload.GuildID, payload.RequestingUserID, payload.BatchID, *result.Success, "batch_assignment")
+	replyTo, _ := ctx.Value(handlerwrapper.CtxKeyReplyTo).(string)
+	results := h.mapSuccessResults(payload.GuildID, payload.RequestingUserID, payload.BatchID, *result.Success, "batch_assignment", replyTo)
 
 	propagateCorrelationID(ctx, results)
 
@@ -107,7 +108,8 @@ func (h *LeaderboardHandlers) handleRoundBasedAssignmentWithCommandFlow(
 		return nil, fmt.Errorf("process round returned nil output")
 	}
 
-	results := h.mapSuccessResults(payload.GuildID, payload.RequestingUserID, payload.BatchID, leaderboardDataFromFinalTags(output.FinalParticipantTags), "batch_assignment")
+	replyTo, _ := ctx.Value(handlerwrapper.CtxKeyReplyTo).(string)
+	results := h.mapSuccessResults(payload.GuildID, payload.RequestingUserID, payload.BatchID, leaderboardDataFromFinalTags(output.FinalParticipantTags), "batch_assignment", replyTo)
 
 	if !output.PointsSkipped {
 		pointsAwarded := make(map[sharedtypes.DiscordID]int, len(output.PointAwards))

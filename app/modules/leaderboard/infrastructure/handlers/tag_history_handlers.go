@@ -46,8 +46,13 @@ func (h *LeaderboardHandlers) HandleTagHistoryRequest(
 		}
 	}
 
+	topic := leaderboardevents.LeaderboardTagHistoryResponseV1
+	if replyTo, ok := ctx.Value(handlerwrapper.CtxKeyReplyTo).(string); ok && replyTo != "" {
+		topic = replyTo
+	}
+
 	return []handlerwrapper.Result{{
-		Topic: leaderboardevents.LeaderboardTagHistoryResponseV1,
+		Topic: topic,
 		Payload: &leaderboardevents.TagHistoryResponsePayloadV1{
 			GuildID: payload.GuildID,
 			Entries: entries,
@@ -77,8 +82,13 @@ func (h *LeaderboardHandlers) HandleTagGraphRequest(
 		}}, nil
 	}
 
+	topic := leaderboardevents.LeaderboardTagGraphResponseV1
+	if replyTo, ok := ctx.Value(handlerwrapper.CtxKeyReplyTo).(string); ok && replyTo != "" {
+		topic = replyTo
+	}
+
 	return []handlerwrapper.Result{{
-		Topic: leaderboardevents.LeaderboardTagGraphResponseV1,
+		Topic: topic,
 		Payload: &leaderboardevents.TagGraphResponsePayloadV1{
 			GuildID:  payload.GuildID,
 			MemberID: payload.MemberID,
@@ -115,8 +125,13 @@ func (h *LeaderboardHandlers) HandleTagListRequest(
 		}
 	}
 
+	topic := leaderboardevents.LeaderboardTagListResponseV1
+	if replyTo, ok := ctx.Value(handlerwrapper.CtxKeyReplyTo).(string); ok && replyTo != "" {
+		topic = replyTo
+	}
+
 	return []handlerwrapper.Result{{
-		Topic: leaderboardevents.LeaderboardTagListResponseV1,
+		Topic: topic,
 		Payload: &leaderboardevents.TagListResponsePayloadV1{
 			GuildID: payload.GuildID,
 			Members: members,
