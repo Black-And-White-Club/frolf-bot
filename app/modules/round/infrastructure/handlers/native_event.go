@@ -56,6 +56,7 @@ func (h *RoundHandlers) HandleNativeEventLookupRequest(
 	// If round found, populate the result
 	if err == nil && round != nil {
 		resultPayload.RoundID = round.ID
+		resultPayload.MessageID = round.EventMessageID
 		resultPayload.Found = true
 	}
 

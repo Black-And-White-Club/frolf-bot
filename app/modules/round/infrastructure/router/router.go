@@ -153,6 +153,7 @@ func (r *RoundRouter) registerHandlers(h roundhandlers.Handlers) error {
 	registerHandler(deps, roundevents.RoundParticipantScoreUpdatedV1, h.HandleParticipantScoreUpdated)
 
 	registerHandler(deps, roundevents.RoundAllScoresSubmittedV1, h.HandleAllScoresSubmitted)
+	registerHandler(deps, roundevents.RoundFinalizeRequestedV1, h.HandleRoundFinalizeRequested)
 	registerHandler(deps, roundevents.RoundFinalizedV1, h.HandleRoundFinalized)
 	// Register the minimal 'start requested' command: worker/scheduler will publish
 	// RoundStartRequestedV1. The handler will consult the DB and perform domain logic.

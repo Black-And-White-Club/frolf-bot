@@ -37,6 +37,7 @@ type Handlers interface {
 
 	// Round finalization handlers
 	HandleAllScoresSubmitted(ctx context.Context, payload *roundevents.AllScoresSubmittedPayloadV1) ([]handlerwrapper.Result, error)
+	HandleRoundFinalizeRequested(ctx context.Context, payload *roundevents.RoundFinalizeRequestedPayloadV1) ([]handlerwrapper.Result, error)
 	HandleRoundFinalized(ctx context.Context, payload *roundevents.RoundFinalizedPayloadV1) ([]handlerwrapper.Result, error)
 
 	// Round start handler (request-style minimal payload)

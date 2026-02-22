@@ -16,9 +16,27 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(
 	ctx context.Context,
 	payload *roundevents.AllScoresSubmittedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
+	return h.finalizeRound(ctx, payload.GuildID, payload.RoundID, "all_scores_submitted")
+}
+
+// HandleRoundFinalizeRequested handles explicit finalize commands (for example,
+// when a native Discord scheduled event is manually/completely ended).
+func (h *RoundHandlers) HandleRoundFinalizeRequested(
+	ctx context.Context,
+	payload *roundevents.RoundFinalizeRequestedPayloadV1,
+) ([]handlerwrapper.Result, error) {
+	return h.finalizeRound(ctx, payload.GuildID, payload.RoundID, "finalize_requested")
+}
+
+func (h *RoundHandlers) finalizeRound(
+	ctx context.Context,
+	guildID sharedtypes.GuildID,
+	roundID sharedtypes.RoundID,
+	source string,
+) ([]handlerwrapper.Result, error) {
 	req := &roundtypes.FinalizeRoundInput{
-		GuildID: payload.GuildID,
-		RoundID: payload.RoundID,
+		GuildID: guildID,
+		RoundID: roundID,
 	}
 
 	finalizeResult, err := h.service.FinalizeRound(ctx, req)
@@ -28,14 +46,16 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(
 
 	if finalizeResult.Failure != nil {
 		h.logger.WarnContext(ctx, "backend round finalization failed",
+			attr.String("source", source),
+			attr.String("round_id", roundID.String()),
 			attr.Any("failure", *finalizeResult.Failure),
 		)
 		return []handlerwrapper.Result{
 			{
 				Topic: roundevents.RoundFinalizationErrorV1,
 				Payload: &roundevents.RoundFinalizationErrorPayloadV1{
-					GuildID: payload.GuildID,
-					RoundID: payload.RoundID,
+					GuildID: guildID,
+					RoundID: roundID,
 					Error:   (*finalizeResult.Failure).Error(),
 				},
 			},
@@ -46,14 +66,23 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(
 		return nil, sharedtypes.ValidationError{Message: "unexpected result from service: both success and failure are nil"}
 	}
 
-	// Prepare data for multiple outgoing events
-	// Use the result from service as the source of truth
 	resultData := *finalizeResult.Success
-	fetchedRound := resultData.Round
+	if resultData.AlreadyFinalized {
+		h.logger.InfoContext(ctx, "Round already finalized; republishing finalization events for downstream idempotency",
+			attr.String("source", source),
+			attr.String("round_id", roundID.String()),
+			attr.String("guild_id", string(guildID)),
+		)
+	}
 
+	if resultData.Round == nil {
+		return nil, sharedtypes.ValidationError{Message: "unexpected finalize result: round is nil"}
+	}
+
+	fetchedRound := resultData.Round
 	discordFinalizationPayload := &roundevents.RoundFinalizedDiscordPayloadV1{
-		GuildID:        payload.GuildID,
-		RoundID:        payload.RoundID,
+		GuildID:        guildID,
+		RoundID:        roundID,
 		Title:          fetchedRound.Title,
 		StartTime:      fetchedRound.StartTime,
 		Location:       fetchedRound.Location,
@@ -64,13 +93,11 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(
 	}
 
 	backendFinalizationPayload := &roundevents.RoundFinalizedPayloadV1{
-		GuildID:   payload.GuildID,
-		RoundID:   payload.RoundID,
+		GuildID:   guildID,
+		RoundID:   roundID,
 		RoundData: *fetchedRound,
 	}
 
-	// We return two separate results. The Discord-bound event needs the message ID
-	// metadata to allow the Discord module to update/finalize the correct message.
 	results := []handlerwrapper.Result{
 		{
 			Topic:   roundevents.RoundFinalizedDiscordV1,
@@ -85,10 +112,8 @@ func (h *RoundHandlers) HandleAllScoresSubmitted(
 		},
 	}
 
-	// Add both legacy GuildID and internal ClubUUID scoped versions for PWA/NATS transition
-	results = h.addParallelIdentityResults(ctx, results, roundevents.RoundFinalizedV1, payload.GuildID)
-
-	return results, nil
+	// Add both legacy GuildID and internal ClubUUID scoped versions for PWA/NATS transition.
+	return h.addParallelIdentityResults(ctx, results, roundevents.RoundFinalizedV1, guildID), nil
 }
 
 // HandleRoundFinalized handles the domain event after a round is finalized, notifying the score module.

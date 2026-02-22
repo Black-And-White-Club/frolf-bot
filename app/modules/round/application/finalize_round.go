@@ -16,6 +16,39 @@ import (
 func (s *RoundService) FinalizeRound(ctx context.Context, req *roundtypes.FinalizeRoundInput) (FinalizeRoundResult, error) {
 	result, err := withTelemetry(s, ctx, "FinalizeRound", req.RoundID, func(ctx context.Context) (FinalizeRoundResult, error) {
 		return runInTx(s, ctx, func(ctx context.Context, tx bun.IDB) (FinalizeRoundResult, error) {
+			// Lock the round row first so finalize is idempotent under concurrent requests.
+			roundForUpdate, err := s.repo.GetRoundForUpdate(ctx, tx, req.GuildID, req.RoundID)
+			if err != nil {
+				s.metrics.RecordDBOperationError(ctx, "get_round_for_update")
+				s.logger.ErrorContext(ctx, "Failed to lock round for finalization",
+					attr.StringUUID("round_id", req.RoundID.String()),
+					attr.Error(err),
+				)
+				return results.FailureResult[*roundtypes.FinalizeRoundResult, error](fmt.Errorf("failed to lock round for finalization: %w", err)), nil
+			}
+
+			if roundForUpdate.State == roundtypes.RoundStateFinalized {
+				participants, err := s.repo.GetParticipants(ctx, tx, req.GuildID, req.RoundID)
+				if err != nil {
+					s.logger.ErrorContext(ctx, "Failed to fetch participants for already finalized round",
+						attr.StringUUID("round_id", req.RoundID.String()),
+						attr.Error(err),
+					)
+					return results.FailureResult[*roundtypes.FinalizeRoundResult, error](fmt.Errorf("failed to fetch participants: %w", err)), nil
+				}
+
+				s.logger.InfoContext(ctx, "Round already finalized; skipping state update",
+					attr.StringUUID("round_id", req.RoundID.String()),
+				)
+
+				return results.SuccessResult[*roundtypes.FinalizeRoundResult, error](&roundtypes.FinalizeRoundResult{
+					Round:            roundForUpdate,
+					Participants:     participants,
+					Teams:            roundForUpdate.Teams,
+					AlreadyFinalized: true,
+				}), nil
+			}
+
 			// Update the round state to finalized in the database
 			rounddbState := roundtypes.RoundStateFinalized
 			s.logger.InfoContext(ctx, "Attempting to update round state to finalized",

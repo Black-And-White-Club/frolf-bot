@@ -42,6 +42,13 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 		{
 			name: "success",
 			setupRepo: func(f *FakeRepo) {
+				f.GetRoundForUpdateFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{
+						ID:      r,
+						GuildID: g,
+						State:   roundtypes.RoundStateInProgress,
+					}, nil
+				}
 				f.UpdateRoundStateFunc = func(ctx context.Context, db bun.IDB, gid sharedtypes.GuildID, rid sharedtypes.RoundID, state roundtypes.RoundState) error {
 					return nil
 				}
@@ -62,7 +69,7 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 				GuildID: guildID,
 				RoundID: roundID,
 			},
-			wantTrace: []string{"UpdateRoundState", "GetRound", "GetParticipants"},
+			wantTrace: []string{"GetRoundForUpdate", "UpdateRoundState", "GetRound", "GetParticipants"},
 			assertFunc: func(t *testing.T, res FinalizeRoundResult) {
 				if res.IsFailure() {
 					t.Fatalf("expected success, got failure: %v", res.Failure)
@@ -77,8 +84,45 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 			},
 		},
 		{
+			name: "already finalized is idempotent success",
+			setupRepo: func(f *FakeRepo) {
+				f.GetRoundForUpdateFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{
+						ID:      r,
+						GuildID: g,
+						State:   roundtypes.RoundStateFinalized,
+					}, nil
+				}
+				f.GetParticipantsFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID) ([]roundtypes.Participant, error) {
+					return []roundtypes.Participant{
+						{UserID: "user1", Score: ptrScore(3)},
+					}, nil
+				}
+			},
+			payload: &roundtypes.FinalizeRoundInput{
+				GuildID: guildID,
+				RoundID: roundID,
+			},
+			wantTrace: []string{"GetRoundForUpdate", "GetParticipants"},
+			assertFunc: func(t *testing.T, res FinalizeRoundResult) {
+				if res.IsFailure() {
+					t.Fatalf("expected success, got failure: %v", res.Failure)
+				}
+				if !(*res.Success).AlreadyFinalized {
+					t.Fatalf("expected AlreadyFinalized=true")
+				}
+			},
+		},
+		{
 			name: "fail update round state",
 			setupRepo: func(f *FakeRepo) {
+				f.GetRoundForUpdateFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{
+						ID:      r,
+						GuildID: g,
+						State:   roundtypes.RoundStateInProgress,
+					}, nil
+				}
 				f.UpdateRoundStateFunc = func(ctx context.Context, db bun.IDB, gid sharedtypes.GuildID, rid sharedtypes.RoundID, state roundtypes.RoundState) error {
 					return errors.New("db error")
 				}
@@ -87,7 +131,7 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 				GuildID: guildID,
 				RoundID: roundID,
 			},
-			wantTrace: []string{"UpdateRoundState"},
+			wantTrace: []string{"GetRoundForUpdate", "UpdateRoundState"},
 			assertFunc: func(t *testing.T, res FinalizeRoundResult) {
 				if res.IsSuccess() {
 					t.Fatal("expected failure")
@@ -100,6 +144,13 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 		{
 			name: "fail get round after state update",
 			setupRepo: func(f *FakeRepo) {
+				f.GetRoundForUpdateFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{
+						ID:      r,
+						GuildID: g,
+						State:   roundtypes.RoundStateInProgress,
+					}, nil
+				}
 				f.UpdateRoundStateFunc = func(ctx context.Context, db bun.IDB, gid sharedtypes.GuildID, rid sharedtypes.RoundID, state roundtypes.RoundState) error {
 					return nil
 				}
@@ -111,7 +162,7 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 				GuildID: guildID,
 				RoundID: roundID,
 			},
-			wantTrace: []string{"UpdateRoundState", "GetRound"},
+			wantTrace: []string{"GetRoundForUpdate", "UpdateRoundState", "GetRound"},
 			assertFunc: func(t *testing.T, res FinalizeRoundResult) {
 				if res.IsSuccess() {
 					t.Fatal("expected failure")
@@ -121,6 +172,13 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 		{
 			name: "fail get participants",
 			setupRepo: func(f *FakeRepo) {
+				f.GetRoundForUpdateFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{
+						ID:      r,
+						GuildID: g,
+						State:   roundtypes.RoundStateInProgress,
+					}, nil
+				}
 				f.UpdateRoundStateFunc = func(ctx context.Context, db bun.IDB, gid sharedtypes.GuildID, rid sharedtypes.RoundID, state roundtypes.RoundState) error {
 					return nil
 				}
@@ -139,7 +197,7 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 				GuildID: guildID,
 				RoundID: roundID,
 			},
-			wantTrace: []string{"UpdateRoundState", "GetRound", "GetParticipants"},
+			wantTrace: []string{"GetRoundForUpdate", "UpdateRoundState", "GetRound", "GetParticipants"},
 			assertFunc: func(t *testing.T, res FinalizeRoundResult) {
 				if res.IsSuccess() {
 					t.Fatal("expected failure")

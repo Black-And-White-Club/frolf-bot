@@ -101,6 +101,7 @@ func TestRoundHandlers_HandleNativeEventLookupRequest(t *testing.T) {
 	testRoundID := sharedtypes.RoundID(uuid.New())
 	testGuildID := sharedtypes.GuildID("guild-123")
 	testDiscordEventID := "event-123"
+	testMessageID := "message-456"
 
 	testPayload := &roundevents.NativeEventLookupRequestPayloadV1{
 		GuildID:        testGuildID,
@@ -115,13 +116,17 @@ func TestRoundHandlers_HandleNativeEventLookupRequest(t *testing.T) {
 		wantResultLen  int
 		wantFound      bool
 		wantRoundID    sharedtypes.RoundID
+		wantMessageID  string
 		expectedErrMsg string
 	}{
 		{
 			name: "Successfully found round",
 			fakeSetup: func(fake *FakeService) {
 				fake.GetRoundByDiscordEventIDFunc = func(ctx context.Context, guildID sharedtypes.GuildID, discordEventID string) (*roundtypes.Round, error) {
-					return &roundtypes.Round{ID: testRoundID}, nil
+					return &roundtypes.Round{
+						ID:             testRoundID,
+						EventMessageID: testMessageID,
+					}, nil
 				}
 			},
 			payload:       testPayload,
@@ -129,6 +134,7 @@ func TestRoundHandlers_HandleNativeEventLookupRequest(t *testing.T) {
 			wantResultLen: 1,
 			wantFound:     true,
 			wantRoundID:   testRoundID,
+			wantMessageID: testMessageID,
 		},
 		{
 			name: "Round not found (ErrRoundNotFound) returns Success with Found=false",
@@ -190,6 +196,9 @@ func TestRoundHandlers_HandleNativeEventLookupRequest(t *testing.T) {
 				}
 				if tt.wantFound && resPayload.RoundID != tt.wantRoundID {
 					t.Errorf("Expected RoundID=%v, got %v", tt.wantRoundID, resPayload.RoundID)
+				}
+				if tt.wantFound && resPayload.MessageID != tt.wantMessageID {
+					t.Errorf("Expected MessageID=%v, got %v", tt.wantMessageID, resPayload.MessageID)
 				}
 			}
 		})

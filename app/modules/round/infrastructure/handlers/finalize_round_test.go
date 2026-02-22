@@ -104,6 +104,30 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 			wantResultLen: 1, // Error event
 		},
 		{
+			name: "Already finalized republishes finalization events",
+			fakeSetup: func(fake *FakeService, u *FakeUserService) {
+				fake.FinalizeRoundFunc = func(ctx context.Context, req *roundtypes.FinalizeRoundInput) (roundservice.FinalizeRoundResult, error) {
+					return results.SuccessResult[*roundtypes.FinalizeRoundResult, error](&roundtypes.FinalizeRoundResult{
+						Round: &roundtypes.Round{
+							ID:             testRoundID,
+							Title:          testTitle,
+							Location:       testLocation,
+							StartTime:      &testStartTime,
+							EventMessageID: testEventMessageID,
+						},
+						Participants:     testParticipants,
+						AlreadyFinalized: true,
+					}), nil
+				}
+				u.GetClubUUIDByDiscordGuildIDFunc = func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) {
+					return testClubUUID, nil
+				}
+			},
+			payload:       testPayload,
+			wantErr:       false,
+			wantResultLen: 4, // Retry path must still publish finalization events
+		},
+		{
 			name: "Service returns error",
 			fakeSetup: func(fake *FakeService, u *FakeUserService) {
 				fake.FinalizeRoundFunc = func(ctx context.Context, req *roundtypes.FinalizeRoundInput) (roundservice.FinalizeRoundResult, error) {
@@ -255,6 +279,108 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 				if results[3].Topic != fmt.Sprintf("%s.%s", roundevents.RoundFinalizedV1, testClubUUID.String()) {
 					t.Errorf("Fourth result should be club-scoped finalization, got %v", results[3].Topic)
 				}
+			}
+		})
+	}
+}
+
+func TestRoundHandlers_HandleRoundFinalizeRequested(t *testing.T) {
+	testRoundID := sharedtypes.RoundID(uuid.New())
+	testGuildID := sharedtypes.GuildID("guild-123")
+	testClubUUID := uuid.New()
+	testStartTime := sharedtypes.StartTime(time.Now().UTC())
+	testParticipants := []roundtypes.Participant{
+		{
+			UserID:   sharedtypes.DiscordID("user1"),
+			Response: roundtypes.ResponseAccept,
+			Score:    scorePointer(sharedtypes.Score(60)),
+		},
+	}
+
+	payload := &roundevents.RoundFinalizeRequestedPayloadV1{
+		GuildID: testGuildID,
+		RoundID: testRoundID,
+	}
+
+	logger := loggerfrolfbot.NoOpLogger
+
+	tests := []struct {
+		name          string
+		fakeSetup     func(*FakeService, *FakeUserService)
+		wantErr       bool
+		wantResultLen int
+	}{
+		{
+			name: "successfully handles finalize request",
+			fakeSetup: func(fake *FakeService, u *FakeUserService) {
+				fake.FinalizeRoundFunc = func(ctx context.Context, req *roundtypes.FinalizeRoundInput) (roundservice.FinalizeRoundResult, error) {
+					return results.SuccessResult[*roundtypes.FinalizeRoundResult, error](&roundtypes.FinalizeRoundResult{
+						Round: &roundtypes.Round{
+							ID:             testRoundID,
+							GuildID:        testGuildID,
+							Title:          roundtypes.Title("Round"),
+							StartTime:      &testStartTime,
+							Location:       roundtypes.Location("Course"),
+							EventMessageID: "msg-1",
+						},
+						Participants: testParticipants,
+					}), nil
+				}
+				u.GetClubUUIDByDiscordGuildIDFunc = func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) {
+					return testClubUUID, nil
+				}
+			},
+			wantErr:       false,
+			wantResultLen: 4,
+		},
+		{
+			name: "already finalized republishes finalization events",
+			fakeSetup: func(fake *FakeService, u *FakeUserService) {
+				fake.FinalizeRoundFunc = func(ctx context.Context, req *roundtypes.FinalizeRoundInput) (roundservice.FinalizeRoundResult, error) {
+					return results.SuccessResult[*roundtypes.FinalizeRoundResult, error](&roundtypes.FinalizeRoundResult{
+						Round:            &roundtypes.Round{ID: testRoundID, GuildID: testGuildID},
+						Participants:     testParticipants,
+						AlreadyFinalized: true,
+					}), nil
+				}
+				u.GetClubUUIDByDiscordGuildIDFunc = func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) {
+					return testClubUUID, nil
+				}
+			},
+			wantErr:       false,
+			wantResultLen: 4,
+		},
+		{
+			name: "service finalization failure emits error event",
+			fakeSetup: func(fake *FakeService, u *FakeUserService) {
+				fake.FinalizeRoundFunc = func(ctx context.Context, req *roundtypes.FinalizeRoundInput) (roundservice.FinalizeRoundResult, error) {
+					return results.FailureResult[*roundtypes.FinalizeRoundResult, error](errors.New("finalize failed")), nil
+				}
+			},
+			wantErr:       false,
+			wantResultLen: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fakeService := NewFakeService()
+			fakeUserService := NewFakeUserService()
+			tt.fakeSetup(fakeService, fakeUserService)
+
+			h := &RoundHandlers{
+				service:     fakeService,
+				userService: fakeUserService,
+				logger:      logger,
+				helpers:     utils.NewHelper(logger),
+			}
+
+			results, err := h.HandleRoundFinalizeRequested(context.Background(), payload)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("HandleRoundFinalizeRequested() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if len(results) != tt.wantResultLen {
+				t.Fatalf("HandleRoundFinalizeRequested() result length = %d, want %d", len(results), tt.wantResultLen)
 			}
 		})
 	}
