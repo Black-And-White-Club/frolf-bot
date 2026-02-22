@@ -17,7 +17,7 @@ func TestHealthEndpoints(t *testing.T) {
 	// This avoids initializing heavy dependencies like DB/NATS which would fail without a running environment
 	app.registerHealthEndpoints()
 
-	// We didn't fully initialize dependencies (DB, EventBus, etc.), 
+	// We didn't fully initialize dependencies (DB, EventBus, etc.),
 	// so readiness checks should fail, but liveness should pass.
 
 	tests := []struct {

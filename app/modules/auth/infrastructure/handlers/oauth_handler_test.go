@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -30,6 +31,108 @@ func findCookie(rr *httptest.ResponseRecorder, name string) *http.Cookie {
 		}
 	}
 	return nil
+}
+
+func TestAuthHandlers_HandleHTTPOAuthLogin(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	tracer := noop.NewTracerProvider().Tracer("test")
+	const pwaBase = "https://app.example.com"
+
+	tests := []struct {
+		name         string
+		rawURL       string
+		setupService func(*FakeService)
+		verify       func(t *testing.T, rr *httptest.ResponseRecorder)
+	}{
+		{
+			name:   "unsupported provider returns 400",
+			rawURL: "/api/auth/discord/login",
+			setupService: func(s *FakeService) {
+				s.InitiateOAuthLoginFunc = func(_ context.Context, _ string) (string, string, error) {
+					return "", "", errors.New("unsupported provider")
+				}
+			},
+			verify: func(t *testing.T, rr *httptest.ResponseRecorder) {
+				if rr.Code != http.StatusBadRequest {
+					t.Errorf("expected 400, got %d", rr.Code)
+				}
+			},
+		},
+		{
+			name:   "success sets oauth_state and clears stale link_mode",
+			rawURL: "/api/auth/discord/login",
+			verify: func(t *testing.T, rr *httptest.ResponseRecorder) {
+				if rr.Code != http.StatusFound {
+					t.Errorf("expected 302, got %d", rr.Code)
+				}
+				if loc := rr.Header().Get("Location"); loc == "" {
+					t.Fatal("expected oauth provider location")
+				}
+
+				stateCookie := findCookie(rr, oauthStateCookie)
+				if stateCookie == nil || stateCookie.Value == "" {
+					t.Fatal("expected oauth_state cookie")
+				}
+				if stateCookie.MaxAge != 300 {
+					t.Errorf("expected oauth_state MaxAge=300, got %d", stateCookie.MaxAge)
+				}
+
+				linkCookie := findCookie(rr, linkModeCookie)
+				if linkCookie == nil {
+					t.Fatal("expected link_mode cookie to be cleared")
+				}
+				if linkCookie.MaxAge != -1 {
+					t.Errorf("expected link_mode MaxAge=-1, got %d", linkCookie.MaxAge)
+				}
+			},
+		},
+		{
+			name:   "success with safe redirect stores oauth_return_to cookie",
+			rawURL: "/api/auth/discord/login?redirect=%2Fjoin%3Fcode%3Dabc",
+			verify: func(t *testing.T, rr *httptest.ResponseRecorder) {
+				returnToCookie := findCookie(rr, oauthReturnToCookie)
+				if returnToCookie == nil {
+					t.Fatal("expected oauth_return_to cookie")
+				}
+				if returnToCookie.MaxAge != 300 {
+					t.Errorf("expected oauth_return_to MaxAge=300, got %d", returnToCookie.MaxAge)
+				}
+				if returnToCookie.Value != url.QueryEscape("/join?code=abc") {
+					t.Errorf("unexpected oauth_return_to cookie value: %s", returnToCookie.Value)
+				}
+			},
+		},
+		{
+			name:   "invalid redirect clears oauth_return_to cookie",
+			rawURL: "/api/auth/discord/login?redirect=https://evil.example/phish",
+			verify: func(t *testing.T, rr *httptest.ResponseRecorder) {
+				returnToCookie := findCookie(rr, oauthReturnToCookie)
+				if returnToCookie == nil {
+					t.Fatal("expected oauth_return_to cookie to be cleared")
+				}
+				if returnToCookie.MaxAge != -1 {
+					t.Errorf("expected oauth_return_to MaxAge=-1, got %d", returnToCookie.MaxAge)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &FakeService{}
+			if tt.setupService != nil {
+				tt.setupService(svc)
+			}
+
+			h := NewAuthHandlers(svc, &FakeEventBus{}, &FakeHelpers{}, logger, tracer, false, pwaBase, "")
+			req := httptest.NewRequest(http.MethodGet, tt.rawURL, nil)
+			req = withProvider(req, "discord")
+			rr := httptest.NewRecorder()
+
+			h.HandleHTTPOAuthLogin(rr, req)
+			tt.verify(t, rr)
+		})
+	}
 }
 
 func TestAuthHandlers_HandleHTTPOAuthLinkInitiate(t *testing.T) {
@@ -336,6 +439,35 @@ func TestAuthHandlers_HandleHTTPOAuthCallback(t *testing.T) {
 				}
 				if refreshCookie.Value != "new-refresh-token" {
 					t.Errorf("expected refresh_token=new-refresh-token, got %s", refreshCookie.Value)
+				}
+
+				returnToCookie := findCookie(rr, oauthReturnToCookie)
+				if returnToCookie == nil {
+					t.Fatal("expected oauth_return_to cookie to be cleared")
+				}
+				if returnToCookie.MaxAge != -1 {
+					t.Errorf("expected oauth_return_to MaxAge=-1, got %d", returnToCookie.MaxAge)
+				}
+			},
+		},
+		{
+			name:   "login mode — success redirects to stored oauth return path",
+			rawURL: "/api/auth/discord/callback?state=" + testState + "&code=" + testCode,
+			setupCookies: func(req *http.Request) {
+				req.AddCookie(&http.Cookie{Name: oauthStateCookie, Value: testState})
+				req.AddCookie(&http.Cookie{Name: oauthReturnToCookie, Value: url.QueryEscape("/join?code=abc")})
+			},
+			setupService: func(s *FakeService) {
+				s.HandleOAuthCallbackFunc = func(_ context.Context, _, _, _ string) (*authservice.LoginResponse, error) {
+					return &authservice.LoginResponse{RefreshToken: "new-refresh-token", UserUUID: "user-uuid"}, nil
+				}
+			},
+			verify: func(t *testing.T, rr *httptest.ResponseRecorder) {
+				if rr.Code != http.StatusFound {
+					t.Errorf("expected 302, got %d", rr.Code)
+				}
+				if loc := rr.Header().Get("Location"); loc != pwaBase+"/join?code=abc" {
+					t.Errorf("expected redirect to %s/join?code=abc, got %s", pwaBase, loc)
 				}
 			},
 		},
