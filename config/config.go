@@ -27,9 +27,9 @@ type Config struct {
 }
 
 type HTTPConfig struct {
-	Port               string   `yaml:"port" env:"HTTP_PORT"`
-	AllowedOrigins     []string `yaml:"allowed_origins" env:"CORS_ALLOWED_ORIGINS"`
-	TrustedProxyCIDRs  []string `yaml:"trusted_proxy_cidrs" env:"TRUSTED_PROXY_CIDRS"`
+	Port              string   `yaml:"port" env:"HTTP_PORT"`
+	AllowedOrigins    []string `yaml:"allowed_origins" env:"CORS_ALLOWED_ORIGINS"`
+	TrustedProxyCIDRs []string `yaml:"trusted_proxy_cidrs" env:"TRUSTED_PROXY_CIDRS"`
 }
 
 // PostgresConfig holds Postgres configuration.
@@ -109,7 +109,7 @@ type AuthCalloutConfig struct {
 	Enabled         bool   `yaml:"enabled" env:"AUTH_CALLOUT_ENABLED"`
 	Subject         string `yaml:"subject" env:"AUTH_CALLOUT_SUBJECT"`
 	IssuerNKey      string `yaml:"issuer_nkey" env:"AUTH_CALLOUT_ISSUER_NKEY"`
-	SigningNKey      string `yaml:"signing_nkey" env:"AUTH_CALLOUT_SIGNING_NKEY"`
+	SigningNKey     string `yaml:"signing_nkey" env:"AUTH_CALLOUT_SIGNING_NKEY"`
 	ServerPublicKey string `yaml:"server_public_key" env:"AUTH_CALLOUT_SERVER_PUBLIC_KEY"` // NATS server's public NKey (e.g. "NA...")
 }
 

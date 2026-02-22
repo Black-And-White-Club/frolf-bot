@@ -2,6 +2,8 @@ package authhandlers
 
 import (
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
@@ -11,6 +13,44 @@ import (
 
 const oauthStateCookie = "oauth_state"
 const linkModeCookie = "link_mode"
+const oauthReturnToCookie = "oauth_return_to"
+
+func sanitizeOAuthReturnTo(raw string) string {
+	candidate := strings.TrimSpace(raw)
+	if candidate == "" {
+		return ""
+	}
+	if !strings.HasPrefix(candidate, "/") || strings.HasPrefix(candidate, "//") {
+		return ""
+	}
+	if strings.ContainsAny(candidate, "\r\n") {
+		return ""
+	}
+
+	parsed, err := url.Parse(candidate)
+	if err != nil || parsed.IsAbs() || parsed.Host != "" {
+		return ""
+	}
+
+	return parsed.RequestURI()
+}
+
+func buildPWAOAuthRedirect(baseURL string, returnTo string) string {
+	if returnTo == "" {
+		return baseURL
+	}
+
+	base, err := url.Parse(baseURL)
+	if err != nil {
+		return baseURL + returnTo
+	}
+	rel, err := url.Parse(returnTo)
+	if err != nil {
+		return baseURL
+	}
+
+	return base.ResolveReference(rel).String()
+}
 
 // HandleHTTPOAuthLogin begins the OAuth2 authorization code flow.
 // It generates a CSRF state token, stores it in a short-lived HttpOnly cookie,
@@ -30,6 +70,30 @@ func (h *AuthHandlers) HandleHTTPOAuthLogin(w http.ResponseWriter, r *http.Reque
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
 	})
+
+	// Preserve an optional relative return-to path for callback redirect.
+	redirectPath := sanitizeOAuthReturnTo(r.URL.Query().Get("redirect"))
+	if redirectPath == "" {
+		http.SetCookie(w, &http.Cookie{
+			Name:     oauthReturnToCookie,
+			Value:    "",
+			Path:     "/",
+			HttpOnly: true,
+			Secure:   h.secureCookies,
+			SameSite: http.SameSiteLaxMode,
+			MaxAge:   -1,
+		})
+	} else {
+		http.SetCookie(w, &http.Cookie{
+			Name:     oauthReturnToCookie,
+			Value:    url.QueryEscape(redirectPath),
+			Path:     "/",
+			HttpOnly: true,
+			Secure:   h.secureCookies,
+			SameSite: http.SameSiteLaxMode,
+			MaxAge:   300,
+		})
+	}
 
 	redirectURL, state, err := h.service.InitiateOAuthLogin(r.Context(), provider)
 	if err != nil {
@@ -211,6 +275,27 @@ func (h *AuthHandlers) HandleHTTPOAuthCallback(w http.ResponseWriter, r *http.Re
 		Expires:  time.Now().Add(authservice.RefreshTokenExpiry),
 	})
 
+	// Resolve optional return-to redirect and clear the helper cookie.
+	target := h.pwaBaseURL
+	if returnToCookie, err := r.Cookie(oauthReturnToCookie); err == nil && returnToCookie.Value != "" {
+		decoded, decodeErr := url.QueryUnescape(returnToCookie.Value)
+		if decodeErr == nil {
+			safeReturnTo := sanitizeOAuthReturnTo(decoded)
+			if safeReturnTo != "" {
+				target = buildPWAOAuthRedirect(h.pwaBaseURL, safeReturnTo)
+			}
+		}
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     oauthReturnToCookie,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   h.secureCookies,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   -1,
+	})
+
 	// Redirect to PWA.
-	http.Redirect(w, r, h.pwaBaseURL, http.StatusFound)
+	http.Redirect(w, r, target, http.StatusFound)
 }
