@@ -118,7 +118,12 @@ func NewRoundModule(
 	roundRouter := roundrouter.NewRoundRouter(logger, router, eventBus, eventBus, helpers, tracer, prometheusRegistry)
 
 	// 2. Initialize Handlers
-	handlers := roundhandlers.NewRoundHandlers(service, userService, logger, helpers)
+	paginationSnapshotRepo := rounddb.NewPaginationSnapshotRepository(db)
+	paginationSnapshotStore, err := roundhandlers.NewDBPaginationSnapshotStore(paginationSnapshotRepo)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize pagination snapshot store: %w", err)
+	}
+	handlers := roundhandlers.NewRoundHandlers(service, userService, logger, helpers, paginationSnapshotStore)
 
 	// 3. Configure the router with handlers (registers topics and middleware)
 	if err := roundRouter.Configure(routerCtx, handlers); err != nil {

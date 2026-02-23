@@ -139,9 +139,16 @@ func (r *RoundRouter) registerHandlers(h roundhandlers.Handlers) error {
 	registerHandler(deps, roundevents.NativeEventCreatedV1, h.HandleNativeEventCreated)
 	registerHandler(deps, roundevents.NativeEventLookupRequestV1, h.HandleNativeEventLookupRequest)
 
+	registerHandler(deps, roundevents.PaginationSnapshotUpsertRequestedV1, h.HandlePaginationSnapshotUpsertRequested)
+	registerHandler(deps, roundevents.PaginationSnapshotGetRequestedV1, h.HandlePaginationSnapshotGetRequested)
+	registerHandler(deps, roundevents.PaginationSnapshotDeleteRequestedV1, h.HandlePaginationSnapshotDeleteRequested)
+
 	registerHandler(deps, roundevents.RoundDeleteRequestedV1, h.HandleRoundDeleteRequest)
 	registerHandler(deps, roundevents.RoundDeleteValidatedV1, h.HandleRoundDeleteValidated)
 	registerHandler(deps, roundevents.RoundDeleteAuthorizedV1, h.HandleRoundDeleteAuthorized)
+
+	registerHandler(deps, roundevents.RoundDeletedV1, h.HandleRoundDeleted)
+	registerHandler(deps, roundevents.RoundCompletedV1, h.HandleRoundCompleted)
 
 	registerHandler(deps, roundevents.RoundUpdateRequestedV1, h.HandleRoundUpdateRequest)
 	registerHandler(deps, roundevents.RoundUpdateValidatedV1, h.HandleRoundUpdateValidated)

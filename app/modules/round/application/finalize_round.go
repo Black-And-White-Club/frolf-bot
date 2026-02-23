@@ -24,7 +24,7 @@ func (s *RoundService) FinalizeRound(ctx context.Context, req *roundtypes.Finali
 					attr.StringUUID("round_id", req.RoundID.String()),
 					attr.Error(err),
 				)
-				return results.FailureResult[*roundtypes.FinalizeRoundResult, error](fmt.Errorf("failed to lock round for finalization: %w", err)), nil
+				return results.FailureResult[*roundtypes.FinalizeRoundResult, error](fmt.Errorf("failed to fetch round data (lock for finalization): %w", err)), nil
 			}
 
 			if roundForUpdate.State == roundtypes.RoundStateFinalized {
