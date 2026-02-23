@@ -236,6 +236,7 @@ func (b *Builder) adminPermissions(clubUUID, userUUID, guildID, userID string) *
 	editor.Publish.Allow = append(editor.Publish.Allow,
 		"leaderboard.batch.tag.assignment.requested.v1",
 		"leaderboard.manual.point.adjustment.v1",
+		"round.scorecard.admin.upload.requested.v1",
 	)
 
 	// Admin-only subscribe subjects for operation feedback (no guildId suffix)

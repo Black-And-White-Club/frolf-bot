@@ -222,6 +222,23 @@ func TestRoundService_ParseScorecard(t *testing.T) {
 				}
 			},
 		},
+		{
+			name:     "Failure - File Too Large",
+			fileData: make([]byte, maxFileSize+1),
+			setupRepo: func(f *FakeRepo) {
+				f.UpdateImportStatusFunc = func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, importID string, status string, errorMessage string, errorCode string) error {
+					return nil
+				}
+			},
+			assertFunc: func(t *testing.T, res results.OperationResult[roundtypes.ParsedScorecard, error], repo *FakeRepo) {
+				if res.Failure == nil {
+					t.Fatal("expected failure for oversized upload")
+				}
+				if !strings.Contains((*res.Failure).Error(), "file too large") {
+					t.Fatalf("expected file too large failure, got %v", (*res.Failure).Error())
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {

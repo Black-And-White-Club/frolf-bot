@@ -59,6 +59,9 @@ func (s *RoundService) applySinglesScores(
 	if err != nil {
 		return results.FailureResult[*roundtypes.ImportApplyScoresResult, error](fmt.Errorf("failed to get existing participants: %w", err)), nil
 	}
+	if req.OverwriteExistingScores {
+		return s.overwriteSinglesScores(ctx, tx, req, round, existingParticipants)
+	}
 
 	// Build map of existing participants by UserID for deduplication
 	existingMap := make(map[sharedtypes.DiscordID]int)
@@ -67,15 +70,48 @@ func (s *RoundService) applySinglesScores(
 			existingMap[p.UserID] = i
 		}
 	}
+	guestIndexByName := make(map[string]int)
+	for i, p := range existingParticipants {
+		if p.UserID != "" {
+			continue
+		}
+		normalized := normalizeName(p.RawName)
+		if normalized == "" {
+			continue
+		}
+		guestIndexByName[normalized] = i
+	}
 
 	updatedCount := 0
 	for _, scoreInfo := range req.Scores {
-		// Do not create guest participants for singles; only add matched guild_membership users.
-		// If UserID is empty, this is an unmatched/guest player - skip entirely for singles.
 		if scoreInfo.UserID == "" {
-			s.logger.DebugContext(ctx, "Skipping guest user in singles import (no guest participants for singles)",
-				attr.String("raw_name", scoreInfo.RawName),
-			)
+			if !req.AllowGuestPlayers {
+				s.logger.DebugContext(ctx, "Skipping guest user in singles import (guest participants disabled)",
+					attr.String("raw_name", scoreInfo.RawName),
+				)
+				continue
+			}
+
+			normalizedGuestName := normalizeName(scoreInfo.RawName)
+			if normalizedGuestName == "" {
+				continue
+			}
+
+			score := sharedtypes.Score(scoreInfo.Score)
+			if idx, exists := guestIndexByName[normalizedGuestName]; exists {
+				existingParticipants[idx].Score = &score
+				existingParticipants[idx].Response = roundtypes.ResponseAccept
+				existingParticipants[idx].RawName = scoreInfo.RawName
+			} else {
+				existingParticipants = append(existingParticipants, roundtypes.Participant{
+					UserID:   "",
+					RawName:  scoreInfo.RawName,
+					Score:    &score,
+					Response: roundtypes.ResponseAccept,
+				})
+				guestIndexByName[normalizedGuestName] = len(existingParticipants) - 1
+			}
+			updatedCount++
 			continue
 		}
 
@@ -117,6 +153,85 @@ func (s *RoundService) applySinglesScores(
 		RoundID:        req.RoundID,
 		ImportID:       req.ImportID,
 		Participants:   existingParticipants,
+		RoundData:      round,
+		EventMessageID: round.EventMessageID,
+		Timestamp:      time.Now().UTC(),
+	}), nil
+}
+
+func (s *RoundService) overwriteSinglesScores(
+	ctx context.Context,
+	tx bun.IDB,
+	req roundtypes.ImportApplyScoresInput,
+	round *roundtypes.Round,
+	existingParticipants []roundtypes.Participant,
+) (ApplyImportedScoresResult, error) {
+	existingByUserID := make(map[sharedtypes.DiscordID]roundtypes.Participant)
+	for _, participant := range existingParticipants {
+		if participant.UserID == "" {
+			continue
+		}
+		existingByUserID[participant.UserID] = participant
+	}
+
+	participants := make([]roundtypes.Participant, 0, len(req.Scores))
+	indexByKey := make(map[string]int)
+	updatedCount := 0
+
+	for _, scoreInfo := range req.Scores {
+		if scoreInfo.UserID == "" && !req.AllowGuestPlayers {
+			continue
+		}
+
+		score := sharedtypes.Score(scoreInfo.Score)
+		next := roundtypes.Participant{
+			UserID:   scoreInfo.UserID,
+			RawName:  scoreInfo.RawName,
+			Score:    &score,
+			Response: roundtypes.ResponseAccept,
+		}
+
+		var key string
+		if scoreInfo.UserID != "" {
+			if existing, exists := existingByUserID[scoreInfo.UserID]; exists {
+				next.TagNumber = existing.TagNumber
+			}
+			key = "user:" + string(scoreInfo.UserID)
+		} else {
+			normalizedGuestName := normalizeName(scoreInfo.RawName)
+			if normalizedGuestName == "" {
+				continue
+			}
+			key = "guest:" + normalizedGuestName
+		}
+
+		if idx, exists := indexByKey[key]; exists {
+			participants[idx] = next
+		} else {
+			indexByKey[key] = len(participants)
+			participants = append(participants, next)
+		}
+		updatedCount++
+	}
+
+	if updatedCount == 0 {
+		return results.FailureResult[*roundtypes.ImportApplyScoresResult, error](errors.New("no scores were successfully applied")), nil
+	}
+
+	updates := []roundtypes.RoundUpdate{{
+		RoundID:      req.RoundID,
+		Participants: participants,
+	}}
+
+	if err := s.repo.UpdateRoundsAndParticipants(ctx, tx, req.GuildID, updates); err != nil {
+		return results.FailureResult[*roundtypes.ImportApplyScoresResult, error](fmt.Errorf("failed to persist participants: %w", err)), nil
+	}
+
+	return results.SuccessResult[*roundtypes.ImportApplyScoresResult, error](&roundtypes.ImportApplyScoresResult{
+		GuildID:        req.GuildID,
+		RoundID:        req.RoundID,
+		ImportID:       req.ImportID,
+		Participants:   participants,
 		RoundData:      round,
 		EventMessageID: round.EventMessageID,
 		Timestamp:      time.Now().UTC(),

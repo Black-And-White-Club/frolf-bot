@@ -59,6 +59,23 @@ func TestBuilder_ForRole(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "admin permissions include admin scorecard upload",
+			claims: &authdomain.Claims{
+				UserUUID:       userUUID,
+				ActiveClubUUID: clubUUID,
+				Role:           authdomain.RoleAdmin,
+				Clubs: []authdomain.ClubRole{
+					{ClubUUID: clubUUID, Role: authdomain.RoleAdmin},
+				},
+			},
+			verify: func(t *testing.T, p *Permissions) {
+				expectedPub := "round.scorecard.admin.upload.requested.v1"
+				if !contains(p.Publish.Allow, expectedPub) {
+					t.Errorf("expected admin publish allow for %s, got %v", expectedPub, p.Publish.Allow)
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
