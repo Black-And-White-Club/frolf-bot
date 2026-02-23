@@ -3,7 +3,7 @@ module github.com/Black-And-White-Club/frolf-bot
 go 1.25.0
 
 require (
-	github.com/Black-And-White-Club/frolf-bot-shared v0.1.21
+	github.com/Black-And-White-Club/frolf-bot-shared v0.1.22
 	github.com/ThreeDotsLabs/watermill v1.5.1
 	github.com/brianvoe/gofakeit/v7 v7.14.0
 	github.com/docker/docker v28.5.2+incompatible
@@ -35,7 +35,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
-replace github.com/Black-And-White-Club/frolf-bot-shared => ../frolf-bot-shared
+// replace github.com/Black-And-White-Club/frolf-bot-shared => ../frolf-bot-shared
 
 require (
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
@@ -58,7 +58,7 @@ require (
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/docker/go-connections v0.6.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
-	github.com/ebitengine/purego v0.9.1 // indirect
+	github.com/ebitengine/purego v0.10.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
