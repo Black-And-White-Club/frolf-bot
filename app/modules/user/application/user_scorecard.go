@@ -8,6 +8,7 @@ import (
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
+	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/uptrace/bun"
 )
 
@@ -111,7 +112,24 @@ func (s *UserService) executeMatchParsedScorecard(
 		}
 	}
 
-	// 4. Build output result map
+	// 4. Fuzzy fallback for unmatched names:
+	// match only when there is exactly one unambiguous candidate.
+	for _, norm := range stillMissing {
+		if _, alreadyMatched := matchedUsers[norm]; alreadyMatched {
+			continue
+		}
+
+		candidates, err := s.repo.FindByUDiscNameFuzzy(ctx, db, guildID, norm)
+		if err != nil {
+			return results.OperationResult[*MatchResult, error]{}, fmt.Errorf("fuzzy name lookup failed: %w", err)
+		}
+
+		if discordID, ok := resolveUnambiguousFuzzyMatch(norm, candidates); ok {
+			matchedUsers[norm] = discordID
+		}
+	}
+
+	// 5. Build output result map
 	matchResult := &MatchResult{
 		Mappings:  []userevents.UDiscConfirmedMappingV1{},
 		Unmatched: unmatchedRaw,
@@ -139,4 +157,68 @@ func (s *UserService) executeMatchParsedScorecard(
 	}
 
 	return results.SuccessResult[*MatchResult, error](matchResult), nil
+}
+
+func resolveUnambiguousFuzzyMatch(norm string, candidates []*userdb.UserWithMembership) (sharedtypes.DiscordID, bool) {
+	exactMatches := make(map[sharedtypes.DiscordID]struct{})
+	firstNameMatches := make(map[sharedtypes.DiscordID]struct{})
+
+	for _, candidate := range candidates {
+		if candidate == nil || candidate.User == nil {
+			continue
+		}
+
+		discordID := candidate.User.GetUserID()
+		if discordID == "" {
+			continue
+		}
+
+		username := normalizeLookupValue(candidate.User.UDiscUsername)
+		name := normalizeLookupValue(candidate.User.UDiscName)
+		if username == norm || name == norm {
+			exactMatches[discordID] = struct{}{}
+			continue
+		}
+
+		if firstName := firstNameFromFullName(candidate.User.UDiscName); firstName == norm {
+			firstNameMatches[discordID] = struct{}{}
+		}
+	}
+
+	if len(exactMatches) == 1 {
+		return onlyDiscordID(exactMatches), true
+	}
+	if len(exactMatches) > 1 {
+		return "", false
+	}
+	if len(firstNameMatches) == 1 {
+		return onlyDiscordID(firstNameMatches), true
+	}
+	return "", false
+}
+
+func normalizeLookupValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSpace(*value))
+}
+
+func firstNameFromFullName(fullName *string) string {
+	normalized := normalizeLookupValue(fullName)
+	if normalized == "" {
+		return ""
+	}
+	parts := strings.Fields(normalized)
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Trim(parts[0], ".,;:!?()[]{}\"'`")
+}
+
+func onlyDiscordID(set map[sharedtypes.DiscordID]struct{}) sharedtypes.DiscordID {
+	for discordID := range set {
+		return discordID
+	}
+	return ""
 }

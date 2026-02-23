@@ -122,74 +122,123 @@ func TestRoundHandlers_HandleAdminScorecardUploadRequested(t *testing.T) {
 		FileData: []byte("bytes"),
 	}
 
-	t.Run("Success - Admin role can enqueue parse request", func(t *testing.T) {
-		fakeService := NewFakeService()
-		fakeService.CreateImportJobFunc = func(ctx context.Context, req *roundtypes.ImportCreateJobInput) (roundservice.CreateImportJobResult, error) {
-			if !req.AllowGuestPlayers {
-				t.Fatalf("expected AllowGuestPlayers=true for admin upload")
+	uuidUserID := uuid.New()
+	uuidUserIDStr := sharedtypes.DiscordID(uuidUserID.String())
+	uuidFallbackDiscordID := sharedtypes.DiscordID("153320995397173249")
+
+	tests := []struct {
+		name             string
+		payloadUserID    sharedtypes.DiscordID
+		setupService     func(*testing.T, *FakeService)
+		setupUserService func(*testing.T, *FakeUserService, sharedtypes.DiscordID)
+		wantTopic        string
+		wantCreateCalled bool
+	}{
+		{
+			name: "success - admin role can enqueue parse request",
+			payloadUserID: adminID,
+			setupService: func(t *testing.T, fakeService *FakeService) {
+				fakeService.CreateImportJobFunc = func(ctx context.Context, req *roundtypes.ImportCreateJobInput) (roundservice.CreateImportJobResult, error) {
+					if !req.AllowGuestPlayers {
+						t.Fatalf("expected AllowGuestPlayers=true for admin upload")
+					}
+					if !req.OverwriteExistingScores {
+						t.Fatalf("expected OverwriteExistingScores=true for admin upload")
+					}
+					if req.Source != adminPwaImportSource {
+						t.Fatalf("expected source %q, got %q", adminPwaImportSource, req.Source)
+					}
+					return results.SuccessResult[roundtypes.CreateImportJobResult, error](roundtypes.CreateImportJobResult{Job: req}), nil
+				}
+			},
+			setupUserService: func(t *testing.T, userService *FakeUserService, payloadUserID sharedtypes.DiscordID) {
+				userService.GetUserRoleFunc = func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (userservice.UserRoleResult, error) {
+					return results.SuccessResult[sharedtypes.UserRoleEnum, error](sharedtypes.UserRoleAdmin), nil
+				}
+			},
+			wantTopic:        roundevents.ScorecardParseRequestedV1,
+			wantCreateCalled: true,
+		},
+		{
+			name: "failure - non-admin role is rejected",
+			payloadUserID: adminID,
+			setupUserService: func(t *testing.T, userService *FakeUserService, payloadUserID sharedtypes.DiscordID) {
+				userService.GetUserRoleFunc = func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (userservice.UserRoleResult, error) {
+					return results.SuccessResult[sharedtypes.UserRoleEnum, error](sharedtypes.UserRoleUser), nil
+				}
+			},
+			wantTopic:        roundevents.ImportFailedV1,
+			wantCreateCalled: false,
+		},
+		{
+			name: "success - uuid user_id falls back to discord identity lookup",
+			payloadUserID: uuidUserIDStr,
+			setupService: func(t *testing.T, fakeService *FakeService) {
+				fakeService.CreateImportJobFunc = func(ctx context.Context, req *roundtypes.ImportCreateJobInput) (roundservice.CreateImportJobResult, error) {
+					return results.SuccessResult[roundtypes.CreateImportJobResult, error](roundtypes.CreateImportJobResult{Job: req}), nil
+				}
+			},
+			setupUserService: func(t *testing.T, userService *FakeUserService, payloadUserID sharedtypes.DiscordID) {
+				userService.GetUserRoleFunc = func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (userservice.UserRoleResult, error) {
+					if userID == payloadUserID {
+						return results.FailureResult[sharedtypes.UserRoleEnum, error](errors.New("user not found")), nil
+					}
+					if userID == uuidFallbackDiscordID {
+						return results.SuccessResult[sharedtypes.UserRoleEnum, error](sharedtypes.UserRoleAdmin), nil
+					}
+					t.Fatalf("unexpected userID passed to GetUserRole: %s", userID)
+					return userservice.UserRoleResult{}, nil
+				}
+				userService.GetDiscordIDByUUIDFunc = func(ctx context.Context, userUUID uuid.UUID) (sharedtypes.DiscordID, error) {
+					if userUUID != uuidUserID {
+						t.Fatalf("expected fallback UUID %s, got %s", uuidUserID, userUUID)
+					}
+					return uuidFallbackDiscordID, nil
+				}
+			},
+			wantTopic:        roundevents.ScorecardParseRequestedV1,
+			wantCreateCalled: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			casePayload := *payload
+			casePayload.UserID = tt.payloadUserID
+
+			fakeService := NewFakeService()
+			if tt.setupService != nil {
+				tt.setupService(t, fakeService)
 			}
-			if !req.OverwriteExistingScores {
-				t.Fatalf("expected OverwriteExistingScores=true for admin upload")
+
+			userService := NewFakeUserService()
+			if tt.setupUserService != nil {
+				tt.setupUserService(t, userService, tt.payloadUserID)
 			}
-			if req.Source != adminPwaImportSource {
-				t.Fatalf("expected source %q, got %q", adminPwaImportSource, req.Source)
+
+			h := &RoundHandlers{
+				service:     fakeService,
+				userService: userService,
+				logger:      loggerfrolfbot.NoOpLogger,
 			}
 
-			return results.SuccessResult[roundtypes.CreateImportJobResult, error](roundtypes.CreateImportJobResult{
-				Job: req,
-			}), nil
-		}
+			res, err := h.HandleAdminScorecardUploadRequested(ctx, &casePayload)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(res) != 1 {
+				t.Fatalf("expected 1 result, got %d", len(res))
+			}
+			if res[0].Topic != tt.wantTopic {
+				t.Fatalf("expected topic %s, got %s", tt.wantTopic, res[0].Topic)
+			}
 
-		userService := NewFakeUserService()
-		userService.GetUserRoleFunc = func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (userservice.UserRoleResult, error) {
-			return results.SuccessResult[sharedtypes.UserRoleEnum, error](sharedtypes.UserRoleAdmin), nil
-		}
-
-		h := &RoundHandlers{
-			service:     fakeService,
-			userService: userService,
-			logger:      loggerfrolfbot.NoOpLogger,
-		}
-
-		res, err := h.HandleAdminScorecardUploadRequested(ctx, payload)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if len(res) != 1 {
-			t.Fatalf("expected 1 result, got %d", len(res))
-		}
-		if res[0].Topic != roundevents.ScorecardParseRequestedV1 {
-			t.Fatalf("expected %s, got %s", roundevents.ScorecardParseRequestedV1, res[0].Topic)
-		}
-	})
-
-	t.Run("Failure - Non-admin role is rejected", func(t *testing.T) {
-		fakeService := NewFakeService()
-		userService := NewFakeUserService()
-		userService.GetUserRoleFunc = func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (userservice.UserRoleResult, error) {
-			return results.SuccessResult[sharedtypes.UserRoleEnum, error](sharedtypes.UserRoleUser), nil
-		}
-
-		h := &RoundHandlers{
-			service:     fakeService,
-			userService: userService,
-			logger:      loggerfrolfbot.NoOpLogger,
-		}
-
-		res, err := h.HandleAdminScorecardUploadRequested(ctx, payload)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if len(res) != 1 {
-			t.Fatalf("expected 1 result, got %d", len(res))
-		}
-		if res[0].Topic != roundevents.ImportFailedV1 {
-			t.Fatalf("expected %s, got %s", roundevents.ImportFailedV1, res[0].Topic)
-		}
-		if len(fakeService.Trace()) != 0 {
-			t.Fatalf("CreateImportJob should not be called for non-admin role")
-		}
-	})
+			gotCreateCalled := len(fakeService.Trace()) > 0
+			if gotCreateCalled != tt.wantCreateCalled {
+				t.Fatalf("CreateImportJob called=%v, want %v", gotCreateCalled, tt.wantCreateCalled)
+			}
+		})
+	}
 }
 
 func TestRoundHandlers_HandleImportCompleted_SingleTrigger(t *testing.T) {

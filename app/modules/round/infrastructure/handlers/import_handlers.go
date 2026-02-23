@@ -10,6 +10,7 @@ import (
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
+	"github.com/google/uuid"
 )
 
 const (
@@ -427,6 +428,28 @@ func (h *RoundHandlers) ensureAdminRole(ctx context.Context, guildID sharedtypes
 		return fmt.Errorf("admin scorecard upload requires a valid user_id")
 	}
 
+	if err := h.requireAdminRole(ctx, guildID, userID); err == nil {
+		return nil
+	}
+
+	parsedUUID, parseErr := uuid.Parse(string(userID))
+	if parseErr != nil {
+		return fmt.Errorf("failed to verify admin role: user %q is not a discord ID and is not a valid UUID", userID)
+	}
+
+	discordID, resolveErr := h.userService.GetDiscordIDByUUID(ctx, parsedUUID)
+	if resolveErr != nil {
+		return fmt.Errorf("failed to verify admin role: could not resolve UUID %q to discord user: %w", userID, resolveErr)
+	}
+
+	if err := h.requireAdminRole(ctx, guildID, discordID); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (h *RoundHandlers) requireAdminRole(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) error {
 	roleResult, err := h.userService.GetUserRole(ctx, guildID, userID)
 	if err != nil {
 		return fmt.Errorf("failed to verify admin role: %w", err)

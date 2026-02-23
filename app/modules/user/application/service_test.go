@@ -197,6 +197,83 @@ func TestUserService_MatchParsedScorecard(t *testing.T) {
 			},
 		},
 		{
+			name:        "match by first-name fuzzy fallback success",
+			playerNames: []string{"Eric"},
+			setupFake: func(f *FakeUserRepository) {
+				f.GetUsersByUDiscUsernamesFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, usernames []string) ([]userdb.UserWithMembership, error) {
+					return []userdb.UserWithMembership{}, nil
+				}
+				f.GetUsersByUDiscNamesFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, names []string) ([]userdb.UserWithMembership, error) {
+					return []userdb.UserWithMembership{}, nil
+				}
+				f.FindByUDiscNameFuzzyFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, partialName string) ([]*userdb.UserWithMembership, error) {
+					if partialName != "eric" {
+						return []*userdb.UserWithMembership{}, nil
+					}
+					return []*userdb.UserWithMembership{
+						{
+							User: &userdb.User{
+								UserID:    pointer(sharedtypes.DiscordID("discord-3")),
+								UDiscName: pointer("Eric Goodyke"),
+							},
+						},
+					}, nil
+				}
+			},
+			verify: func(t *testing.T, res results.OperationResult[*MatchResult, error], fake *FakeUserRepository) {
+				if !res.IsSuccess() {
+					t.Fatalf("expected success, got failure")
+				}
+				success := *res.Success
+				if len(success.Mappings) != 1 || success.Mappings[0].DiscordUserID != "discord-3" {
+					t.Errorf("expected fuzzy first-name match to discord-3, got %+v", success.Mappings)
+				}
+			},
+		},
+		{
+			name:        "first-name fuzzy fallback ambiguous remains unmatched",
+			playerNames: []string{"Mark"},
+			setupFake: func(f *FakeUserRepository) {
+				f.GetUsersByUDiscUsernamesFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, usernames []string) ([]userdb.UserWithMembership, error) {
+					return []userdb.UserWithMembership{}, nil
+				}
+				f.GetUsersByUDiscNamesFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, names []string) ([]userdb.UserWithMembership, error) {
+					return []userdb.UserWithMembership{}, nil
+				}
+				f.FindByUDiscNameFuzzyFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, partialName string) ([]*userdb.UserWithMembership, error) {
+					if partialName != "mark" {
+						return []*userdb.UserWithMembership{}, nil
+					}
+					return []*userdb.UserWithMembership{
+						{
+							User: &userdb.User{
+								UserID:    pointer(sharedtypes.DiscordID("discord-4")),
+								UDiscName: pointer("Mark Newton"),
+							},
+						},
+						{
+							User: &userdb.User{
+								UserID:    pointer(sharedtypes.DiscordID("discord-5")),
+								UDiscName: pointer("Mark Jones"),
+							},
+						},
+					}, nil
+				}
+			},
+			verify: func(t *testing.T, res results.OperationResult[*MatchResult, error], fake *FakeUserRepository) {
+				if !res.IsSuccess() {
+					t.Fatalf("expected success, got failure")
+				}
+				success := *res.Success
+				if len(success.Mappings) != 0 {
+					t.Errorf("expected no mapping due to ambiguity, got %+v", success.Mappings)
+				}
+				if len(success.Unmatched) != 1 || success.Unmatched[0] != "Mark" {
+					t.Errorf("expected Mark to remain unmatched, got %v", success.Unmatched)
+				}
+			},
+		},
+		{
 			name:           "too many players error",
 			playerNames:    make([]string, 513),
 			expectInfraErr: false,

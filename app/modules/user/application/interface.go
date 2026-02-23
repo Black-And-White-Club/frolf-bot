@@ -73,5 +73,6 @@ type Service interface {
 
 	// Identity Resolution
 	GetUUIDByDiscordID(ctx context.Context, discordID sharedtypes.DiscordID) (uuid.UUID, error)
+	GetDiscordIDByUUID(ctx context.Context, userUUID uuid.UUID) (sharedtypes.DiscordID, error)
 	GetClubUUIDByDiscordGuildID(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error)
 }

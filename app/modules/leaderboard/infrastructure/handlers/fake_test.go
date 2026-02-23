@@ -289,6 +289,7 @@ var _ utils.Helpers = (*FakeHelpers)(nil)
 // FakeUserService implements userservice.Service for handler testing.
 type FakeUserService struct {
 	LookupProfilesFunc              func(ctx context.Context, userIDs []sharedtypes.DiscordID, guildID sharedtypes.GuildID) (results.OperationResult[*userservice.LookupProfilesResponse, error], error)
+	GetDiscordIDByUUIDFunc          func(ctx context.Context, userUUID uuid.UUID) (sharedtypes.DiscordID, error)
 	GetClubUUIDByDiscordGuildIDFunc func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error)
 }
 
@@ -337,6 +338,13 @@ func (f *FakeUserService) UpdateUserProfile(ctx context.Context, userID sharedty
 
 func (f *FakeUserService) GetUUIDByDiscordID(ctx context.Context, discordID sharedtypes.DiscordID) (uuid.UUID, error) {
 	return uuid.New(), nil
+}
+
+func (f *FakeUserService) GetDiscordIDByUUID(ctx context.Context, userUUID uuid.UUID) (sharedtypes.DiscordID, error) {
+	if f.GetDiscordIDByUUIDFunc != nil {
+		return f.GetDiscordIDByUUIDFunc(ctx, userUUID)
+	}
+	return "", nil
 }
 
 func (f *FakeUserService) GetClubUUIDByDiscordGuildID(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) {

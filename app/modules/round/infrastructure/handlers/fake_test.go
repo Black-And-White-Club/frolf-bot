@@ -412,6 +412,7 @@ type FakeUserService struct {
 	LookupProfilesFunc              func(ctx context.Context, userIDs []sharedtypes.DiscordID, guildID sharedtypes.GuildID) (results.OperationResult[*userservice.LookupProfilesResponse, error], error)
 	GetUserRoleFunc                 func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (userservice.UserRoleResult, error)
 	GetUUIDByDiscordIDFunc          func(ctx context.Context, discordID sharedtypes.DiscordID) (uuid.UUID, error)
+	GetDiscordIDByUUIDFunc          func(ctx context.Context, userUUID uuid.UUID) (sharedtypes.DiscordID, error)
 	GetClubUUIDByDiscordGuildIDFunc func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error)
 }
 
@@ -466,6 +467,13 @@ func (f *FakeUserService) GetUUIDByDiscordID(ctx context.Context, discordID shar
 		return f.GetUUIDByDiscordIDFunc(ctx, discordID)
 	}
 	return uuid.New(), nil
+}
+
+func (f *FakeUserService) GetDiscordIDByUUID(ctx context.Context, userUUID uuid.UUID) (sharedtypes.DiscordID, error) {
+	if f.GetDiscordIDByUUIDFunc != nil {
+		return f.GetDiscordIDByUUIDFunc(ctx, userUUID)
+	}
+	return "", nil
 }
 
 func (f *FakeUserService) GetClubUUIDByDiscordGuildID(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) {

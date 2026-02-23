@@ -115,6 +115,23 @@ func (s *UserService) GetUUIDByDiscordID(ctx context.Context, discordID sharedty
 	return s.repo.GetUUIDByDiscordID(ctx, s.db, discordID)
 }
 
+// GetDiscordIDByUUID resolves an internal UUID to a Discord ID.
+func (s *UserService) GetDiscordIDByUUID(ctx context.Context, userUUID uuid.UUID) (sharedtypes.DiscordID, error) {
+	if userUUID == uuid.Nil {
+		return "", fmt.Errorf("userUUID cannot be nil")
+	}
+
+	user, err := s.repo.GetUserByUUID(ctx, s.db, userUUID)
+	if err != nil {
+		return "", err
+	}
+	if user == nil || user.UserID == nil || *user.UserID == "" {
+		return "", userdb.ErrNotFound
+	}
+
+	return *user.UserID, nil
+}
+
 // GetClubUUIDByDiscordGuildID resolves a Discord guild ID to internal club UUID.
 func (s *UserService) GetClubUUIDByDiscordGuildID(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) {
 	if guildID == "" {
