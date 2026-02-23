@@ -2,6 +2,7 @@ package roundhandlers
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
@@ -11,18 +12,100 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 )
 
-// HandleScorecardUploaded transforms a scorecard upload into an import job request.
-func (h *RoundHandlers) HandleScorecardUploaded(ctx context.Context, payload *roundevents.ScorecardUploadedPayloadV1) ([]handlerwrapper.Result, error) {
+const (
+	adminPwaImportSource      = "admin_pwa_upload"
+	discordUploadImportSource = "discord_upload"
+	discordURLImportSource    = "discord_url"
+)
+
+// HandleAdminScorecardUploadRequested accepts admin-originated uploads from PWA.
+// It enforces admin role and forces guest fallback + overwrite semantics.
+func (h *RoundHandlers) HandleAdminScorecardUploadRequested(ctx context.Context, payload *roundevents.ScorecardUploadedPayloadV1) ([]handlerwrapper.Result, error) {
+	h.logger.InfoContext(ctx, "Admin scorecard upload requested",
+		attr.String("source", adminPwaImportSource),
+		attr.String("import_id", payload.ImportID),
+		attr.String("round_id", payload.RoundID.String()),
+		attr.String("guild_id", string(payload.GuildID)),
+		attr.String("user_id", string(payload.UserID)),
+	)
+
+	if err := h.ensureAdminRole(ctx, payload.GuildID, payload.UserID); err != nil {
+		return []handlerwrapper.Result{{
+			Topic: roundevents.ImportFailedV1,
+			Payload: &roundevents.ImportFailedPayloadV1{
+				GuildID:        payload.GuildID,
+				RoundID:        payload.RoundID,
+				ImportID:       payload.ImportID,
+				EventMessageID: payload.MessageID,
+				UserID:         payload.UserID,
+				ChannelID:      payload.ChannelID,
+				Error:          err.Error(),
+				Timestamp:      time.Now().UTC(),
+			},
+		}}, nil
+	}
+
 	req := roundtypes.ImportCreateJobInput{
 		ImportID:  payload.ImportID,
 		GuildID:   payload.GuildID,
 		RoundID:   payload.RoundID,
+		Source:    adminPwaImportSource,
 		UserID:    payload.UserID,
 		ChannelID: payload.ChannelID,
 		FileName:  payload.FileName,
 		FileData:  payload.FileData,
 		UDiscURL:  payload.UDiscURL,
 		Notes:     payload.Notes,
+		// Forced for admin upload path.
+		AllowGuestPlayers:       true,
+		OverwriteExistingScores: true,
+	}
+
+	result, err := h.service.CreateImportJob(ctx, &req)
+	if err != nil {
+		return nil, err
+	}
+
+	if result.Failure != nil {
+		return []handlerwrapper.Result{{
+			Topic: roundevents.ImportFailedV1,
+			Payload: &roundevents.ImportFailedPayloadV1{
+				GuildID:        payload.GuildID,
+				RoundID:        payload.RoundID,
+				ImportID:       payload.ImportID,
+				EventMessageID: payload.MessageID,
+				UserID:         payload.UserID,
+				ChannelID:      payload.ChannelID,
+				Error:          (*result.Failure).Error(),
+				Timestamp:      time.Now().UTC(),
+			},
+		}}, nil
+	}
+
+	return []handlerwrapper.Result{{Topic: roundevents.ScorecardParseRequestedV1, Payload: result.Success.Job}}, nil
+}
+
+// HandleScorecardUploaded transforms a scorecard upload into an import job request.
+func (h *RoundHandlers) HandleScorecardUploaded(ctx context.Context, payload *roundevents.ScorecardUploadedPayloadV1) ([]handlerwrapper.Result, error) {
+	source := payload.Source
+	if source == "" {
+		source = discordUploadImportSource
+	}
+
+	req := roundtypes.ImportCreateJobInput{
+		ImportID:  payload.ImportID,
+		GuildID:   payload.GuildID,
+		RoundID:   payload.RoundID,
+		Source:    source,
+		UserID:    payload.UserID,
+		ChannelID: payload.ChannelID,
+		FileName:  payload.FileName,
+		FileData:  payload.FileData,
+		UDiscURL:  payload.UDiscURL,
+		Notes:     payload.Notes,
+		// Non-admin path keeps standard matching semantics.
+		AllowGuestPlayers:       false,
+		OverwriteExistingScores: false,
 	}
 
 	result, err := h.service.CreateImportJob(ctx, &req)
@@ -52,13 +135,16 @@ func (h *RoundHandlers) HandleScorecardUploaded(ctx context.Context, payload *ro
 // HandleScorecardURLRequested transforms a URL request into an import job.
 func (h *RoundHandlers) HandleScorecardURLRequested(ctx context.Context, payload *roundevents.ScorecardURLRequestedPayloadV1) ([]handlerwrapper.Result, error) {
 	req := roundtypes.ImportCreateJobInput{
-		ImportID:  payload.ImportID,
-		GuildID:   payload.GuildID,
-		RoundID:   payload.RoundID,
-		UserID:    payload.UserID,
-		ChannelID: payload.ChannelID,
-		UDiscURL:  payload.UDiscURL,
-		Notes:     payload.Notes,
+		ImportID:                payload.ImportID,
+		GuildID:                 payload.GuildID,
+		RoundID:                 payload.RoundID,
+		Source:                  discordURLImportSource,
+		UserID:                  payload.UserID,
+		ChannelID:               payload.ChannelID,
+		UDiscURL:                payload.UDiscURL,
+		Notes:                   payload.Notes,
+		AllowGuestPlayers:       false,
+		OverwriteExistingScores: false,
 	}
 
 	result, err := h.service.ScorecardURLRequested(ctx, &req)
@@ -87,7 +173,10 @@ func (h *RoundHandlers) HandleScorecardURLRequested(ctx context.Context, payload
 
 // HandleParseScorecardRequest handles the actual parsing of file data (CSV or URL download).
 func (h *RoundHandlers) HandleParseScorecardRequest(ctx context.Context, payload *roundevents.ScorecardUploadedPayloadV1) ([]handlerwrapper.Result, error) {
-	h.logger.DebugContext(ctx, "parsing scorecard", attr.String("import_id", payload.ImportID))
+	h.logger.DebugContext(ctx, "parsing scorecard",
+		attr.String("import_id", payload.ImportID),
+		attr.String("source", payload.Source),
+	)
 
 	req := roundtypes.ImportParseScorecardInput{
 		ImportID: payload.ImportID,
@@ -120,13 +209,16 @@ func (h *RoundHandlers) HandleParseScorecardRequest(ctx context.Context, payload
 	}
 
 	payloadOut := &roundevents.ParsedScorecardPayloadV1{
-		ImportID:       payload.ImportID,
-		GuildID:        payload.GuildID,
-		RoundID:        payload.RoundID,
-		UserID:         payload.UserID,
-		ChannelID:      payload.ChannelID,
-		EventMessageID: payload.MessageID,
-		ParsedData:     result.Success,
+		ImportID:                payload.ImportID,
+		Source:                  payload.Source,
+		GuildID:                 payload.GuildID,
+		RoundID:                 payload.RoundID,
+		UserID:                  payload.UserID,
+		ChannelID:               payload.ChannelID,
+		EventMessageID:          payload.MessageID,
+		ParsedData:              result.Success,
+		AllowGuestPlayers:       payload.AllowGuestPlayers,
+		OverwriteExistingScores: payload.OverwriteExistingScores,
 	}
 
 	return []handlerwrapper.Result{{Topic: roundevents.ScorecardParsedForNormalizationV1, Payload: payloadOut}}, nil
@@ -162,14 +254,17 @@ func (h *RoundHandlers) HandleScorecardParsedForNormalization(ctx context.Contex
 	return mapOperationResult(result.Map(
 		func(s *roundtypes.NormalizedScorecard) any {
 			return &roundevents.ScorecardNormalizedPayloadV1{
-				ImportID:       payload.ImportID,
-				GuildID:        payload.GuildID,
-				RoundID:        payload.RoundID,
-				UserID:         payload.UserID,
-				ChannelID:      payload.ChannelID,
-				EventMessageID: payload.EventMessageID,
-				Normalized:     *s,
-				Timestamp:      time.Now().UTC(),
+				ImportID:                payload.ImportID,
+				Source:                  payload.Source,
+				GuildID:                 payload.GuildID,
+				RoundID:                 payload.RoundID,
+				UserID:                  payload.UserID,
+				ChannelID:               payload.ChannelID,
+				EventMessageID:          payload.EventMessageID,
+				Normalized:              *s,
+				AllowGuestPlayers:       payload.AllowGuestPlayers,
+				OverwriteExistingScores: payload.OverwriteExistingScores,
+				Timestamp:               time.Now().UTC(),
 			}
 		},
 		func(f error) any {
@@ -190,13 +285,16 @@ func (h *RoundHandlers) HandleScorecardParsedForNormalization(ctx context.Contex
 // HandleScorecardNormalized handles the ingestion/matching of names.
 func (h *RoundHandlers) HandleScorecardNormalized(ctx context.Context, payload *roundevents.ScorecardNormalizedPayloadV1) ([]handlerwrapper.Result, error) {
 	req := roundtypes.ImportIngestScorecardInput{
-		ImportID:       payload.ImportID,
-		GuildID:        payload.GuildID,
-		RoundID:        payload.RoundID,
-		UserID:         payload.UserID,
-		ChannelID:      payload.ChannelID,
-		EventMessageID: payload.EventMessageID,
-		NormalizedData: payload.Normalized,
+		ImportID:                payload.ImportID,
+		GuildID:                 payload.GuildID,
+		RoundID:                 payload.RoundID,
+		Source:                  payload.Source,
+		UserID:                  payload.UserID,
+		ChannelID:               payload.ChannelID,
+		EventMessageID:          payload.EventMessageID,
+		NormalizedData:          payload.Normalized,
+		AllowGuestPlayers:       payload.AllowGuestPlayers,
+		OverwriteExistingScores: payload.OverwriteExistingScores,
 	}
 
 	result, err := h.service.IngestNormalizedScorecard(ctx, req)
@@ -206,12 +304,15 @@ func (h *RoundHandlers) HandleScorecardNormalized(ctx context.Context, payload *
 	return mapOperationResult(result.Map(
 		func(s *roundtypes.IngestScorecardResult) any {
 			return &roundevents.ImportCompletedPayloadV1{
-				ImportID:       s.ImportID,
-				GuildID:        s.GuildID,
-				RoundID:        s.RoundID,
-				Scores:         s.Scores,
-				EventMessageID: s.EventMessageID,
-				Timestamp:      s.Timestamp,
+				ImportID:                s.ImportID,
+				Source:                  payload.Source,
+				GuildID:                 s.GuildID,
+				RoundID:                 s.RoundID,
+				Scores:                  s.Scores,
+				EventMessageID:          s.EventMessageID,
+				AllowGuestPlayers:       payload.AllowGuestPlayers,
+				OverwriteExistingScores: payload.OverwriteExistingScores,
+				Timestamp:               s.Timestamp,
 			}
 		},
 		func(f error) any {
@@ -245,10 +346,13 @@ func (h *RoundHandlers) HandleImportCompleted(
 	}
 
 	req := roundtypes.ImportApplyScoresInput{
-		GuildID:  payload.GuildID,
-		RoundID:  payload.RoundID,
-		ImportID: payload.ImportID,
-		Scores:   scores,
+		GuildID:                 payload.GuildID,
+		RoundID:                 payload.RoundID,
+		ImportID:                payload.ImportID,
+		Source:                  payload.Source,
+		Scores:                  scores,
+		AllowGuestPlayers:       payload.AllowGuestPlayers,
+		OverwriteExistingScores: payload.OverwriteExistingScores,
 	}
 
 	res, err := h.service.ApplyImportedScores(ctx, req)
@@ -316,4 +420,23 @@ func (h *RoundHandlers) HandleImportCompleted(
 	results = h.addParallelIdentityResults(ctx, results, roundevents.RoundParticipantScoreUpdatedV1, success.GuildID)
 
 	return results, nil
+}
+
+func (h *RoundHandlers) ensureAdminRole(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) error {
+	if userID == "" {
+		return fmt.Errorf("admin scorecard upload requires a valid user_id")
+	}
+
+	roleResult, err := h.userService.GetUserRole(ctx, guildID, userID)
+	if err != nil {
+		return fmt.Errorf("failed to verify admin role: %w", err)
+	}
+	if roleResult.Failure != nil {
+		return fmt.Errorf("failed to verify admin role: %w", *roleResult.Failure)
+	}
+	if roleResult.Success == nil || *roleResult.Success != sharedtypes.UserRoleAdmin {
+		return fmt.Errorf("admin role required for manual scorecard upload")
+	}
+
+	return nil
 }

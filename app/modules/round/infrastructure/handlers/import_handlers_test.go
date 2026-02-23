@@ -11,6 +11,7 @@ import (
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
+	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
 	"github.com/google/uuid"
 )
 
@@ -35,6 +36,9 @@ func TestRoundHandlers_HandleScorecardUploaded(t *testing.T) {
 			name: "Success - Routes to Parse Requested",
 			fakeSetup: func(fake *FakeService) {
 				fake.CreateImportJobFunc = func(ctx context.Context, req *roundtypes.ImportCreateJobInput) (roundservice.CreateImportJobResult, error) {
+					if req.Source != discordUploadImportSource {
+						t.Fatalf("expected source %q, got %q", discordUploadImportSource, req.Source)
+					}
 					return results.SuccessResult[roundtypes.CreateImportJobResult, error](roundtypes.CreateImportJobResult{
 						Job: &roundtypes.ImportCreateJobInput{
 							ImportID: "imp-123",
@@ -101,6 +105,91 @@ func TestRoundHandlers_HandleScorecardUploaded(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRoundHandlers_HandleAdminScorecardUploadRequested(t *testing.T) {
+	ctx := context.Background()
+	roundID := sharedtypes.RoundID(uuid.New())
+	guildID := sharedtypes.GuildID("guild-123")
+	adminID := sharedtypes.DiscordID("admin-user")
+
+	payload := &roundevents.ScorecardUploadedPayloadV1{
+		ImportID: "imp-123",
+		GuildID:  guildID,
+		RoundID:  roundID,
+		UserID:   adminID,
+		FileName: "scores.xlsx",
+		FileData: []byte("bytes"),
+	}
+
+	t.Run("Success - Admin role can enqueue parse request", func(t *testing.T) {
+		fakeService := NewFakeService()
+		fakeService.CreateImportJobFunc = func(ctx context.Context, req *roundtypes.ImportCreateJobInput) (roundservice.CreateImportJobResult, error) {
+			if !req.AllowGuestPlayers {
+				t.Fatalf("expected AllowGuestPlayers=true for admin upload")
+			}
+			if !req.OverwriteExistingScores {
+				t.Fatalf("expected OverwriteExistingScores=true for admin upload")
+			}
+			if req.Source != adminPwaImportSource {
+				t.Fatalf("expected source %q, got %q", adminPwaImportSource, req.Source)
+			}
+
+			return results.SuccessResult[roundtypes.CreateImportJobResult, error](roundtypes.CreateImportJobResult{
+				Job: req,
+			}), nil
+		}
+
+		userService := NewFakeUserService()
+		userService.GetUserRoleFunc = func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (userservice.UserRoleResult, error) {
+			return results.SuccessResult[sharedtypes.UserRoleEnum, error](sharedtypes.UserRoleAdmin), nil
+		}
+
+		h := &RoundHandlers{
+			service:     fakeService,
+			userService: userService,
+			logger:      loggerfrolfbot.NoOpLogger,
+		}
+
+		res, err := h.HandleAdminScorecardUploadRequested(ctx, payload)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(res) != 1 {
+			t.Fatalf("expected 1 result, got %d", len(res))
+		}
+		if res[0].Topic != roundevents.ScorecardParseRequestedV1 {
+			t.Fatalf("expected %s, got %s", roundevents.ScorecardParseRequestedV1, res[0].Topic)
+		}
+	})
+
+	t.Run("Failure - Non-admin role is rejected", func(t *testing.T) {
+		fakeService := NewFakeService()
+		userService := NewFakeUserService()
+		userService.GetUserRoleFunc = func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (userservice.UserRoleResult, error) {
+			return results.SuccessResult[sharedtypes.UserRoleEnum, error](sharedtypes.UserRoleUser), nil
+		}
+
+		h := &RoundHandlers{
+			service:     fakeService,
+			userService: userService,
+			logger:      loggerfrolfbot.NoOpLogger,
+		}
+
+		res, err := h.HandleAdminScorecardUploadRequested(ctx, payload)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(res) != 1 {
+			t.Fatalf("expected 1 result, got %d", len(res))
+		}
+		if res[0].Topic != roundevents.ImportFailedV1 {
+			t.Fatalf("expected %s, got %s", roundevents.ImportFailedV1, res[0].Topic)
+		}
+		if len(fakeService.Trace()) != 0 {
+			t.Fatalf("CreateImportJob should not be called for non-admin role")
+		}
+	})
 }
 
 func TestRoundHandlers_HandleImportCompleted_SingleTrigger(t *testing.T) {

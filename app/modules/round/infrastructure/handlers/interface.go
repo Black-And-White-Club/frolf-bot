@@ -81,6 +81,7 @@ type Handlers interface {
 	HandlePaginationSnapshotDeleteRequested(ctx context.Context, payload *roundevents.PaginationSnapshotDeleteRequestedPayloadV1) ([]handlerwrapper.Result, error)
 
 	// Scorecard import handlers
+	HandleAdminScorecardUploadRequested(ctx context.Context, payload *roundevents.ScorecardUploadedPayloadV1) ([]handlerwrapper.Result, error)
 	HandleScorecardUploaded(ctx context.Context, payload *roundevents.ScorecardUploadedPayloadV1) ([]handlerwrapper.Result, error)
 	HandleScorecardURLRequested(ctx context.Context, payload *roundevents.ScorecardURLRequestedPayloadV1) ([]handlerwrapper.Result, error)
 	HandleScorecardParsedForNormalization(ctx context.Context, payload *roundevents.ParsedScorecardPayloadV1) ([]handlerwrapper.Result, error)

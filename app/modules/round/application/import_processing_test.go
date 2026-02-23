@@ -26,6 +26,7 @@ func TestRoundService_ImportProcessing(t *testing.T) {
 		mode          sharedtypes.RoundMode
 		inputData     *roundtypes.ParsedScorecard
 		setupFakes    func(r *FakeRepo, l *FakeUserLookup)
+		allowGuests   bool
 		expectSuccess bool
 		expectedCode  string
 		check         func(t *testing.T, res any)
@@ -152,6 +153,30 @@ func TestRoundService_ImportProcessing(t *testing.T) {
 			},
 			expectSuccess: false,
 		},
+		{
+			name: "Ingest: Singles Guest Fallback",
+			mode: sharedtypes.RoundModeSingles,
+			setupFakes: func(r *FakeRepo, l *FakeUserLookup) {
+				l.FindByDisplayFn = func(name string) sharedtypes.DiscordID { return "" }
+			},
+			allowGuests:   true,
+			expectSuccess: true,
+			check: func(t *testing.T, res any) {
+				p := res.(*roundtypes.IngestScorecardResult)
+				if p.MatchedPlayers != 0 {
+					t.Errorf("expected 0 matches, got %d", p.MatchedPlayers)
+				}
+				if p.UnmatchedPlayers != 2 {
+					t.Errorf("expected 2 unmatched, got %d", p.UnmatchedPlayers)
+				}
+				if len(p.Scores) != 2 {
+					t.Fatalf("expected 2 score entries, got %d", len(p.Scores))
+				}
+				if p.Scores[0].UserID != "" || p.Scores[0].RawName == "" {
+					t.Errorf("expected guest score row with raw name, got %+v", p.Scores[0])
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -196,6 +221,7 @@ func TestRoundService_ImportProcessing(t *testing.T) {
 					NormalizedData: roundtypes.NormalizedScorecard{
 						Mode: tt.mode,
 					},
+					AllowGuestPlayers: tt.allowGuests,
 				}
 				if tt.mode == sharedtypes.RoundModeSingles {
 					payload.NormalizedData.Players = []roundtypes.NormalizedPlayer{

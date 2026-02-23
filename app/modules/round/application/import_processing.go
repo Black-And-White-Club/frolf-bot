@@ -301,6 +301,13 @@ func (s *RoundService) IngestNormalizedScorecard(ctx context.Context, req roundt
 					)
 					if discordID == "" {
 						unmatchedPlayers = append(unmatchedPlayers, p.DisplayName)
+						if req.AllowGuestPlayers {
+							finalScores = append(finalScores, sharedtypes.ScoreInfo{
+								UserID:  "",
+								RawName: p.DisplayName,
+								Score:   sharedtypes.Score(p.Total),
+							})
+						}
 						continue
 					}
 					finalScores = append(finalScores, sharedtypes.ScoreInfo{
@@ -312,6 +319,9 @@ func (s *RoundService) IngestNormalizedScorecard(ctx context.Context, req roundt
 			}
 
 			if len(finalScores) == 0 {
+				if req.AllowGuestPlayers {
+					return results.FailureResult[*roundtypes.IngestScorecardResult, error](fmt.Errorf("no player scores found in scorecard")), nil
+				}
 				return results.FailureResult[*roundtypes.IngestScorecardResult, error](fmt.Errorf("no valid player scores matched")), nil
 			}
 

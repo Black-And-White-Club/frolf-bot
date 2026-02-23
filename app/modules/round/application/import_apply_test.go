@@ -29,6 +29,7 @@ func TestRoundService_ApplyImportedScores(t *testing.T) {
 	u1 := sharedtypes.DiscordID("user-1")
 	u2 := sharedtypes.DiscordID("user-2")
 	teamID := uuid.New()
+	tag1 := sharedtypes.TagNumber(17)
 
 	type testCase struct {
 		name      string
@@ -126,6 +127,61 @@ func TestRoundService_ApplyImportedScores(t *testing.T) {
 				errMsg := (*res.Failure).Error()
 				if errMsg != "no scores were successfully applied" {
 					t.Errorf("unexpected error message: %s", errMsg)
+				}
+			},
+		},
+		{
+			name: "Singles - Success (Overwrite with guests)",
+			input: roundtypes.ImportApplyScoresInput{
+				GuildID:                 gID,
+				RoundID:                 rID,
+				ImportID:                importID,
+				AllowGuestPlayers:       true,
+				OverwriteExistingScores: true,
+				Scores: []roundtypes.ImportScoreData{
+					{UserID: u1, Score: 49, RawName: "User 1"},
+					{UserID: "", Score: 53, RawName: "Guest Player"},
+				},
+			},
+			setupFake: func(r *FakeRepo) {
+				r.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{ID: rID, EventMessageID: "msg-123"}, nil
+				}
+				r.GetParticipantsFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID) ([]roundtypes.Participant, error) {
+					return []roundtypes.Participant{
+						{UserID: u1, Score: ptrScore(60), Response: roundtypes.ResponseAccept, TagNumber: &tag1},
+						{UserID: u2, Score: nil, Response: roundtypes.ResponseAccept},
+					}, nil
+				}
+				r.UpdateRoundsAndParticipantsFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, updates []roundtypes.RoundUpdate) error {
+					if len(updates) != 1 {
+						return errors.New("expected 1 update")
+					}
+					parts := updates[0].Participants
+					if len(parts) != 2 {
+						return errors.New("expected overwrite to keep exactly 2 participants")
+					}
+					if parts[0].UserID != u1 {
+						return errors.New("expected first participant to be matched user")
+					}
+					if parts[0].TagNumber == nil || *parts[0].TagNumber != tag1 {
+						return errors.New("expected matched user tag to be preserved")
+					}
+					if parts[1].UserID != "" || parts[1].RawName != "Guest Player" {
+						return errors.New("expected second participant to be guest row")
+					}
+					return nil
+				}
+			},
+			verify: func(t *testing.T, res ApplyImportedScoresResult, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if res.IsFailure() {
+					t.Fatalf("unexpected failure: %v", (*res.Failure).Error())
+				}
+				if len((*res.Success).Participants) != 2 {
+					t.Fatalf("expected 2 participants after overwrite, got %d", len((*res.Success).Participants))
 				}
 			},
 		},

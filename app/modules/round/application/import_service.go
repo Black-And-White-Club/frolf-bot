@@ -19,6 +19,20 @@ import (
 
 func (s *RoundService) CreateImportJob(ctx context.Context, req *roundtypes.ImportCreateJobInput) (CreateImportJobResult, error) {
 	result, err := withTelemetry(s, ctx, "CreateImportJob", req.RoundID, func(ctx context.Context) (CreateImportJobResult, error) {
+		source := req.Source
+		if source == "" {
+			source = "unknown"
+		}
+
+		s.logger.InfoContext(ctx, "Creating import job",
+			attr.String("import_id", req.ImportID),
+			attr.String("guild_id", string(req.GuildID)),
+			attr.String("round_id", req.RoundID.String()),
+			attr.String("source", source),
+			attr.Bool("has_file_data", len(req.FileData) > 0),
+			attr.Bool("has_udisc_url", req.UDiscURL != ""),
+		)
+
 		return runInTx(s, ctx, func(ctx context.Context, tx bun.IDB) (CreateImportJobResult, error) {
 			now := time.Now().UTC()
 
@@ -50,6 +64,12 @@ func (s *RoundService) CreateImportJob(ctx context.Context, req *roundtypes.Impo
 			if _, err := s.repo.UpdateRound(ctx, tx, req.GuildID, req.RoundID, round); err != nil {
 				return results.FailureResult[roundtypes.CreateImportJobResult](err), nil
 			}
+
+			s.logger.InfoContext(ctx, "Import job created",
+				attr.String("import_id", req.ImportID),
+				attr.String("round_id", req.RoundID.String()),
+				attr.String("source", source),
+			)
 
 			return results.SuccessResult[roundtypes.CreateImportJobResult, error](roundtypes.CreateImportJobResult{Job: req}), nil
 		})
@@ -113,6 +133,9 @@ func (s *RoundService) ParseScorecard(ctx context.Context, req *roundtypes.Impor
 			}
 			fileData = data
 		}
+		if len(fileData) > maxFileSize {
+			return results.FailureResult[roundtypes.ParsedScorecard](fmt.Errorf("file too large")), nil
+		}
 
 		parser, err := s.parserFactory.GetParser(req.FileName)
 		if err != nil {
@@ -139,12 +162,19 @@ func (s *RoundService) ParseScorecard(ctx context.Context, req *roundtypes.Impor
 // ScorecardURLRequested handles the specific case of a user providing a UDisc URL.
 func (s *RoundService) ScorecardURLRequested(ctx context.Context, req *roundtypes.ImportCreateJobInput) (CreateImportJobResult, error) {
 	result, err := withTelemetry(s, ctx, "ScorecardURLRequested", req.RoundID, func(ctx context.Context) (CreateImportJobResult, error) {
+		source := req.Source
+		if source == "" {
+			source = "unknown"
+		}
+
 		return runInTx(s, ctx, func(ctx context.Context, tx bun.IDB) (CreateImportJobResult, error) {
 			now := time.Now().UTC()
 
 			s.logger.InfoContext(ctx, "Handling scorecard URL request",
 				attr.String("import_id", req.ImportID),
 				attr.String("guild_id", string(req.GuildID)),
+				attr.String("round_id", req.RoundID.String()),
+				attr.String("source", source),
 				attr.String("udisc_url", req.UDiscURL),
 			)
 
@@ -184,6 +214,7 @@ func (s *RoundService) ScorecardURLRequested(ctx context.Context, req *roundtype
 
 			s.logger.InfoContext(ctx, "UDisc URL request processed successfully",
 				attr.String("import_id", req.ImportID),
+				attr.String("source", source),
 				attr.String("normalized_url", normalizedURL))
 
 			// 4. Return success result
