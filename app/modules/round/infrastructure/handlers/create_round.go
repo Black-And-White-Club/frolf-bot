@@ -5,6 +5,8 @@ import (
 	"errors"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	roundtime "github.com/Black-And-White-Club/frolf-bot/app/modules/round/time_utils"
@@ -15,6 +17,17 @@ func (h *RoundHandlers) HandleCreateRoundRequest(
 	ctx context.Context,
 	payload *roundevents.CreateRoundRequestedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
+	if h.logger != nil {
+		h.logger.InfoContext(ctx, "processing create round request",
+			attr.ExtractCorrelationID(ctx),
+			attr.String("guild_id", string(payload.GuildID)),
+			attr.UserID(payload.UserID),
+			attr.String("title", string(payload.Title)),
+			attr.String("start_time", payload.StartTime),
+			attr.String("timezone", string(payload.Timezone)),
+		)
+	}
+
 	clock := h.extractAnchorClock(ctx)
 
 	description := ""
@@ -36,6 +49,14 @@ func (h *RoundHandlers) HandleCreateRoundRequest(
 
 	result, err := h.service.ValidateRoundCreationWithClock(ctx, req, roundtime.NewTimeParser(), clock)
 	if err != nil {
+		if h.logger != nil {
+			h.logger.ErrorContext(ctx, "create round validation request failed",
+				attr.ExtractCorrelationID(ctx),
+				attr.String("guild_id", string(payload.GuildID)),
+				attr.UserID(payload.UserID),
+				attr.Error(err),
+			)
+		}
 		return nil, err
 	}
 
@@ -47,8 +68,7 @@ func (h *RoundHandlers) HandleCreateRoundRequest(
 				Round:            *res.Round,
 				DiscordChannelID: res.ChannelID,
 				DiscordGuildID:   string(payload.GuildID),
-				// Config fragment mapping omitted as it requires conversion which is verbose here
-				// and likely not critical for this specific step if the guild ID is present.
+				Config:           sharedevents.NewGuildConfigFragment(res.GuildConfig),
 			}
 		},
 		func(err error) any {
@@ -60,10 +80,31 @@ func (h *RoundHandlers) HandleCreateRoundRequest(
 		},
 	)
 
-	return mapOperationResult(mappedResult,
+	handlerResults := mapOperationResult(mappedResult,
 		roundevents.RoundEntityCreatedV1,
 		roundevents.RoundValidationFailedV1,
-	), nil
+	)
+
+	if h.logger != nil {
+		if mappedResult.Failure != nil {
+			h.logger.WarnContext(ctx, "create round request validation failed",
+				attr.ExtractCorrelationID(ctx),
+				attr.String("guild_id", string(payload.GuildID)),
+				attr.UserID(payload.UserID),
+				attr.Any("failure", *mappedResult.Failure),
+			)
+		} else if mappedResult.Success != nil {
+			if successPayload, ok := (*mappedResult.Success).(*roundevents.RoundEntityCreatedPayloadV1); ok {
+				h.logger.InfoContext(ctx, "create round request validated successfully",
+					attr.ExtractCorrelationID(ctx),
+					attr.String("guild_id", string(payload.GuildID)),
+					attr.RoundID("round_id", successPayload.Round.ID),
+				)
+			}
+		}
+	}
+
+	return handlerResults, nil
 }
 
 // HandleRoundEntityCreated handles persisting the round entity to the database.
@@ -71,17 +112,37 @@ func (h *RoundHandlers) HandleRoundEntityCreated(
 	ctx context.Context,
 	payload *roundevents.RoundEntityCreatedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
+	if h.logger != nil {
+		h.logger.InfoContext(ctx, "processing round entity created",
+			attr.ExtractCorrelationID(ctx),
+			attr.String("guild_id", string(payload.GuildID)),
+			attr.RoundID("round_id", payload.Round.ID),
+		)
+	}
+
 	result, err := h.service.StoreRound(ctx, &payload.Round, payload.GuildID)
 	if err != nil {
+		if h.logger != nil {
+			h.logger.ErrorContext(ctx, "store round failed",
+				attr.ExtractCorrelationID(ctx),
+				attr.String("guild_id", string(payload.GuildID)),
+				attr.RoundID("round_id", payload.Round.ID),
+				attr.Error(err),
+			)
+		}
 		return nil, err
 	}
 
 	// Explicitly map the result to the event payload to ensure correct structure
-	// Explicitly map the result to the event payload to ensure correct structure
 	mappedResult := result.Map(
 		func(res *roundtypes.CreateRoundResult) any {
 			r := res.Round
-			payload := &roundevents.RoundCreatedPayloadV1{
+			channelID := payload.DiscordChannelID
+			if channelID == "" && res.GuildConfig != nil {
+				channelID = res.GuildConfig.EventChannelID
+			}
+
+			createdPayload := &roundevents.RoundCreatedPayloadV1{
 				GuildID: payload.GuildID,
 				BaseRoundPayload: roundtypes.BaseRoundPayload{
 					RoundID:     r.ID,
@@ -91,20 +152,23 @@ func (h *RoundHandlers) HandleRoundEntityCreated(
 					StartTime:   r.StartTime,
 					UserID:      r.CreatedBy,
 				},
-				ChannelID: payload.DiscordChannelID,
+				ChannelID: channelID,
+				Config:    sharedevents.NewGuildConfigFragment(res.GuildConfig),
 			}
 
-			// Map guild config fragment if available
-			if res.GuildConfig != nil {
-				// Convert to event fragment if types differ
-			}
-
-			return payload
+			return createdPayload
 		},
 		func(err error) any {
+			channelID := payload.DiscordChannelID
+			if channelID == "" && payload.Config != nil {
+				channelID = payload.Config.EventChannelID
+			}
+
 			return &roundevents.RoundCreationFailedPayloadV1{
 				GuildID:      payload.GuildID,
+				UserID:       payload.Round.CreatedBy,
 				ErrorMessage: err.Error(),
+				ChannelID:    channelID,
 			}
 		},
 	)
@@ -117,6 +181,26 @@ func (h *RoundHandlers) HandleRoundEntityCreated(
 	// Add both legacy GuildID and internal ClubUUID scoped versions for PWA/NATS transition
 	handlerResults = h.addParallelIdentityResults(ctx, handlerResults, roundevents.RoundCreatedV1, payload.GuildID)
 
+	if h.logger != nil {
+		if mappedResult.Failure != nil {
+			h.logger.WarnContext(ctx, "round creation persistence failed",
+				attr.ExtractCorrelationID(ctx),
+				attr.String("guild_id", string(payload.GuildID)),
+				attr.RoundID("round_id", payload.Round.ID),
+				attr.Any("failure", *mappedResult.Failure),
+			)
+		} else if mappedResult.Success != nil {
+			if successPayload, ok := (*mappedResult.Success).(*roundevents.RoundCreatedPayloadV1); ok {
+				h.logger.InfoContext(ctx, "round creation persisted successfully",
+					attr.ExtractCorrelationID(ctx),
+					attr.String("guild_id", string(successPayload.GuildID)),
+					attr.RoundID("round_id", successPayload.RoundID),
+					attr.Int("published_events", len(handlerResults)),
+				)
+			}
+		}
+	}
+
 	return handlerResults, nil
 }
 
@@ -126,6 +210,14 @@ func (h *RoundHandlers) HandleRoundEventMessageIDUpdate(
 	ctx context.Context,
 	payload *roundevents.RoundMessageIDUpdatePayloadV1,
 ) ([]handlerwrapper.Result, error) {
+	if h.logger != nil {
+		h.logger.InfoContext(ctx, "processing round event message id update",
+			attr.ExtractCorrelationID(ctx),
+			attr.String("guild_id", string(payload.GuildID)),
+			attr.RoundID("round_id", payload.RoundID),
+		)
+	}
+
 	// 1. Extract metadata injected into context by the wrapper
 	discordMessageID, ok := ctx.Value("discord_message_id").(string)
 	if !ok || discordMessageID == "" {
@@ -135,6 +227,14 @@ func (h *RoundHandlers) HandleRoundEventMessageIDUpdate(
 	// 2. Call service to persist the ID
 	updatedRound, err := h.service.UpdateRoundMessageID(ctx, payload.GuildID, payload.RoundID, discordMessageID)
 	if err != nil {
+		if h.logger != nil {
+			h.logger.ErrorContext(ctx, "round event message id update failed",
+				attr.ExtractCorrelationID(ctx),
+				attr.String("guild_id", string(payload.GuildID)),
+				attr.RoundID("round_id", payload.RoundID),
+				attr.Error(err),
+			)
+		}
 		return nil, err
 	}
 
@@ -154,6 +254,15 @@ func (h *RoundHandlers) HandleRoundEventMessageIDUpdate(
 			UserID:      updatedRound.CreatedBy,
 		},
 		EventMessageID: discordMessageID,
+	}
+
+	if h.logger != nil {
+		h.logger.InfoContext(ctx, "round event message id update persisted",
+			attr.ExtractCorrelationID(ctx),
+			attr.String("guild_id", string(payload.GuildID)),
+			attr.RoundID("round_id", payload.RoundID),
+			attr.String("discord_message_id", discordMessageID),
+		)
 	}
 
 	// 4. Explicitly promote the metadata to the outgoing message headers.

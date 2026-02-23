@@ -7,6 +7,7 @@ import (
 	"time"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
+	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
@@ -165,6 +166,7 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 		wantResultLen   int
 		wantResultTopic string
 		expectedErrMsg  string
+		assertPayload   func(t *testing.T, resultPayload any)
 	}{
 		{
 			name: "Successfully handle RoundEntityCreated",
@@ -179,7 +181,11 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 							StartTime:   &testStartTime,
 							CreatedBy:   testUserID,
 						},
-						ChannelID: "test-channel-id",
+						ChannelID: "ignored-service-channel-id",
+						GuildConfig: &guildtypes.GuildConfig{
+							GuildID:        guildID,
+							EventChannelID: "configured-events-channel-id",
+						},
 					}), nil
 				}
 				u.GetClubUUIDByDiscordGuildIDFunc = func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) {
@@ -190,24 +196,67 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 			wantErr:         false,
 			wantResultLen:   3, // Original + Guild Scoped + Club Scoped
 			wantResultTopic: roundevents.RoundCreatedV1,
+			assertPayload: func(t *testing.T, resultPayload any) {
+				t.Helper()
+				createdPayload, ok := resultPayload.(*roundevents.RoundCreatedPayloadV1)
+				if !ok {
+					t.Fatalf("expected *roundevents.RoundCreatedPayloadV1, got %T", resultPayload)
+				}
+				if createdPayload.ChannelID != "test-channel-id" {
+					t.Fatalf("expected original payload channel_id to win, got %q", createdPayload.ChannelID)
+				}
+				if createdPayload.Config == nil {
+					t.Fatalf("expected config fragment to be populated")
+				}
+				if createdPayload.Config.EventChannelID != "configured-events-channel-id" {
+					t.Fatalf(
+						"expected config fragment event_channel_id %q, got %q",
+						"configured-events-channel-id",
+						createdPayload.Config.EventChannelID,
+					)
+				}
+			},
 		},
 		{
-			name: "Successfully handle RoundEntityCreated verify channel ID",
+			name: "Successfully handle RoundEntityCreated falls back to guild event channel when payload channel is empty",
 			fakeSetup: func(fake *FakeService, u *FakeUserService) {
 				fake.StoreRoundFunc = func(ctx context.Context, round *roundtypes.Round, guildID sharedtypes.GuildID) (roundservice.CreateRoundResult, error) {
 					return results.SuccessResult[*roundtypes.CreateRoundResult, error](&roundtypes.CreateRoundResult{
 						Round:     &roundtypes.Round{ID: testRoundID},
-						ChannelID: "test-channel-id", // Should be ignored in favor of payload
+						ChannelID: "service-channel-id-ignored",
+						GuildConfig: &guildtypes.GuildConfig{
+							GuildID:        guildID,
+							EventChannelID: "guild-fallback-channel-id",
+						},
 					}), nil
 				}
 				u.GetClubUUIDByDiscordGuildIDFunc = func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) {
 					return testClubUUID, nil
 				}
 			},
-			payload:         testPayload, // has DiscordChannelID: "test-channel-id"
+			payload: &roundevents.RoundEntityCreatedPayloadV1{
+				GuildID:          guildID,
+				Round:            testRound,
+				DiscordChannelID: "",
+				DiscordGuildID:   "test-guild-id",
+			},
 			wantErr:         false,
 			wantResultLen:   3,
 			wantResultTopic: roundevents.RoundCreatedV1,
+			assertPayload: func(t *testing.T, resultPayload any) {
+				t.Helper()
+				createdPayload, ok := resultPayload.(*roundevents.RoundCreatedPayloadV1)
+				if !ok {
+					t.Fatalf("expected *roundevents.RoundCreatedPayloadV1, got %T", resultPayload)
+				}
+				if createdPayload.ChannelID != "guild-fallback-channel-id" {
+					t.Fatalf(
+						"expected fallback channel_id %q, got %q",
+						"guild-fallback-channel-id",
+						createdPayload.ChannelID,
+					)
+				}
+			},
 		},
 		{
 			name: "Service failure returns creation failed",
@@ -272,6 +321,9 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 			}
 			if tt.wantResultLen > 0 && results[0].Topic != tt.wantResultTopic {
 				t.Errorf("HandleRoundEntityCreated() result topic = %v, want %v", results[0].Topic, tt.wantResultTopic)
+			}
+			if tt.assertPayload != nil && len(results) > 0 {
+				tt.assertPayload(t, results[0].Payload)
 			}
 		})
 	}
