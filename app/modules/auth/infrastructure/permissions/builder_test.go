@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	authdomain "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/domain"
 	"github.com/google/uuid"
 )
@@ -70,7 +71,7 @@ func TestBuilder_ForRole(t *testing.T) {
 				},
 			},
 			verify: func(t *testing.T, p *Permissions) {
-				expectedPub := "round.scorecard.admin.upload.requested.v1"
+				expectedPub := roundevents.ScorecardAdminUploadRequestedV1
 				if !contains(p.Publish.Allow, expectedPub) {
 					t.Errorf("expected admin publish allow for %s, got %v", expectedPub, p.Publish.Allow)
 				}

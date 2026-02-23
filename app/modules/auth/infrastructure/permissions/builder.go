@@ -3,6 +3,8 @@ package permissions
 import (
 	"fmt"
 
+	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
+	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	authdomain "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/domain"
 )
 
@@ -234,17 +236,17 @@ func (b *Builder) adminPermissions(clubUUID, userUUID, guildID, userID string) *
 
 	// Admin-only publish subjects (no guildId suffix — backend subscribes without it)
 	editor.Publish.Allow = append(editor.Publish.Allow,
-		"leaderboard.batch.tag.assignment.requested.v1",
-		"leaderboard.manual.point.adjustment.v1",
-		"round.scorecard.admin.upload.requested.v1",
+		leaderboardevents.LeaderboardBatchTagAssignmentRequestedV1,
+		leaderboardevents.LeaderboardManualPointAdjustmentV1,
+		roundevents.ScorecardAdminUploadRequestedV1,
 	)
 
 	// Admin-only subscribe subjects for operation feedback (no guildId suffix)
 	editor.Subscribe.Allow = append(editor.Subscribe.Allow,
-		"leaderboard.batch.tag.assigned.v1",
-		"leaderboard.batch.tag.assignment.failed.v1",
-		"leaderboard.manual.point.adjustment.success.v1",
-		"leaderboard.manual.point.adjustment.failed.v1",
+		leaderboardevents.LeaderboardBatchTagAssignedV1,
+		leaderboardevents.LeaderboardBatchTagAssignmentFailedV1,
+		leaderboardevents.LeaderboardManualPointAdjustmentSuccessV1,
+		leaderboardevents.LeaderboardManualPointAdjustmentFailedV1,
 	)
 
 	return editor
