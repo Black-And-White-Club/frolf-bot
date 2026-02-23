@@ -34,9 +34,11 @@ func (h *UserHandlers) HandleUserSignupRequest(
 	if payload.TagNumber != nil {
 		results := []handlerwrapper.Result{
 			{Topic: sharedevents.TagAvailabilityCheckRequestedV1, Payload: &sharedevents.TagAvailabilityCheckRequestedPayloadV1{
-				GuildID:   payload.GuildID,
-				TagNumber: payload.TagNumber,
-				UserID:    payload.UserID,
+				GuildID:       payload.GuildID,
+				TagNumber:     payload.TagNumber,
+				UserID:        payload.UserID,
+				UDiscUsername: payload.UDiscUsername,
+				UDiscName:     payload.UDiscName,
 			}},
 		}
 		if clubSyncResult != nil {

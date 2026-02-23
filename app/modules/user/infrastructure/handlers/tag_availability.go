@@ -19,16 +19,15 @@ func (h *UserHandlers) HandleTagAvailable(
 		return nil, nil // Or return an error depending on your middleware strategy
 	}
 
-	// Call the updated service method.
-	// Note: udiscUsername and udiscName are passed as nil here
-	// as they aren't part of the TagAvailable payload.
+	// Preserve optional UDisc identity captured at signup when tag assignment
+	// runs through the availability flow.
 	result, err := h.service.CreateUser(
 		ctx,
 		payload.GuildID,
 		payload.UserID,
 		&payload.TagNumber,
-		nil,
-		nil,
+		payload.UDiscUsername,
+		payload.UDiscName,
 	)
 	if err != nil {
 		// Infrastructure failure (DB down, etc.)

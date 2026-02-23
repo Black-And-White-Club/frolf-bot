@@ -29,9 +29,11 @@ func TestLeaderboardHandlers_HandleTagAvailabilityCheckRequested(t *testing.T) {
 		{
 			name: "tag available",
 			payload: &sharedevents.TagAvailabilityCheckRequestedPayloadV1{
-				GuildID:   testGuildID,
-				UserID:    testUserID,
-				TagNumber: &testTagNumber,
+				GuildID:       testGuildID,
+				UserID:        testUserID,
+				TagNumber:     &testTagNumber,
+				UDiscUsername: stringPtr("udisc-user"),
+				UDiscName:     stringPtr("udisc name"),
 			},
 			setupFake: func(f *FakeService) {
 				f.CheckTagAvailabilityFunc = func(ctx context.Context, g sharedtypes.GuildID, u sharedtypes.DiscordID, tn sharedtypes.TagNumber) (results.OperationResult[leaderboardservice.TagAvailabilityResult, error], error) {
@@ -49,6 +51,12 @@ func TestLeaderboardHandlers_HandleTagAvailabilityCheckRequested(t *testing.T) {
 				}
 				if p.TagNumber != testTagNumber {
 					t.Errorf("expected tag %d, got %d", testTagNumber, p.TagNumber)
+				}
+				if p.UDiscUsername == nil || *p.UDiscUsername != "udisc-user" {
+					t.Fatalf("expected udisc username to round-trip, got %v", p.UDiscUsername)
+				}
+				if p.UDiscName == nil || *p.UDiscName != "udisc name" {
+					t.Fatalf("expected udisc name to round-trip, got %v", p.UDiscName)
 				}
 			},
 		},
@@ -132,4 +140,8 @@ func TestLeaderboardHandlers_HandleTagAvailabilityCheckRequested(t *testing.T) {
 			}
 		})
 	}
+}
+
+func stringPtr(v string) *string {
+	return &v
 }

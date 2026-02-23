@@ -36,12 +36,20 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 		{
 			name: "Successfully handle TagAvailable event",
 			payload: &sharedevents.TagAvailablePayloadV1{
-				GuildID:   testGuildID,
-				UserID:    testUserID,
-				TagNumber: testTagNumber,
+				GuildID:       testGuildID,
+				UserID:        testUserID,
+				TagNumber:     testTagNumber,
+				UDiscUsername: stringPtr("udisc-user"),
+				UDiscName:     stringPtr("udisc name"),
 			},
 			setupFake: func(f *FakeUserService) {
 				f.CreateUserFunc = func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID, tag *sharedtypes.TagNumber, udiscUsername *string, udiscName *string) (userservice.UserResult, error) {
+					if udiscUsername == nil || *udiscUsername != "udisc-user" {
+						t.Fatalf("expected udisc username to be passed through, got %v", udiscUsername)
+					}
+					if udiscName == nil || *udiscName != "udisc name" {
+						t.Fatalf("expected udisc name to be passed through, got %v", udiscName)
+					}
 					return results.SuccessResult[*userservice.CreateUserResponse, error](&userservice.CreateUserResponse{
 						UserData: usertypes.UserData{
 							UserID: userID,
@@ -159,4 +167,8 @@ func TestUserHandlers_HandleTagUnavailable(t *testing.T) {
 			}
 		})
 	}
+}
+
+func stringPtr(s string) *string {
+	return &s
 }

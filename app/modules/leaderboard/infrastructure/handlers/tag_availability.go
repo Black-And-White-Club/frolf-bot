@@ -30,9 +30,11 @@ func (h *LeaderboardHandlers) HandleTagAvailabilityCheckRequested(
 
 	if res.Available {
 		availablePayload := &sharedevents.TagAvailablePayloadV1{
-			GuildID:   payload.GuildID,
-			UserID:    payload.UserID,
-			TagNumber: *payload.TagNumber,
+			GuildID:       payload.GuildID,
+			UserID:        payload.UserID,
+			TagNumber:     *payload.TagNumber,
+			UDiscUsername: payload.UDiscUsername,
+			UDiscName:     payload.UDiscName,
 		}
 
 		return []handlerwrapper.Result{{Topic: sharedevents.TagAvailableV1, Payload: availablePayload}}, nil

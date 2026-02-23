@@ -34,6 +34,7 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 		wantTopic    string
 		wantClubSync bool
 		wantErr      bool
+		assertFirst  func(t *testing.T, payload any)
 	}{
 		{
 			name: "Successful signup with tag (Availability Check Flow)",
@@ -41,6 +42,14 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 				GuildID:   testGuildID,
 				UserID:    testUserID,
 				TagNumber: &testTagNumber,
+				UDiscUsername: func() *string {
+					v := "udisc-user"
+					return &v
+				}(),
+				UDiscName: func() *string {
+					v := "udisc name"
+					return &v
+				}(),
 			},
 			setupFake: func(f *FakeUserService) {
 				// No service call expected for this branch
@@ -49,6 +58,18 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 			wantTopic:    sharedevents.TagAvailabilityCheckRequestedV1,
 			wantClubSync: false,
 			wantErr:      false,
+			assertFirst: func(t *testing.T, payload any) {
+				tagReq, ok := payload.(*sharedevents.TagAvailabilityCheckRequestedPayloadV1)
+				if !ok {
+					t.Fatalf("expected TagAvailabilityCheckRequestedPayloadV1, got %T", payload)
+				}
+				if tagReq.UDiscUsername == nil || *tagReq.UDiscUsername != "udisc-user" {
+					t.Fatalf("expected udisc username to round-trip, got %v", tagReq.UDiscUsername)
+				}
+				if tagReq.UDiscName == nil || *tagReq.UDiscName != "udisc name" {
+					t.Fatalf("expected udisc name to round-trip, got %v", tagReq.UDiscName)
+				}
+			},
 		},
 		{
 			name: "Successful signup with tag and guild metadata publishes club sync",
@@ -157,6 +178,9 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 				assert.Len(t, res, tt.wantLen)
 				if len(res) > 0 {
 					assert.Equal(t, tt.wantTopic, res[0].Topic)
+					if tt.assertFirst != nil {
+						tt.assertFirst(t, res[0].Payload)
+					}
 				}
 				if tt.wantClubSync {
 					lastResult := res[len(res)-1]
