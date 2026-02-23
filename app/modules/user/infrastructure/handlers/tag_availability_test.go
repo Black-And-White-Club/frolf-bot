@@ -11,6 +11,7 @@ import (
 	usermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
 	"go.opentelemetry.io/otel/trace/noop"
@@ -32,6 +33,7 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 		wantLen   int
 		wantTopic string
 		wantErr   bool
+		validate  func(t *testing.T, res []handlerwrapper.Result)
 	}{
 		{
 			name: "Successfully handle TagAvailable event",
@@ -58,9 +60,33 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 					}), nil
 				}
 			},
-			wantLen:   1,
+			wantLen:   2,
 			wantTopic: userevents.UserCreatedV1,
 			wantErr:   false,
+			validate: func(t *testing.T, res []handlerwrapper.Result) {
+				if res[1].Topic != sharedevents.LeaderboardBatchTagAssignmentRequestedV1 {
+					t.Fatalf("expected topic %s, got %s", sharedevents.LeaderboardBatchTagAssignmentRequestedV1, res[1].Topic)
+				}
+				payload, ok := res[1].Payload.(*sharedevents.BatchTagAssignmentRequestedPayloadV1)
+				if !ok {
+					t.Fatalf("expected BatchTagAssignmentRequestedPayloadV1, got %T", res[1].Payload)
+				}
+				if payload.GuildID != testGuildID {
+					t.Fatalf("expected guild %s, got %s", testGuildID, payload.GuildID)
+				}
+				if payload.RequestingUserID != testUserID {
+					t.Fatalf("expected requesting user %s, got %s", testUserID, payload.RequestingUserID)
+				}
+				if len(payload.Assignments) != 1 {
+					t.Fatalf("expected 1 assignment, got %d", len(payload.Assignments))
+				}
+				if payload.Assignments[0].UserID != testUserID {
+					t.Fatalf("expected assignment user %s, got %s", testUserID, payload.Assignments[0].UserID)
+				}
+				if payload.Assignments[0].TagNumber != testTagNumber {
+					t.Fatalf("expected assignment tag %d, got %d", testTagNumber, payload.Assignments[0].TagNumber)
+				}
+			},
 		},
 		{
 			name: "Fail to create user (Domain Logic)",
@@ -115,6 +141,9 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 				}
 				if res[0].Topic != tt.wantTopic {
 					t.Errorf("got topic %s, want %s", res[0].Topic, tt.wantTopic)
+				}
+				if tt.validate != nil {
+					tt.validate(t, res)
 				}
 			}
 		})

@@ -6,8 +6,9 @@ import (
 
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
-	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
+	"github.com/google/uuid"
 )
 
 // HandleTagAvailable handles the TagAvailable event.
@@ -34,27 +35,56 @@ func (h *UserHandlers) HandleTagAvailable(
 		return nil, err
 	}
 
-	// Map result to event payloads
-	mappedResult := result.Map(
-		func(success *userservice.CreateUserResponse) any {
-			return &userevents.UserCreatedPayloadV1{
+	if result.IsFailure() {
+		return []handlerwrapper.Result{
+			{
+				Topic: userevents.UserCreationFailedV1,
+				Payload: &userevents.UserCreationFailedPayloadV1{
+					GuildID:   payload.GuildID,
+					UserID:    payload.UserID,
+					TagNumber: &payload.TagNumber,
+					Reason:    (*result.Failure).Error(),
+				},
+			},
+		}, nil
+	}
+
+	if !result.IsSuccess() {
+		return nil, nil
+	}
+
+	success := *result.Success
+	events := []handlerwrapper.Result{
+		{
+			Topic: userevents.UserCreatedV1,
+			Payload: &userevents.UserCreatedPayloadV1{
 				GuildID:         payload.GuildID,
 				UserID:          success.UserID,
 				TagNumber:       success.TagNumber,
 				IsReturningUser: success.IsReturningUser,
-			}
+			},
 		},
-		func(failure error) any {
-			return &userevents.UserCreationFailedPayloadV1{
-				GuildID:   payload.GuildID,
-				UserID:    payload.UserID,
-				TagNumber: &payload.TagNumber,
-				Reason:    failure.Error(),
-			}
-		},
-	)
+	}
 
-	return mapOperationResult(mappedResult, userevents.UserCreatedV1, userevents.UserCreationFailedV1), nil
+	if success.TagNumber != nil {
+		events = append(events, handlerwrapper.Result{
+			Topic: sharedevents.LeaderboardBatchTagAssignmentRequestedV1,
+			Payload: &sharedevents.BatchTagAssignmentRequestedPayloadV1{
+				ScopedGuildID:    sharedevents.ScopedGuildID{GuildID: payload.GuildID},
+				RequestingUserID: payload.UserID,
+				BatchID:          uuid.NewString(),
+				Assignments: []sharedevents.TagAssignmentInfoV1{
+					{
+						UserID:    payload.UserID,
+						TagNumber: *success.TagNumber,
+					},
+				},
+				Source: sharedtypes.ServiceUpdateSourceCreateUser,
+			},
+		})
+	}
+
+	return events, nil
 }
 
 // HandleTagUnavailable remains largely the same as it doesn't call the service,
