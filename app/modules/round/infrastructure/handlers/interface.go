@@ -24,6 +24,10 @@ type Handlers interface {
 	HandleRoundDeleteValidated(ctx context.Context, payload *roundevents.RoundDeleteValidatedPayloadV1) ([]handlerwrapper.Result, error)
 	HandleRoundDeleteAuthorized(ctx context.Context, payload *roundevents.RoundDeleteAuthorizedPayloadV1) ([]handlerwrapper.Result, error)
 
+	// Round lifecycle cleanup handlers
+	HandleRoundDeleted(ctx context.Context, payload *roundevents.RoundDeletedPayloadV1) ([]handlerwrapper.Result, error)
+	HandleRoundCompleted(ctx context.Context, payload *roundevents.RoundCompletedPayloadV1) ([]handlerwrapper.Result, error)
+
 	// Round update handlers
 	HandleRoundUpdateRequest(ctx context.Context, payload *roundevents.UpdateRoundRequestedPayloadV1) ([]handlerwrapper.Result, error)
 	HandleRoundUpdateValidated(ctx context.Context, payload *roundevents.RoundUpdateValidatedPayloadV1) ([]handlerwrapper.Result, error)
@@ -70,6 +74,11 @@ type Handlers interface {
 	// Native Event handlers
 	HandleNativeEventCreated(ctx context.Context, payload *roundevents.NativeEventCreatedPayloadV1) ([]handlerwrapper.Result, error)
 	HandleNativeEventLookupRequest(ctx context.Context, payload *roundevents.NativeEventLookupRequestPayloadV1) ([]handlerwrapper.Result, error)
+
+	// Pagination snapshot handlers
+	HandlePaginationSnapshotUpsertRequested(ctx context.Context, payload *roundevents.PaginationSnapshotUpsertRequestedPayloadV1) ([]handlerwrapper.Result, error)
+	HandlePaginationSnapshotGetRequested(ctx context.Context, payload *roundevents.PaginationSnapshotGetRequestedPayloadV1) ([]handlerwrapper.Result, error)
+	HandlePaginationSnapshotDeleteRequested(ctx context.Context, payload *roundevents.PaginationSnapshotDeleteRequestedPayloadV1) ([]handlerwrapper.Result, error)
 
 	// Scorecard import handlers
 	HandleScorecardUploaded(ctx context.Context, payload *roundevents.ScorecardUploadedPayloadV1) ([]handlerwrapper.Result, error)

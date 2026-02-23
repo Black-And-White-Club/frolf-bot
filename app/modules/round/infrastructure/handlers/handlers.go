@@ -18,10 +18,11 @@ import (
 
 // RoundHandlers implements the Handlers interface for round events.
 type RoundHandlers struct {
-	service     roundservice.Service
-	userService userservice.Service
-	logger      *slog.Logger
-	helpers     utils.Helpers
+	service                 roundservice.Service
+	userService             userservice.Service
+	logger                  *slog.Logger
+	helpers                 utils.Helpers
+	paginationSnapshotStore PaginationSnapshotStore
 }
 
 // NewRoundHandlers creates a new RoundHandlers instance.
@@ -30,12 +31,19 @@ func NewRoundHandlers(
 	userService userservice.Service,
 	logger *slog.Logger,
 	helpers utils.Helpers,
+	paginationSnapshotStores ...PaginationSnapshotStore,
 ) Handlers {
+	var paginationSnapshotStore PaginationSnapshotStore
+	if len(paginationSnapshotStores) > 0 {
+		paginationSnapshotStore = paginationSnapshotStores[0]
+	}
+
 	return &RoundHandlers{
-		service:     service,
-		userService: userService,
-		logger:      logger,
-		helpers:     helpers,
+		service:                 service,
+		userService:             userService,
+		logger:                  logger,
+		helpers:                 helpers,
+		paginationSnapshotStore: paginationSnapshotStore,
 	}
 }
 
