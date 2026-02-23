@@ -10,6 +10,7 @@ import (
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
+	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
 	"github.com/uptrace/bun"
 )
 
@@ -39,11 +40,35 @@ func (s *RoundService) executeApplyImportedScores(
 			return results.FailureResult[*roundtypes.ImportApplyScoresResult, error](fmt.Errorf("failed to get round: %w", err)), nil
 		}
 
+		var result ApplyImportedScoresResult
 		if len(round.Teams) > 0 {
-			return s.applyTeamScores(ctx, tx, req, round)
+			result, err = s.applyTeamScores(ctx, tx, req, round)
+		} else {
+			result, err = s.applySinglesScores(ctx, tx, req, round)
+		}
+		if err != nil {
+			return result, err
+		}
+		if result.Failure != nil || req.ImportID == "" {
+			return result, nil
 		}
 
-		return s.applySinglesScores(ctx, tx, req, round)
+		if err := s.repo.UpdateImportStatus(
+			ctx,
+			tx,
+			req.GuildID,
+			req.RoundID,
+			req.ImportID,
+			string(rounddb.ImportStatusCompleted),
+			"",
+			"",
+		); err != nil {
+			return results.FailureResult[*roundtypes.ImportApplyScoresResult, error](
+				fmt.Errorf("failed to mark import as completed: %w", err),
+			), nil
+		}
+
+		return result, nil
 	})
 }
 

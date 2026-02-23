@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"slices"
 	"testing"
 
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
@@ -35,7 +36,7 @@ func TestRoundService_ApplyImportedScores(t *testing.T) {
 		name      string
 		input     roundtypes.ImportApplyScoresInput
 		setupFake func(*FakeRepo)
-		verify    func(*testing.T, ApplyImportedScoresResult, error)
+		verify    func(*testing.T, *FakeRepo, ApplyImportedScoresResult, error)
 	}
 
 	tests := []testCase{
@@ -83,7 +84,7 @@ func TestRoundService_ApplyImportedScores(t *testing.T) {
 					return nil
 				}
 			},
-			verify: func(t *testing.T, res ApplyImportedScoresResult, err error) {
+			verify: func(t *testing.T, repo *FakeRepo, res ApplyImportedScoresResult, err error) {
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
@@ -96,6 +97,9 @@ func TestRoundService_ApplyImportedScores(t *testing.T) {
 				}
 				if len((*success).Participants) != 2 {
 					t.Errorf("expected 2 participants in result, got %d", len((*success).Participants))
+				}
+				if !slices.Contains(repo.Trace(), "UpdateImportStatus") {
+					t.Fatalf("expected UpdateImportStatus to be called, trace=%v", repo.Trace())
 				}
 			},
 		},
@@ -117,7 +121,7 @@ func TestRoundService_ApplyImportedScores(t *testing.T) {
 					return []roundtypes.Participant{}, nil
 				}
 			},
-			verify: func(t *testing.T, res ApplyImportedScoresResult, err error) {
+			verify: func(t *testing.T, repo *FakeRepo, res ApplyImportedScoresResult, err error) {
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
@@ -127,6 +131,9 @@ func TestRoundService_ApplyImportedScores(t *testing.T) {
 				errMsg := (*res.Failure).Error()
 				if errMsg != "no scores were successfully applied" {
 					t.Errorf("unexpected error message: %s", errMsg)
+				}
+				if slices.Contains(repo.Trace(), "UpdateImportStatus") {
+					t.Fatalf("did not expect UpdateImportStatus on failure, trace=%v", repo.Trace())
 				}
 			},
 		},
@@ -173,7 +180,7 @@ func TestRoundService_ApplyImportedScores(t *testing.T) {
 					return nil
 				}
 			},
-			verify: func(t *testing.T, res ApplyImportedScoresResult, err error) {
+			verify: func(t *testing.T, repo *FakeRepo, res ApplyImportedScoresResult, err error) {
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
@@ -182,6 +189,9 @@ func TestRoundService_ApplyImportedScores(t *testing.T) {
 				}
 				if len((*res.Success).Participants) != 2 {
 					t.Fatalf("expected 2 participants after overwrite, got %d", len((*res.Success).Participants))
+				}
+				if !slices.Contains(repo.Trace(), "UpdateImportStatus") {
+					t.Fatalf("expected UpdateImportStatus to be called, trace=%v", repo.Trace())
 				}
 			},
 		},
@@ -218,12 +228,15 @@ func TestRoundService_ApplyImportedScores(t *testing.T) {
 					return nil
 				}
 			},
-			verify: func(t *testing.T, res ApplyImportedScoresResult, err error) {
+			verify: func(t *testing.T, repo *FakeRepo, res ApplyImportedScoresResult, err error) {
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
 				if res.IsFailure() {
 					t.Fatalf("unexpected failure: %v", (*res.Failure).Error())
+				}
+				if !slices.Contains(repo.Trace(), "UpdateImportStatus") {
+					t.Fatalf("expected UpdateImportStatus to be called, trace=%v", repo.Trace())
 				}
 			},
 		},
@@ -245,7 +258,7 @@ func TestRoundService_ApplyImportedScores(t *testing.T) {
 			}
 
 			res, err := svc.ApplyImportedScores(context.Background(), tc.input)
-			tc.verify(t, res, err)
+			tc.verify(t, repo, res, err)
 		})
 	}
 }

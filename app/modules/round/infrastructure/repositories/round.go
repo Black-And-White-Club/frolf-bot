@@ -509,9 +509,11 @@ func (r *Impl) UpdateRoundState(ctx context.Context, db bun.IDB, guildID sharedt
 	if db == nil {
 		db = r.db
 	}
+	isFinalized := state == roundtypes.RoundStateFinalized
 	_, err := db.NewUpdate().
 		Model(&Round{}).
 		Set("state = ?", state).
+		Set("finalized = ?", isFinalized).
 		Where("id = ? AND guild_id = ?", roundID, guildID).
 		Exec(ctx)
 	if err != nil {
