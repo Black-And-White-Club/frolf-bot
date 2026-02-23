@@ -385,10 +385,18 @@ func (s *LeaderboardService) calculateAndPersistPoints(
 		finalTags[a.MemberID] = a.Tag
 	}
 
-	// Fetch season data for tier calculation
-	memberIDs := make([]sharedtypes.DiscordID, len(cmd.Participants))
-	for i, p := range cmd.Participants {
-		memberIDs[i] = sharedtypes.DiscordID(p.MemberID)
+	// Only tagged participants are eligible for point awards/season standing updates.
+	eligibleParticipants := make([]RoundParticipantInput, 0, len(cmd.Participants))
+	memberIDs := make([]sharedtypes.DiscordID, 0, len(cmd.Participants))
+	for _, p := range cmd.Participants {
+		if finalTags[p.MemberID] <= 0 {
+			continue
+		}
+		eligibleParticipants = append(eligibleParticipants, p)
+		memberIDs = append(memberIDs, sharedtypes.DiscordID(p.MemberID))
+	}
+	if len(eligibleParticipants) == 0 {
+		return nil, nil
 	}
 
 	seasonBestTags, err := s.repo.GetSeasonBestTags(ctx, tx, cmd.GuildID, seasonID, memberIDs)
@@ -407,8 +415,8 @@ func (s *LeaderboardService) calculateAndPersistPoints(
 	}
 
 	// Build RoundParticipant slice for domain calculation
-	participants := make([]leaderboarddomain.RoundParticipant, len(cmd.Participants))
-	for i, p := range cmd.Participants {
+	participants := make([]leaderboarddomain.RoundParticipant, len(eligibleParticipants))
+	for i, p := range eligibleParticipants {
 		discordID := sharedtypes.DiscordID(p.MemberID)
 		tag := finalTags[p.MemberID]
 

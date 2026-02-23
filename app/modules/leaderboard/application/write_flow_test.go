@@ -337,6 +337,73 @@ func TestCalculateAndPersistPoints_PersistsAwardsAndStandings(t *testing.T) {
 	}
 }
 
+func TestCalculateAndPersistPoints_ExcludesUntaggedParticipants(t *testing.T) {
+	repo := NewFakeLeaderboardRepo()
+	members := &fakeLeagueMemberRepo{}
+	svc := newWriteFlowTestService(repo, members, &fakeTagHistoryRepo{}, &fakeRoundOutcomeRepo{})
+
+	cmd := ProcessRoundCommand{
+		GuildID: "guild-1",
+		RoundID: uuid.New(),
+		Participants: []RoundParticipantInput{
+			{MemberID: "u1", FinishRank: 1},
+			{MemberID: "u2", FinishRank: 2},
+		},
+	}
+
+	var bestTagMemberIDs []sharedtypes.DiscordID
+	var standingMemberIDs []sharedtypes.DiscordID
+	var savedHistories []*leaderboarddb.PointHistory
+	var savedStandings []*leaderboarddb.SeasonStanding
+
+	repo.GetSeasonBestTagsFunc = func(ctx context.Context, db bun.IDB, guildID string, seasonID string, memberIDs []sharedtypes.DiscordID) (map[sharedtypes.DiscordID]int, error) {
+		bestTagMemberIDs = append([]sharedtypes.DiscordID(nil), memberIDs...)
+		return map[sharedtypes.DiscordID]int{
+			"u1": 1,
+		}, nil
+	}
+	repo.CountSeasonMembersFunc = func(ctx context.Context, db bun.IDB, guildID string, seasonID string) (int, error) {
+		return 10, nil
+	}
+	repo.GetSeasonStandingsFunc = func(ctx context.Context, db bun.IDB, guildID string, seasonID string, memberIDs []sharedtypes.DiscordID) (map[sharedtypes.DiscordID]*leaderboarddb.SeasonStanding, error) {
+		standingMemberIDs = append([]sharedtypes.DiscordID(nil), memberIDs...)
+		return map[sharedtypes.DiscordID]*leaderboarddb.SeasonStanding{
+			"u1": {MemberID: "u1", SeasonID: seasonID, TotalPoints: 12, RoundsPlayed: 2},
+		}, nil
+	}
+	repo.BulkSavePointHistoryFunc = func(ctx context.Context, db bun.IDB, guildID string, histories []*leaderboarddb.PointHistory) error {
+		savedHistories = histories
+		return nil
+	}
+	repo.BulkUpsertSeasonStandingsFunc = func(ctx context.Context, db bun.IDB, guildID string, standings []*leaderboarddb.SeasonStanding) error {
+		savedStandings = standings
+		return nil
+	}
+
+	awards, err := svc.calculateAndPersistPoints(context.Background(), bun.Tx{}, cmd, map[string]int{"u1": 1, "u2": 0}, nil, "season-1")
+	if err != nil {
+		t.Fatalf("calculateAndPersistPoints returned error: %v", err)
+	}
+	if len(awards) != 1 {
+		t.Fatalf("expected 1 award for tagged participant, got %d", len(awards))
+	}
+	if awards[0].MemberID != "u1" {
+		t.Fatalf("expected u1 to receive award, got %s", awards[0].MemberID)
+	}
+	if len(bestTagMemberIDs) != 1 || bestTagMemberIDs[0] != "u1" {
+		t.Fatalf("expected season best lookup for only u1, got %+v", bestTagMemberIDs)
+	}
+	if len(standingMemberIDs) != 1 || standingMemberIDs[0] != "u1" {
+		t.Fatalf("expected standings lookup for only u1, got %+v", standingMemberIDs)
+	}
+	if len(savedHistories) != 1 || savedHistories[0].MemberID != "u1" {
+		t.Fatalf("expected point history write for only u1, got %+v", savedHistories)
+	}
+	if len(savedStandings) != 1 || savedStandings[0].MemberID != "u1" {
+		t.Fatalf("expected season standing upsert for only u1, got %+v", savedStandings)
+	}
+}
+
 func TestRollbackPreviousRound_DeletesHistoryAfterDecrement(t *testing.T) {
 	repo := NewFakeLeaderboardRepo()
 	svc := newWriteFlowTestService(repo, &fakeLeagueMemberRepo{}, &fakeTagHistoryRepo{}, &fakeRoundOutcomeRepo{})
