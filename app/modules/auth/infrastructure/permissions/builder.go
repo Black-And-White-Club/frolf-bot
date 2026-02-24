@@ -3,8 +3,6 @@ package permissions
 import (
 	"fmt"
 
-	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
-	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	authdomain "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/domain"
 )
 
@@ -215,6 +213,8 @@ func (b *Builder) editorPermissions(clubUUID, userUUID, guildID, userID string) 
 			fmt.Sprintf("round.update.v1.%s", id),
 			fmt.Sprintf("round.delete.v1.%s", id),
 			fmt.Sprintf("score.submit.v1.%s", id),
+			fmt.Sprintf("leaderboard.point.history.requested.v1.%s", id),
+			fmt.Sprintf("leaderboard.get.season.standings.v1.%s", id),
 		)
 	}
 
@@ -234,20 +234,28 @@ func (b *Builder) editorPermissions(clubUUID, userUUID, guildID, userID string) 
 func (b *Builder) adminPermissions(clubUUID, userUUID, guildID, userID string) *Permissions {
 	editor := b.editorPermissions(clubUUID, userUUID, guildID, userID)
 
-	// Admin-only publish subjects (no guildId suffix — backend subscribes without it)
-	editor.Publish.Allow = append(editor.Publish.Allow,
-		leaderboardevents.LeaderboardBatchTagAssignmentRequestedV1,
-		leaderboardevents.LeaderboardManualPointAdjustmentV1,
-		roundevents.ScorecardAdminUploadRequestedV1,
-	)
+	// Admin-only publish subjects (scoped by guild/club ID)
+	for _, id := range []string{clubUUID, guildID} {
+		if id == "" {
+			continue
+		}
+		editor.Publish.Allow = append(editor.Publish.Allow,
+			fmt.Sprintf("leaderboard.manual.point.adjustment.v1.%s", id),
+			fmt.Sprintf("leaderboard.recalculate.round.v1.%s", id),
+			fmt.Sprintf("leaderboard.start.new.season.v1.%s", id),
+			fmt.Sprintf("leaderboard.end.season.v1.%s", id),
+			fmt.Sprintf("leaderboard.batch.tag.assignment.requested.v1.%s", id),
+			fmt.Sprintf("round.scorecard.admin.upload.requested.v1.%s", id),
+		)
 
-	// Admin-only subscribe subjects for operation feedback (no guildId suffix)
-	editor.Subscribe.Allow = append(editor.Subscribe.Allow,
-		leaderboardevents.LeaderboardBatchTagAssignedV1,
-		leaderboardevents.LeaderboardBatchTagAssignmentFailedV1,
-		leaderboardevents.LeaderboardManualPointAdjustmentSuccessV1,
-		leaderboardevents.LeaderboardManualPointAdjustmentFailedV1,
-	)
+		// Admin-only subscribe subjects for operation feedback (scoped)
+		editor.Subscribe.Allow = append(editor.Subscribe.Allow,
+			fmt.Sprintf("leaderboard.batch.tag.assigned.v1.%s", id),
+			fmt.Sprintf("leaderboard.batch.tag.assignment.failed.v1.%s", id),
+			fmt.Sprintf("leaderboard.manual.point.adjustment.success.v1.%s", id),
+			fmt.Sprintf("leaderboard.manual.point.adjustment.failed.v1.%s", id),
+		)
+	}
 
 	return editor
 }

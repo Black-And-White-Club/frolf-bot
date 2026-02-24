@@ -89,7 +89,7 @@ test-unit-all:
 # Run all integration tests across the entire project
 test-integration-all:
 	@echo "Running all integration tests across the project..."
-	go test ./integration_tests/... -v
+	go test -p 1 ./integration_tests/... -v
 
 # Run ALL tests (unit + integration) across the entire project
 test-all-project: test-unit-all test-integration-all
@@ -98,13 +98,13 @@ test-all-project: test-unit-all test-integration-all
 # Run tests with verbose output showing individual test results
 test-all-verbose:
 	@echo "Running all tests with detailed output..."
-	go test ./app/... ./integration_tests/... -v
+	go test -p 1 ./app/... ./integration_tests/... -v
 
 # Run tests with failure summary at the end
 test-with-summary:
 	@echo "Running all tests with failure summary..."
 	@TEMP_FILE=$$(mktemp) && \
-	(go test ./app/... ./integration_tests/... -v 2>&1 | tee $$TEMP_FILE; \
+	(go test -p 1 ./app/... ./integration_tests/... -v 2>&1 | tee $$TEMP_FILE; \
 	EXIT_CODE=$${PIPESTATUS[0]}; \
 	echo ""; \
 	echo "=========================================="; \
@@ -165,7 +165,7 @@ test-unit-summary:
 test-integration-summary:
 	@echo "Running integration tests with failure summary..."
 	@TEMP_FILE=$$(mktemp) && \
-	(go test ./integration_tests/... -v 2>&1 | tee $$TEMP_FILE; \
+	(go test -p 1 ./integration_tests/... -v 2>&1 | tee $$TEMP_FILE; \
 	EXIT_CODE=$${PIPESTATUS[0]}; \
 	echo ""; \
 	echo "=========================================="; \
@@ -206,7 +206,7 @@ test-quick:
 test-silent:
 	@echo "Running tests silently..."
 	@TEMP_FILE=$$(mktemp) && \
-	(go test ./app/... ./integration_tests/... 2>&1 > $$TEMP_FILE; \
+	(go test -p 1 ./app/... ./integration_tests/... 2>&1 > $$TEMP_FILE; \
 	EXIT_CODE=$$?; \
 	if [ $$EXIT_CODE -eq 0 ]; then \
 		echo "✅ ALL TESTS PASSED"; \
@@ -220,7 +220,7 @@ test-silent:
 # Test with JSON output for parsing by tools/CI
 test-json:
 	@echo "Running tests with JSON output..."
-	go test ./app/... ./integration_tests/... -json
+	go test -p 1 ./app/... ./integration_tests/... -json
 
 # Test specific module with summary
 test-module:
@@ -231,7 +231,7 @@ test-module:
 	fi
 	@echo "Running tests for $(MODULE) module with summary..."
 	@TEMP_FILE=$$(mktemp) && \
-	(go test ./app/modules/$(MODULE)/... ./integration_tests/modules/$(MODULE)/... -v 2>&1 | tee $$TEMP_FILE; \
+	(go test -p 1 ./app/modules/$(MODULE)/... ./integration_tests/modules/$(MODULE)/... -v 2>&1 | tee $$TEMP_FILE; \
 	EXIT_CODE=$${PIPESTATUS[0]}; \
 	echo ""; \
 	echo "=========================================="; \
@@ -258,7 +258,7 @@ test-integration-module:
 	fi
 	@echo "Running integration tests for $(MODULE) with summary..."
 	@TEMP_FILE=$$(mktemp) && \
-	(go test ./integration_tests/modules/$(MODULE)/... -v 2>&1 | tee $$TEMP_FILE; \
+	(go test -p 1 ./integration_tests/modules/$(MODULE)/... -v 2>&1 | tee $$TEMP_FILE; \
 	EXIT_CODE=$${PIPESTATUS[0]}; \
 	echo ""; \
 	echo "=========================================="; \
@@ -289,7 +289,7 @@ test-integration-leaderboard: ; $(MAKE) test-integration-module MODULE=leaderboa
 test-integration-round-summary:
 	@echo "Running round integration tests with failure summary..."
 	@TEMP_FILE=$$(mktemp) && \
-	(go test ./integration_tests/modules/round/... -v 2>&1 | tee $$TEMP_FILE; \
+	(go test -p 1 ./integration_tests/modules/round/... -v 2>&1 | tee $$TEMP_FILE; \
 	EXIT_CODE=$${PIPESTATUS[0]}; \
 	echo ""; \
 	echo "=========================================="; \
@@ -313,7 +313,7 @@ test-integration-round-summary:
 test-round-summary:
 	@echo "Running all round module tests with failure summary..."
 	@TEMP_FILE=$$(mktemp) && \
-	(go test ./app/modules/round/... ./integration_tests/modules/round/... -v 2>&1 | tee $$TEMP_FILE; \
+	(go test -p 1 ./app/modules/round/... ./integration_tests/modules/round/... -v 2>&1 | tee $$TEMP_FILE; \
 	EXIT_CODE=$${PIPESTATUS[0]}; \
 	echo ""; \
 	echo "=========================================="; \
@@ -407,7 +407,7 @@ coverage-integration:
 	@echo "  $(INTEGRATION_COVER_PKGS)"
 	@echo "=========================================="
 
-	@go test -v ./integration_tests/... \
+	@go test -p 1 -v ./integration_tests/... \
 		-covermode=atomic \
 		-coverpkg=$(INTEGRATION_COVER_PKGS) \
 		-coverprofile=$(REPORTS_DIR)/coverage-integration.out
@@ -426,9 +426,9 @@ coverage-all-with-counts:
 	@echo -n "Unit tests: "
 	@go test -list=. ./app/... 2>/dev/null | grep -c "^Test" || echo "0"
 	@echo -n "Integration tests: "
-	@go test -list=. ./integration_tests/... 2>/dev/null | grep -c "^Test" || echo "0"
+	@go test -p 1 -list=. ./integration_tests/... 2>/dev/null | grep -c "^Test" || echo "0"
 	@echo -n "Total tests: "
-	@echo $$(( $$(go test -list=. ./app/... 2>/dev/null | grep -c "^Test" || echo "0") + $$(go test -list=. ./integration_tests/... 2>/dev/null | grep -c "^Test" || echo "0") ))
+	@echo $$(( $$(go test -p 1 -list=. ./app/... 2>/dev/null | grep -c "^Test" || echo "0") + $$(go test -list=. ./integration_tests/... 2>/dev/null | grep -c "^Test" || echo "0") ))
 	@echo ""
 	@$(MAKE) coverage-all
 

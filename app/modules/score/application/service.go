@@ -138,6 +138,13 @@ func runInTx[S any, F any](
 		return fn(ctx, nil)
 	}
 
+	// Apply a default safety timeout for all DB transactions if one isn't already set
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 15*time.Second)
+		defer cancel()
+	}
+
 	var result results.OperationResult[S, F]
 	err := s.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		var txErr error

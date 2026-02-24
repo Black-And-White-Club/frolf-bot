@@ -385,13 +385,12 @@ func (s *LeaderboardService) calculateAndPersistPoints(
 		finalTags[a.MemberID] = a.Tag
 	}
 
-	// Only tagged participants are eligible for point awards/season standing updates.
+	// All participants are eligible for point history; untagged participants receive 0 points.
+	// The domain's CalculateRoundPoints already handles TagNumber==0 correctly (sorted last,
+	// not counted as opponents, awarded 0 points).
 	eligibleParticipants := make([]RoundParticipantInput, 0, len(cmd.Participants))
 	memberIDs := make([]sharedtypes.DiscordID, 0, len(cmd.Participants))
 	for _, p := range cmd.Participants {
-		if finalTags[p.MemberID] <= 0 {
-			continue
-		}
 		eligibleParticipants = append(eligibleParticipants, p)
 		memberIDs = append(memberIDs, sharedtypes.DiscordID(p.MemberID))
 	}
