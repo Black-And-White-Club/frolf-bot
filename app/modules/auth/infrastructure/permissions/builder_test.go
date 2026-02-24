@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"testing"
 
-	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	authdomain "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/domain"
 	"github.com/google/uuid"
 )
@@ -61,7 +60,7 @@ func TestBuilder_ForRole(t *testing.T) {
 			},
 		},
 		{
-			name: "admin permissions include admin scorecard upload",
+			name: "admin permissions include scoped scorecard upload",
 			claims: &authdomain.Claims{
 				UserUUID:       userUUID,
 				ActiveClubUUID: clubUUID,
@@ -71,9 +70,36 @@ func TestBuilder_ForRole(t *testing.T) {
 				},
 			},
 			verify: func(t *testing.T, p *Permissions) {
-				expectedPub := roundevents.ScorecardAdminUploadRequestedV1
+				expectedPub := fmt.Sprintf("round.scorecard.admin.upload.requested.v1.%s", clubUUID)
 				if !contains(p.Publish.Allow, expectedPub) {
 					t.Errorf("expected admin publish allow for %s, got %v", expectedPub, p.Publish.Allow)
+				}
+			},
+		},
+		{
+			name: "admin permissions scoped correctly",
+			claims: &authdomain.Claims{
+				UserUUID:       userUUID,
+				ActiveClubUUID: clubUUID,
+				GuildID:        "123456789",
+				Role:           authdomain.RoleAdmin,
+				Clubs: []authdomain.ClubRole{
+					{ClubUUID: clubUUID, Role: authdomain.RoleAdmin},
+				},
+			},
+			verify: func(t *testing.T, p *Permissions) {
+				// Verify scoped admin actions for both club UUID and Guild ID
+				for _, id := range []string{clubUUID.String(), "123456789"} {
+					expected := fmt.Sprintf("leaderboard.manual.point.adjustment.v1.%s", id)
+					if !contains(p.Publish.Allow, expected) {
+						t.Errorf("expected scoped admin publish allow for %s, got %v", expected, p.Publish.Allow)
+					}
+				}
+
+				// Ensure unscoped subjects are NOT present (regression check)
+				unscoped := "leaderboard.manual.point.adjustment.v1"
+				if contains(p.Publish.Allow, unscoped) {
+					t.Errorf("unscoped subject %s should NOT be allowed", unscoped)
 				}
 			},
 		},

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Black-And-White-Club/frolf-bot/app/shared/security"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/google/uuid"
 	"github.com/uptrace/bun"
@@ -907,6 +908,13 @@ func (r *Impl) GetLinkedIdentityByProvider(ctx context.Context, db bun.IDB, user
 		}
 		return nil, fmt.Errorf("userdb.GetLinkedIdentityByProvider: %w", err)
 	}
+	if li.AccessToken != nil && *li.AccessToken != "" {
+		decrypted, err := security.Decrypt(*li.AccessToken)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decrypt access token: %w", err)
+		}
+		li.AccessToken = &decrypted
+	}
 	return li, nil
 }
 
@@ -944,9 +952,15 @@ func (r *Impl) UpdateLinkedIdentityToken(ctx context.Context, db bun.IDB, provid
 	if db == nil {
 		db = r.db
 	}
-	_, err := db.NewUpdate().
+
+	encryptedToken, err := security.Encrypt(accessToken)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt access token: %w", err)
+	}
+
+	_, err = db.NewUpdate().
 		Model((*LinkedIdentity)(nil)).
-		Set("access_token = ?", accessToken).
+		Set("access_token = ?", encryptedToken).
 		Set("access_token_expires_at = ?", expiresAt).
 		Where("provider = ? AND provider_id = ?", provider, providerID).
 		Exec(ctx)
@@ -964,6 +978,8 @@ func (r *Impl) InsertLinkedIdentity(ctx context.Context, db bun.IDB, userUUID uu
 	if displayName != "" {
 		dn = &displayName
 	}
+
+	// Note: insert doesn't take a token yet in current implementation, but we're prepared.
 	li := &LinkedIdentity{
 		UserUUID:    userUUID,
 		Provider:    provider,

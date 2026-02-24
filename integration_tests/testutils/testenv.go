@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -250,17 +251,30 @@ func (env *TestEnvironment) Cleanup() {
 }
 
 // configureLocalDockerAutodetect sets minimal Testcontainers overrides for Colima environments
-// to make the integration suite plug-and-play. It only applies when:
-// - DOCKER_HOST points at a Colima socket, and
-// - the respective overrides are not already set by the user.
+// to make the integration suite plug-and-play. It applies when:
+// - DOCKER_HOST or DOCKER_CONTEXT points at a Colima socket, OR
+// - DOCKER_HOST is unset but the default Colima socket exists on disk.
 // It does not change behavior for Docker Desktop or CI environments.
 func configureLocalDockerAutodetect() {
 	dh := os.Getenv("DOCKER_HOST")
 	dc := os.Getenv("DOCKER_CONTEXT")
-	if dh == "" && dc == "" {
-		return
+
+	colimaDetected := strings.Contains(dh, ".colima/") || strings.EqualFold(dc, "colima")
+
+	// Also detect Colima when DOCKER_HOST is unset but the default socket is present.
+	// testcontainers-go discovers the socket on its own, but without DOCKER_HOST set the
+	// overrides below never fire, causing Ryuk's mapped port to be unreachable.
+	if !colimaDetected && dh == "" {
+		if homeDir, err := os.UserHomeDir(); err == nil {
+			colimaSocket := filepath.Join(homeDir, ".colima", "default", "docker.sock")
+			if _, err := os.Stat(colimaSocket); err == nil {
+				os.Setenv("DOCKER_HOST", "unix://"+colimaSocket)
+				colimaDetected = true
+			}
+		}
 	}
-	if !(strings.Contains(dh, ".colima/") || strings.EqualFold(dc, "colima")) {
+
+	if !colimaDetected {
 		return
 	}
 
@@ -268,15 +282,23 @@ func configureLocalDockerAutodetect() {
 		os.Setenv("TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE", "/var/run/docker.sock")
 	}
 
-	// If no host override or an alias is set, prefer a concrete IP to avoid DNS issues in Colima.
+	// Colima (QEMU) forwards container ports to 127.0.0.1 on the macOS host via SSH
+	// tunnelling — NOT to the VM's internal IP (e.g. 192.168.50.82). Without this
+	// override testcontainers uses the VM IP and the Ryuk health-check times out.
 	if ho := os.Getenv("TESTCONTAINERS_HOST_OVERRIDE"); ho == "" || ho == "host.lima.internal" || ho == "host.docker.internal" {
-		if ip := hostIPv4ForLocal(); ip != "" {
-			os.Setenv("TESTCONTAINERS_HOST_OVERRIDE", ip)
-		}
+		os.Setenv("TESTCONTAINERS_HOST_OVERRIDE", "127.0.0.1")
 	}
 
 	if os.Getenv("TESTCONTAINERS_RYUK_CONTAINER_PRIVILEGED") == "" {
 		os.Setenv("TESTCONTAINERS_RYUK_CONTAINER_PRIVILEGED", "true")
+	}
+
+	// Ryuk needs to connect back to Docker via a mapped port, but Colima (QEMU) does
+	// not reliably forward ephemeral container ports to 127.0.0.1 before the
+	// health-check times out. The container pool already calls Terminate() on every
+	// container explicitly, so Ryuk's automatic cleanup is not needed here.
+	if os.Getenv("TESTCONTAINERS_RYUK_DISABLED") == "" {
+		os.Setenv("TESTCONTAINERS_RYUK_DISABLED", "true")
 	}
 }
 

@@ -337,7 +337,10 @@ func TestCalculateAndPersistPoints_PersistsAwardsAndStandings(t *testing.T) {
 	}
 }
 
-func TestCalculateAndPersistPoints_ExcludesUntaggedParticipants(t *testing.T) {
+func TestCalculateAndPersistPoints_IncludesUntaggedParticipants(t *testing.T) {
+	// Untagged participants receive a 0-point history entry. The domain's
+	// CalculateRoundPoints skips them as opponents but still emits an award record,
+	// so their participation is tracked even before they earn a tag.
 	repo := NewFakeLeaderboardRepo()
 	members := &fakeLeagueMemberRepo{}
 	svc := newWriteFlowTestService(repo, members, &fakeTagHistoryRepo{}, &fakeRoundOutcomeRepo{})
@@ -380,27 +383,39 @@ func TestCalculateAndPersistPoints_ExcludesUntaggedParticipants(t *testing.T) {
 		return nil
 	}
 
+	// u1 has tag 1, u2 is untagged (tag 0). Both should appear in awards/history.
+	// u2 is not counted as an opponent by the domain, so u1 also earns 0 points here.
 	awards, err := svc.calculateAndPersistPoints(context.Background(), bun.Tx{}, cmd, map[string]int{"u1": 1, "u2": 0}, nil, "season-1")
 	if err != nil {
 		t.Fatalf("calculateAndPersistPoints returned error: %v", err)
 	}
-	if len(awards) != 1 {
-		t.Fatalf("expected 1 award for tagged participant, got %d", len(awards))
+	if len(awards) != 2 {
+		t.Fatalf("expected 2 awards (tagged + untagged), got %d", len(awards))
 	}
-	if awards[0].MemberID != "u1" {
-		t.Fatalf("expected u1 to receive award, got %s", awards[0].MemberID)
+	memberSet := make(map[string]int, len(awards))
+	for _, a := range awards {
+		memberSet[a.MemberID] = a.Points
 	}
-	if len(bestTagMemberIDs) != 1 || bestTagMemberIDs[0] != "u1" {
-		t.Fatalf("expected season best lookup for only u1, got %+v", bestTagMemberIDs)
+	if _, ok := memberSet["u1"]; !ok {
+		t.Fatalf("expected u1 in awards, got %+v", awards)
 	}
-	if len(standingMemberIDs) != 1 || standingMemberIDs[0] != "u1" {
-		t.Fatalf("expected standings lookup for only u1, got %+v", standingMemberIDs)
+	if _, ok := memberSet["u2"]; !ok {
+		t.Fatalf("expected u2 in awards, got %+v", awards)
 	}
-	if len(savedHistories) != 1 || savedHistories[0].MemberID != "u1" {
-		t.Fatalf("expected point history write for only u1, got %+v", savedHistories)
+	if memberSet["u2"] != 0 {
+		t.Fatalf("expected u2 (untagged) to have 0 points, got %d", memberSet["u2"])
 	}
-	if len(savedStandings) != 1 || savedStandings[0].MemberID != "u1" {
-		t.Fatalf("expected season standing upsert for only u1, got %+v", savedStandings)
+	if len(bestTagMemberIDs) != 2 {
+		t.Fatalf("expected season best lookup for both participants, got %+v", bestTagMemberIDs)
+	}
+	if len(standingMemberIDs) != 2 {
+		t.Fatalf("expected standings lookup for both participants, got %+v", standingMemberIDs)
+	}
+	if len(savedHistories) != 2 {
+		t.Fatalf("expected point history write for both participants, got %+v", savedHistories)
+	}
+	if len(savedStandings) != 2 {
+		t.Fatalf("expected season standing upsert for both participants, got %+v", savedStandings)
 	}
 }
 
