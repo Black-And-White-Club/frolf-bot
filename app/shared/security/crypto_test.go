@@ -1,9 +1,9 @@
 package security
 
 import (
+	"github.com/stretchr/testify/assert"
 	"os"
 	"testing"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestEncryptDecrypt(t *testing.T) {

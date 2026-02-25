@@ -3,7 +3,7 @@ module github.com/Black-And-White-Club/frolf-bot
 go 1.25.0
 
 require (
-	github.com/Black-And-White-Club/frolf-bot-shared v0.1.23
+	github.com/Black-And-White-Club/frolf-bot-shared v0.1.24
 	github.com/ThreeDotsLabs/watermill v1.5.1
 	github.com/brianvoe/gofakeit/v7 v7.14.0
 	github.com/docker/docker v28.5.2+incompatible
@@ -27,7 +27,7 @@ require (
 	github.com/uptrace/bun/driver/pgdriver v1.2.17
 	github.com/urfave/cli/v2 v2.27.7
 	github.com/wcharczuk/go-chart/v2 v2.1.2
-	github.com/xuri/excelize/v2 v2.10.0
+	github.com/xuri/excelize/v2 v2.10.1
 	go.opentelemetry.io/otel v1.40.0
 	go.opentelemetry.io/otel/trace v1.40.0
 	golang.org/x/oauth2 v0.35.0

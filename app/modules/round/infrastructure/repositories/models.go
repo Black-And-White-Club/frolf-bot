@@ -51,6 +51,7 @@ type Round struct {
 	ImportedAt      *time.Time            `bun:"imported_at,type:timestamp"`
 	ImportUserID    sharedtypes.DiscordID `bun:"import_user_id,nullzero"`
 	ImportChannelID string                `bun:"import_channel_id,nullzero"`
+	ParScores       []int                 `bun:"par_scores,type:jsonb,nullzero" json:"par_scores,omitempty"`
 }
 
 type RoundGroup struct {

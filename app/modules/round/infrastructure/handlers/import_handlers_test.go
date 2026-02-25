@@ -135,7 +135,7 @@ func TestRoundHandlers_HandleAdminScorecardUploadRequested(t *testing.T) {
 		wantCreateCalled bool
 	}{
 		{
-			name: "success - admin role can enqueue parse request",
+			name:          "success - admin role can enqueue parse request",
 			payloadUserID: adminID,
 			setupService: func(t *testing.T, fakeService *FakeService) {
 				fakeService.CreateImportJobFunc = func(ctx context.Context, req *roundtypes.ImportCreateJobInput) (roundservice.CreateImportJobResult, error) {
@@ -160,7 +160,7 @@ func TestRoundHandlers_HandleAdminScorecardUploadRequested(t *testing.T) {
 			wantCreateCalled: true,
 		},
 		{
-			name: "failure - non-admin role is rejected",
+			name:          "failure - non-admin role is rejected",
 			payloadUserID: adminID,
 			setupUserService: func(t *testing.T, userService *FakeUserService, payloadUserID sharedtypes.DiscordID) {
 				userService.GetUserRoleFunc = func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (userservice.UserRoleResult, error) {
@@ -171,7 +171,7 @@ func TestRoundHandlers_HandleAdminScorecardUploadRequested(t *testing.T) {
 			wantCreateCalled: false,
 		},
 		{
-			name: "success - uuid user_id falls back to discord identity lookup",
+			name:          "success - uuid user_id falls back to discord identity lookup",
 			payloadUserID: uuidUserIDStr,
 			setupService: func(t *testing.T, fakeService *FakeService) {
 				fakeService.CreateImportJobFunc = func(ctx context.Context, req *roundtypes.ImportCreateJobInput) (roundservice.CreateImportJobResult, error) {

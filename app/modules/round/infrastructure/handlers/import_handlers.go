@@ -313,6 +313,7 @@ func (h *RoundHandlers) HandleScorecardNormalized(ctx context.Context, payload *
 				EventMessageID:          s.EventMessageID,
 				AllowGuestPlayers:       payload.AllowGuestPlayers,
 				OverwriteExistingScores: payload.OverwriteExistingScores,
+				ParScores:               s.ParScores,
 				Timestamp:               s.Timestamp,
 			}
 		},
@@ -339,10 +340,11 @@ func (h *RoundHandlers) HandleImportCompleted(
 	scores := make([]roundtypes.ImportScoreData, len(payload.Scores))
 	for i, s := range payload.Scores {
 		scores[i] = roundtypes.ImportScoreData{
-			UserID:  s.UserID,
-			RawName: s.RawName,
-			Score:   int(s.Score),
-			TeamID:  s.TeamID,
+			UserID:     s.UserID,
+			RawName:    s.RawName,
+			Score:      int(s.Score),
+			TeamID:     s.TeamID,
+			HoleScores: s.HoleScores,
 		}
 	}
 
@@ -354,6 +356,7 @@ func (h *RoundHandlers) HandleImportCompleted(
 		Scores:                  scores,
 		AllowGuestPlayers:       payload.AllowGuestPlayers,
 		OverwriteExistingScores: payload.OverwriteExistingScores,
+		ParScores:               payload.ParScores,
 	}
 
 	res, err := h.service.ApplyImportedScores(ctx, req)

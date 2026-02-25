@@ -127,12 +127,14 @@ func (s *RoundService) applySinglesScores(
 				existingParticipants[idx].Score = &score
 				existingParticipants[idx].Response = roundtypes.ResponseAccept
 				existingParticipants[idx].RawName = scoreInfo.RawName
+				existingParticipants[idx].HoleScores = scoreInfo.HoleScores
 			} else {
 				existingParticipants = append(existingParticipants, roundtypes.Participant{
-					UserID:   "",
-					RawName:  scoreInfo.RawName,
-					Score:    &score,
-					Response: roundtypes.ResponseAccept,
+					UserID:     "",
+					RawName:    scoreInfo.RawName,
+					Score:      &score,
+					Response:   roundtypes.ResponseAccept,
+					HoleScores: scoreInfo.HoleScores,
 				})
 				guestIndexByName[normalizedGuestName] = len(existingParticipants) - 1
 			}
@@ -146,12 +148,14 @@ func (s *RoundService) applySinglesScores(
 			// Update existing participant's score
 			existingParticipants[idx].Score = &score
 			existingParticipants[idx].Response = roundtypes.ResponseAccept
+			existingParticipants[idx].HoleScores = scoreInfo.HoleScores
 		} else {
 			// Add new participant - user wasn't RSVP'd but is in the scorecard and has guild_membership
 			existingParticipants = append(existingParticipants, roundtypes.Participant{
-				UserID:   scoreInfo.UserID,
-				Score:    &score,
-				Response: roundtypes.ResponseAccept,
+				UserID:     scoreInfo.UserID,
+				Score:      &score,
+				Response:   roundtypes.ResponseAccept,
+				HoleScores: scoreInfo.HoleScores,
 			})
 			// Update map to prevent duplicates within same import
 			existingMap[scoreInfo.UserID] = len(existingParticipants) - 1
@@ -171,6 +175,13 @@ func (s *RoundService) applySinglesScores(
 
 	if err := s.repo.UpdateRoundsAndParticipants(ctx, tx, req.GuildID, updates); err != nil {
 		return results.FailureResult[*roundtypes.ImportApplyScoresResult, error](fmt.Errorf("failed to persist participants: %w", err)), nil
+	}
+
+	if len(req.ParScores) > 0 {
+		round.ParScores = req.ParScores
+		if _, err := s.repo.UpdateRound(ctx, tx, req.GuildID, req.RoundID, round); err != nil {
+			return results.FailureResult[*roundtypes.ImportApplyScoresResult, error](fmt.Errorf("failed to update round par scores: %w", err)), nil
+		}
 	}
 
 	return results.SuccessResult[*roundtypes.ImportApplyScoresResult, error](&roundtypes.ImportApplyScoresResult{
@@ -210,10 +221,11 @@ func (s *RoundService) overwriteSinglesScores(
 
 		score := sharedtypes.Score(scoreInfo.Score)
 		next := roundtypes.Participant{
-			UserID:   scoreInfo.UserID,
-			RawName:  scoreInfo.RawName,
-			Score:    &score,
-			Response: roundtypes.ResponseAccept,
+			UserID:     scoreInfo.UserID,
+			RawName:    scoreInfo.RawName,
+			Score:      &score,
+			Response:   roundtypes.ResponseAccept,
+			HoleScores: scoreInfo.HoleScores,
 		}
 
 		var key string
@@ -250,6 +262,13 @@ func (s *RoundService) overwriteSinglesScores(
 
 	if err := s.repo.UpdateRoundsAndParticipants(ctx, tx, req.GuildID, updates); err != nil {
 		return results.FailureResult[*roundtypes.ImportApplyScoresResult, error](fmt.Errorf("failed to persist participants: %w", err)), nil
+	}
+
+	if len(req.ParScores) > 0 {
+		round.ParScores = req.ParScores
+		if _, err := s.repo.UpdateRound(ctx, tx, req.GuildID, req.RoundID, round); err != nil {
+			return results.FailureResult[*roundtypes.ImportApplyScoresResult, error](fmt.Errorf("failed to update round par scores: %w", err)), nil
+		}
 	}
 
 	return results.SuccessResult[*roundtypes.ImportApplyScoresResult, error](&roundtypes.ImportApplyScoresResult{

@@ -251,19 +251,21 @@ func (s *RoundService) IngestNormalizedScorecard(ctx context.Context, req roundt
 
 						if discordID != "" {
 							finalScores = append(finalScores, sharedtypes.ScoreInfo{
-								UserID: discordID,
-								Score:  sharedtypes.Score(team.Total),
-								TeamID: team.TeamID,
+								UserID:     discordID,
+								Score:      sharedtypes.Score(team.Total),
+								TeamID:     team.TeamID,
+								HoleScores: cloneInts(team.HoleScores),
 							})
 							matchedCount++
 							teamMatched = true
 						} else {
 							// Guest user - include with RawName but empty UserID
 							finalScores = append(finalScores, sharedtypes.ScoreInfo{
-								UserID:  "",
-								Score:   sharedtypes.Score(team.Total),
-								TeamID:  team.TeamID,
-								RawName: member.RawName,
+								UserID:     "",
+								Score:      sharedtypes.Score(team.Total),
+								TeamID:     team.TeamID,
+								RawName:    member.RawName,
+								HoleScores: cloneInts(team.HoleScores),
 							})
 							unmatchedPlayers = append(unmatchedPlayers, member.RawName)
 						}
@@ -303,16 +305,18 @@ func (s *RoundService) IngestNormalizedScorecard(ctx context.Context, req roundt
 						unmatchedPlayers = append(unmatchedPlayers, p.DisplayName)
 						if req.AllowGuestPlayers {
 							finalScores = append(finalScores, sharedtypes.ScoreInfo{
-								UserID:  "",
-								RawName: p.DisplayName,
-								Score:   sharedtypes.Score(p.Total),
+								UserID:     "",
+								RawName:    p.DisplayName,
+								Score:      sharedtypes.Score(p.Total),
+								HoleScores: cloneInts(p.HoleScores),
 							})
 						}
 						continue
 					}
 					finalScores = append(finalScores, sharedtypes.ScoreInfo{
-						UserID: discordID,
-						Score:  sharedtypes.Score(p.Total),
+						UserID:     discordID,
+						Score:      sharedtypes.Score(p.Total),
+						HoleScores: cloneInts(p.HoleScores),
 					})
 					matchedCount++
 				}
@@ -340,6 +344,7 @@ func (s *RoundService) IngestNormalizedScorecard(ctx context.Context, req roundt
 				RoundMode:        req.NormalizedData.Mode,
 				EventMessageID:   req.EventMessageID,
 				Timestamp:        time.Now().UTC(),
+				ParScores:        cloneInts(req.NormalizedData.ParScores),
 			}), nil
 		})
 	})

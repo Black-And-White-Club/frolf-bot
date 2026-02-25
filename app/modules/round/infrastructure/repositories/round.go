@@ -277,6 +277,7 @@ func convertToDomainRound(dbRound Round) *roundtypes.Round {
 		ImportedAt:      dbRound.ImportedAt,
 		ImportUserID:    dbRound.ImportUserID,
 		ImportChannelID: dbRound.ImportChannelID,
+		ParScores:       dbRound.ParScores,
 	}
 }
 
@@ -343,6 +344,9 @@ func (r *Impl) UpdateRound(ctx context.Context, db bun.IDB, guildID sharedtypes.
 	}
 	if round.ImportChannelID != "" {
 		dbRound.ImportChannelID = round.ImportChannelID
+	}
+	if len(round.ParScores) > 0 {
+		dbRound.ParScores = round.ParScores
 	}
 
 	var updatedDbRound Round

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Black-And-White-Club/frolf-bot/app/shared/security"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot/app/shared/security"
 	"github.com/google/uuid"
 	"github.com/uptrace/bun"
 )

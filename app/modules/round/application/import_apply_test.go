@@ -16,6 +16,338 @@ import (
 	"go.opentelemetry.io/otel/trace/noop"
 )
 
+func TestRoundService_ApplyImportedScores_HoleScores(t *testing.T) {
+	ptrScore := func(i int) *sharedtypes.Score {
+		s := sharedtypes.Score(i)
+		return &s
+	}
+
+	gID := sharedtypes.GuildID("guild-hole")
+	rID := sharedtypes.RoundID(uuid.New())
+	importID := "import-holes"
+	u1 := sharedtypes.DiscordID("user-1")
+	u2 := sharedtypes.DiscordID("user-2")
+
+	// 9-hole scorecard par values and a player's hole scores
+	parScores9 := []int{3, 4, 3, 3, 4, 5, 3, 4, 3}
+	holeScores9 := []int{3, 3, 4, 3, 5, 5, 2, 4, 4}
+
+	// Only 3 holes provided (partial upload)
+	partialHoles := []int{3, 4, 3}
+
+	type testCase struct {
+		name      string
+		input     roundtypes.ImportApplyScoresInput
+		setupFake func(*FakeRepo)
+		verify    func(*testing.T, *FakeRepo, ApplyImportedScoresResult, error)
+	}
+
+	tests := []testCase{
+		{
+			name: "Singles - HoleScores set on updated participant",
+			input: roundtypes.ImportApplyScoresInput{
+				GuildID:  gID,
+				RoundID:  rID,
+				ImportID: importID,
+				Scores: []roundtypes.ImportScoreData{
+					{UserID: u1, Score: 33, HoleScores: holeScores9},
+				},
+			},
+			setupFake: func(r *FakeRepo) {
+				r.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{ID: rID, EventMessageID: "msg-1"}, nil
+				}
+				r.GetParticipantsFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID) ([]roundtypes.Participant, error) {
+					return []roundtypes.Participant{
+						{UserID: u1, Score: ptrScore(40), Response: roundtypes.ResponseAccept},
+					}, nil
+				}
+				r.UpdateRoundsAndParticipantsFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, updates []roundtypes.RoundUpdate) error {
+					parts := updates[0].Participants
+					if len(parts[0].HoleScores) != 9 {
+						return errors.New("expected 9 hole scores on updated participant")
+					}
+					if parts[0].HoleScores[1] != holeScores9[1] {
+						return errors.New("hole score value mismatch on updated participant")
+					}
+					return nil
+				}
+			},
+			verify: func(t *testing.T, repo *FakeRepo, res ApplyImportedScoresResult, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if res.IsFailure() {
+					t.Fatalf("unexpected failure: %v", (*res.Failure).Error())
+				}
+				parts := (*res.Success).Participants
+				if len(parts[0].HoleScores) != 9 {
+					t.Errorf("expected 9 hole scores on result participant, got %d", len(parts[0].HoleScores))
+				}
+			},
+		},
+		{
+			name: "Singles - HoleScores set on newly added participant",
+			input: roundtypes.ImportApplyScoresInput{
+				GuildID:  gID,
+				RoundID:  rID,
+				ImportID: importID,
+				Scores: []roundtypes.ImportScoreData{
+					{UserID: u2, Score: 33, HoleScores: holeScores9},
+				},
+			},
+			setupFake: func(r *FakeRepo) {
+				r.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{ID: rID, EventMessageID: "msg-1"}, nil
+				}
+				r.GetParticipantsFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID) ([]roundtypes.Participant, error) {
+					return []roundtypes.Participant{}, nil // No existing participants
+				}
+				r.UpdateRoundsAndParticipantsFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, updates []roundtypes.RoundUpdate) error {
+					parts := updates[0].Participants
+					if len(parts[0].HoleScores) != 9 {
+						return errors.New("expected 9 hole scores on new participant")
+					}
+					return nil
+				}
+			},
+			verify: func(t *testing.T, repo *FakeRepo, res ApplyImportedScoresResult, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if res.IsFailure() {
+					t.Fatalf("unexpected failure: %v", (*res.Failure).Error())
+				}
+				parts := (*res.Success).Participants
+				if len(parts) != 1 {
+					t.Fatalf("expected 1 participant, got %d", len(parts))
+				}
+				if len(parts[0].HoleScores) != 9 {
+					t.Errorf("expected 9 hole scores on new participant result, got %d", len(parts[0].HoleScores))
+				}
+			},
+		},
+		{
+			name: "Singles - ParScores trigger UpdateRound with correct values",
+			input: roundtypes.ImportApplyScoresInput{
+				GuildID:   gID,
+				RoundID:   rID,
+				ImportID:  importID,
+				ParScores: parScores9,
+				Scores:    []roundtypes.ImportScoreData{{UserID: u1, Score: 33}},
+			},
+			setupFake: func(r *FakeRepo) {
+				r.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{ID: rID, EventMessageID: "msg-1"}, nil
+				}
+				r.GetParticipantsFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID) ([]roundtypes.Participant, error) {
+					return []roundtypes.Participant{}, nil
+				}
+				r.UpdateRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID, round *roundtypes.Round) (*roundtypes.Round, error) {
+					if len(round.ParScores) != 9 {
+						return nil, errors.New("expected 9 par scores in UpdateRound call")
+					}
+					for i, v := range parScores9 {
+						if round.ParScores[i] != v {
+							return nil, errors.New("par score value mismatch in UpdateRound")
+						}
+					}
+					return &roundtypes.Round{}, nil
+				}
+			},
+			verify: func(t *testing.T, repo *FakeRepo, res ApplyImportedScoresResult, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if res.IsFailure() {
+					t.Fatalf("UpdateRound validation failed: %v", (*res.Failure).Error())
+				}
+				if !slices.Contains(repo.Trace(), "UpdateRound") {
+					t.Errorf("expected UpdateRound called when ParScores non-empty, trace=%v", repo.Trace())
+				}
+			},
+		},
+		{
+			name: "Singles - No UpdateRound called when ParScores is empty",
+			input: roundtypes.ImportApplyScoresInput{
+				GuildID:  gID,
+				RoundID:  rID,
+				ImportID: importID,
+				Scores:   []roundtypes.ImportScoreData{{UserID: u1, Score: 33}},
+				// ParScores intentionally absent
+			},
+			setupFake: func(r *FakeRepo) {
+				r.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{ID: rID}, nil
+				}
+				r.GetParticipantsFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID) ([]roundtypes.Participant, error) {
+					return []roundtypes.Participant{}, nil
+				}
+			},
+			verify: func(t *testing.T, repo *FakeRepo, res ApplyImportedScoresResult, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if res.IsFailure() {
+					t.Fatalf("unexpected failure: %v", (*res.Failure).Error())
+				}
+				if slices.Contains(repo.Trace(), "UpdateRound") {
+					t.Errorf("UpdateRound should not be called when ParScores is empty, trace=%v", repo.Trace())
+				}
+			},
+		},
+		{
+			// UDisc may export a subset of holes if the scorecard was cut short or
+			// a hole was skipped. We store whatever was provided and render "-" for gaps.
+			name: "Singles - Partial HoleScores (3 of 9 holes) stored as-is",
+			input: roundtypes.ImportApplyScoresInput{
+				GuildID:  gID,
+				RoundID:  rID,
+				ImportID: importID,
+				Scores: []roundtypes.ImportScoreData{
+					{UserID: u1, Score: 33, HoleScores: partialHoles},
+				},
+			},
+			setupFake: func(r *FakeRepo) {
+				r.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{ID: rID}, nil
+				}
+				r.GetParticipantsFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID) ([]roundtypes.Participant, error) {
+					return []roundtypes.Participant{}, nil
+				}
+				r.UpdateRoundsAndParticipantsFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, updates []roundtypes.RoundUpdate) error {
+					parts := updates[0].Participants
+					if len(parts[0].HoleScores) != 3 {
+						return errors.New("expected exactly 3 hole scores, not padded or truncated")
+					}
+					return nil
+				}
+			},
+			verify: func(t *testing.T, repo *FakeRepo, res ApplyImportedScoresResult, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if res.IsFailure() {
+					t.Fatalf("unexpected failure: %v", (*res.Failure).Error())
+				}
+				if len((*res.Success).Participants[0].HoleScores) != 3 {
+					t.Errorf("expected 3 partial hole scores preserved, got %d", len((*res.Success).Participants[0].HoleScores))
+				}
+			},
+		},
+		{
+			name: "Singles Overwrite - HoleScores preserved",
+			input: roundtypes.ImportApplyScoresInput{
+				GuildID:                 gID,
+				RoundID:                 rID,
+				ImportID:                importID,
+				OverwriteExistingScores: true,
+				Scores: []roundtypes.ImportScoreData{
+					{UserID: u1, Score: 33, HoleScores: holeScores9},
+					{UserID: u2, Score: 36, HoleScores: partialHoles},
+				},
+			},
+			setupFake: func(r *FakeRepo) {
+				r.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{ID: rID, EventMessageID: "msg-1"}, nil
+				}
+				r.GetParticipantsFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID) ([]roundtypes.Participant, error) {
+					return []roundtypes.Participant{}, nil
+				}
+				r.UpdateRoundsAndParticipantsFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, updates []roundtypes.RoundUpdate) error {
+					parts := updates[0].Participants
+					if len(parts[0].HoleScores) != 9 {
+						return errors.New("expected 9 hole scores for u1 in overwrite")
+					}
+					if len(parts[1].HoleScores) != 3 {
+						return errors.New("expected 3 partial hole scores for u2 in overwrite")
+					}
+					return nil
+				}
+			},
+			verify: func(t *testing.T, repo *FakeRepo, res ApplyImportedScoresResult, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if res.IsFailure() {
+					t.Fatalf("unexpected failure: %v", (*res.Failure).Error())
+				}
+				parts := (*res.Success).Participants
+				if len(parts) != 2 {
+					t.Fatalf("expected 2 participants, got %d", len(parts))
+				}
+				if len(parts[0].HoleScores) != 9 {
+					t.Errorf("u1: expected 9 hole scores, got %d", len(parts[0].HoleScores))
+				}
+				if len(parts[1].HoleScores) != 3 {
+					t.Errorf("u2: expected 3 partial hole scores, got %d", len(parts[1].HoleScores))
+				}
+			},
+		},
+		{
+			// Guest players enabled: guests should also carry hole scores through.
+			name: "Singles - Guest participant gets HoleScores",
+			input: roundtypes.ImportApplyScoresInput{
+				GuildID:           gID,
+				RoundID:           rID,
+				ImportID:          importID,
+				AllowGuestPlayers: true,
+				Scores: []roundtypes.ImportScoreData{
+					{UserID: "", RawName: "Guest McGuest", Score: 38, HoleScores: holeScores9},
+				},
+			},
+			setupFake: func(r *FakeRepo) {
+				r.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{ID: rID}, nil
+				}
+				r.GetParticipantsFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID) ([]roundtypes.Participant, error) {
+					return []roundtypes.Participant{}, nil
+				}
+				r.UpdateRoundsAndParticipantsFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, updates []roundtypes.RoundUpdate) error {
+					parts := updates[0].Participants
+					if parts[0].UserID != "" {
+						return errors.New("expected guest (empty UserID)")
+					}
+					if len(parts[0].HoleScores) != 9 {
+						return errors.New("expected 9 hole scores on guest participant")
+					}
+					return nil
+				}
+			},
+			verify: func(t *testing.T, repo *FakeRepo, res ApplyImportedScoresResult, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if res.IsFailure() {
+					t.Fatalf("unexpected failure: %v", (*res.Failure).Error())
+				}
+				if len((*res.Success).Participants[0].HoleScores) != 9 {
+					t.Errorf("expected 9 hole scores on guest result participant")
+				}
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := NewFakeRepo()
+			if tc.setupFake != nil {
+				tc.setupFake(repo)
+			}
+
+			svc := &RoundService{
+				repo:    repo,
+				logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+				metrics: &roundmetrics.NoOpMetrics{},
+				tracer:  noop.NewTracerProvider().Tracer("test"),
+			}
+
+			res, err := svc.ApplyImportedScores(context.Background(), tc.input)
+			tc.verify(t, repo, res, err)
+		})
+	}
+}
+
 func TestRoundService_ApplyImportedScores(t *testing.T) {
 	// Helper for creating pointers
 	ptrScore := func(i int) *sharedtypes.Score {
