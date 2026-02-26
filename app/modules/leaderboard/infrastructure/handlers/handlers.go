@@ -98,7 +98,7 @@ func (h *LeaderboardHandlers) mapSuccessResults(
 				GuildID:          guildID,
 				RequestingUserID: requestorID,
 				BatchID:          batchID,
-				AssignmentCount:  len(assignments),
+				AssignmentCount:  len(requests),
 				Assignments:      assignments,
 			},
 		},

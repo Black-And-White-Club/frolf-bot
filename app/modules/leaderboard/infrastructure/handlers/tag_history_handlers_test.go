@@ -200,7 +200,11 @@ func TestLeaderboardHandlers_HandleTagListRequest(t *testing.T) {
 				tt.setupFake(fakeSvc)
 			}
 
-			h := &LeaderboardHandlers{service: fakeSvc, logger: slog.Default()}
+			h := &LeaderboardHandlers{
+				service:     fakeSvc,
+				userService: NewFakeUserService(),
+				logger:      slog.Default(),
+			}
 			got, err := h.HandleTagListRequest(context.Background(), tt.payload)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("error = %v, wantErr %v", err, tt.wantErr)

@@ -337,7 +337,7 @@ func TestMapSuccessResults_TagRemovalBehavior(t *testing.T) {
 			requests: []sharedtypes.TagAssignmentRequest{
 				{UserID: "user-1", TagNumber: 0},
 			},
-			wantAssignCount: 0,
+			wantAssignCount: 1,
 			wantAssignLen:   0,
 			wantChangedTags: map[sharedtypes.DiscordID]sharedtypes.TagNumber{
 				"user-1": 0,
@@ -349,7 +349,7 @@ func TestMapSuccessResults_TagRemovalBehavior(t *testing.T) {
 				{UserID: "user-1", TagNumber: 5},
 				{UserID: "user-2", TagNumber: 0},
 			},
-			wantAssignCount: 1,
+			wantAssignCount: 2,
 			wantAssignLen:   1,
 			wantChangedTags: map[sharedtypes.DiscordID]sharedtypes.TagNumber{
 				"user-1": 5,

@@ -52,9 +52,12 @@ func CalculateRoundPoints(participants []RoundParticipant) []PointAward {
 		return cmp.Compare(a.MemberID, b.MemberID)
 	})
 
-	awards := make([]PointAward, len(sorted))
+	var finalAwards []PointAward // Build dynamically since we skip untagged
 
 	for i := 0; i < len(sorted); i++ {
+		if sorted[i].TagNumber <= 0 {
+			continue // entirely skip points & season updates for untagged members
+		}
 		winner := PlayerContext{
 			ID:           sorted[i].MemberID,
 			RoundsPlayed: sorted[i].RoundsPlayed,
@@ -83,15 +86,15 @@ func CalculateRoundPoints(participants []RoundParticipant) []PointAward {
 			opponentsBeaten++
 		}
 
-		awards[i] = PointAward{
+		finalAwards = append(finalAwards, PointAward{
 			MemberID:        sorted[i].MemberID,
 			Points:          totalPoints,
 			OpponentsBeaten: opponentsBeaten,
 			Tier:            sorted[i].CurrentTier,
-		}
+		})
 	}
 
-	return awards
+	return finalAwards
 }
 
 // UpdateBestTag returns the better (lower) of the current best and the new tag.

@@ -6,7 +6,9 @@ import (
 	"time"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
+	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 )
 
@@ -118,10 +120,24 @@ func (h *LeaderboardHandlers) HandleTagListRequest(
 	}
 
 	members := make([]leaderboardevents.TagListMemberV1, len(tagList))
+	userIDs := make([]sharedtypes.DiscordID, 0, len(tagList))
 	for i, m := range tagList {
 		members[i] = leaderboardevents.TagListMemberV1{
 			MemberID:   m.MemberID,
 			CurrentTag: m.Tag,
+		}
+		userIDs = append(userIDs, sharedtypes.DiscordID(m.MemberID))
+	}
+
+	profiles := make(map[sharedtypes.DiscordID]*usertypes.UserProfile)
+	var syncRequests []*userevents.UserProfileSyncRequestPayloadV1
+
+	if len(userIDs) > 0 {
+		profileResult, _ := h.userService.LookupProfiles(ctx, userIDs, sharedtypes.GuildID(payload.GuildID))
+		if profileResult.IsSuccess() {
+			resp := profileResult.Success
+			profiles = (*resp).Profiles
+			syncRequests = (*resp).SyncRequests
 		}
 	}
 
@@ -130,11 +146,22 @@ func (h *LeaderboardHandlers) HandleTagListRequest(
 		topic = replyTo
 	}
 
-	return []handlerwrapper.Result{{
+	results := make([]handlerwrapper.Result, 0, 1+len(syncRequests))
+	results = append(results, handlerwrapper.Result{
 		Topic: topic,
 		Payload: &leaderboardevents.TagListResponsePayloadV1{
-			GuildID: payload.GuildID,
-			Members: members,
+			GuildID:  payload.GuildID,
+			Members:  members,
+			Profiles: profiles,
 		},
-	}}, nil
+	})
+
+	for _, syncReq := range syncRequests {
+		results = append(results, handlerwrapper.Result{
+			Topic:   userevents.UserProfileSyncRequestTopicV1,
+			Payload: syncReq,
+		})
+	}
+
+	return results, nil
 }

@@ -384,13 +384,12 @@ func TestCalculateAndPersistPoints_IncludesUntaggedParticipants(t *testing.T) {
 	}
 
 	// u1 has tag 1, u2 is untagged (tag 0). Both should appear in awards/history.
-	// u2 is not counted as an opponent by the domain, so u1 also earns 0 points here.
 	awards, err := svc.calculateAndPersistPoints(context.Background(), bun.Tx{}, cmd, map[string]int{"u1": 1, "u2": 0}, nil, "season-1")
 	if err != nil {
 		t.Fatalf("calculateAndPersistPoints returned error: %v", err)
 	}
-	if len(awards) != 2 {
-		t.Fatalf("expected 2 awards (tagged + untagged), got %d", len(awards))
+	if len(awards) != 1 {
+		t.Fatalf("expected 1 award (tagged), got %d", len(awards))
 	}
 	memberSet := make(map[string]int, len(awards))
 	for _, a := range awards {
@@ -399,23 +398,20 @@ func TestCalculateAndPersistPoints_IncludesUntaggedParticipants(t *testing.T) {
 	if _, ok := memberSet["u1"]; !ok {
 		t.Fatalf("expected u1 in awards, got %+v", awards)
 	}
-	if _, ok := memberSet["u2"]; !ok {
-		t.Fatalf("expected u2 in awards, got %+v", awards)
+	if _, ok := memberSet["u2"]; ok {
+		t.Fatalf("expected u2 to be excluded from awards, got %+v", awards)
 	}
-	if memberSet["u2"] != 0 {
-		t.Fatalf("expected u2 (untagged) to have 0 points, got %d", memberSet["u2"])
+	if len(bestTagMemberIDs) != 1 {
+		t.Fatalf("expected season best lookup for only tagged participant, got %+v", bestTagMemberIDs)
 	}
-	if len(bestTagMemberIDs) != 2 {
-		t.Fatalf("expected season best lookup for both participants, got %+v", bestTagMemberIDs)
+	if len(standingMemberIDs) != 1 {
+		t.Fatalf("expected standings lookup for only tagged participant, got %+v", standingMemberIDs)
 	}
-	if len(standingMemberIDs) != 2 {
-		t.Fatalf("expected standings lookup for both participants, got %+v", standingMemberIDs)
+	if len(savedHistories) != 1 {
+		t.Fatalf("expected point history write for only tagged participant, got %+v", savedHistories)
 	}
-	if len(savedHistories) != 2 {
-		t.Fatalf("expected point history write for both participants, got %+v", savedHistories)
-	}
-	if len(savedStandings) != 2 {
-		t.Fatalf("expected season standing upsert for both participants, got %+v", savedStandings)
+	if len(savedStandings) != 1 {
+		t.Fatalf("expected season standing upsert for only tagged participant, got %+v", savedStandings)
 	}
 }
 

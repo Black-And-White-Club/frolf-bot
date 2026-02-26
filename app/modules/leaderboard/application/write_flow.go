@@ -303,13 +303,16 @@ func (s *LeaderboardService) persistTagChanges(
 	}
 
 	// Write tag history entries
-	histEntries := make([]leaderboarddb.TagHistoryEntry, len(changes))
-	for i, ch := range changes {
+	var histEntries []leaderboarddb.TagHistoryEntry
+	for _, ch := range changes {
+		if ch.TagNumber <= 0 {
+			continue // defensive: never record tag removals/0 as assignments
+		}
 		var oldMember *string
 		if ch.OldMemberID != "" {
 			oldMember = &ch.OldMemberID
 		}
-		histEntries[i] = leaderboarddb.TagHistoryEntry{
+		histEntries = append(histEntries, leaderboarddb.TagHistoryEntry{
 			GuildID:     guildID,
 			RoundID:     roundID,
 			TagNumber:   ch.TagNumber,
@@ -317,9 +320,12 @@ func (s *LeaderboardService) persistTagChanges(
 			NewMemberID: ch.NewMemberID,
 			Reason:      reason,
 			Metadata:    "{}",
-		}
+		})
 	}
-	return s.tagHistRepo.BulkInsertTagHistory(ctx, tx, histEntries)
+	if len(histEntries) > 0 {
+		return s.tagHistRepo.BulkInsertTagHistory(ctx, tx, histEntries)
+	}
+	return nil
 }
 
 // ensureParticipantMembers ensures all round participants exist in league_members.
@@ -392,12 +398,15 @@ func (s *LeaderboardService) calculateAndPersistPoints(
 		finalTags[a.MemberID] = a.Tag
 	}
 
-	// All participants are eligible for point history; untagged participants receive 0 points.
-	// The domain's CalculateRoundPoints already handles TagNumber==0 correctly (sorted last,
-	// not counted as opponents, awarded 0 points).
+	// All participants with a positive tag are eligible for point history.
+	// The domain's CalculateRoundPoints already ignores untagged participants,
+	// but filtering them here saves DB queries for season lookups.
 	eligibleParticipants := make([]RoundParticipantInput, 0, len(cmd.Participants))
 	memberIDs := make([]sharedtypes.DiscordID, 0, len(cmd.Participants))
 	for _, p := range cmd.Participants {
+		if finalTags[p.MemberID] <= 0 {
+			continue // skip completely
+		}
 		eligibleParticipants = append(eligibleParticipants, p)
 		memberIDs = append(memberIDs, sharedtypes.DiscordID(p.MemberID))
 	}
@@ -951,9 +960,12 @@ func (s *LeaderboardService) getTagHistoryCore(ctx context.Context, guildID, mem
 		return nil, fmt.Errorf("LeaderboardService.GetTagHistory: %w", err)
 	}
 
-	views := make([]TagHistoryView, len(entries))
-	for i, entry := range entries {
-		views[i] = toTagHistoryView(entry)
+	var views []TagHistoryView
+	for _, entry := range entries {
+		if entry.TagNumber <= 0 {
+			continue // skip tag removals/nulls from surfacing in history
+		}
+		views = append(views, toTagHistoryView(entry))
 	}
 	return views, nil
 }
@@ -965,9 +977,12 @@ func (s *LeaderboardService) generateTagGraphPNGCore(ctx context.Context, guildI
 		return nil, fmt.Errorf("LeaderboardService.GenerateTagGraphPNG: %w", err)
 	}
 
-	views := make([]TagHistoryView, len(entries))
-	for i, entry := range entries {
-		views[i] = toTagHistoryView(entry)
+	var views []TagHistoryView
+	for _, entry := range entries {
+		if entry.TagNumber <= 0 {
+			continue // skip tag removals/nulls from graph
+		}
+		views = append(views, toTagHistoryView(entry))
 	}
 	slices.Reverse(views)
 

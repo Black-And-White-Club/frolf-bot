@@ -50,8 +50,8 @@ func TestCalculateRoundPointsUntaggedNotCountedAsOpponent(t *testing.T) {
 	}
 
 	awards := CalculateRoundPoints(participants)
-	if len(awards) != 2 {
-		t.Fatalf("expected 2 awards, got %d", len(awards))
+	if len(awards) != 1 {
+		t.Fatalf("expected 1 award, got %d", len(awards))
 	}
 
 	// Tagged player sorts first, but earns 0 points: untagged players are not counted as opponents.
@@ -63,13 +63,6 @@ func TestCalculateRoundPointsUntaggedNotCountedAsOpponent(t *testing.T) {
 	}
 	if awards[0].OpponentsBeaten != 0 {
 		t.Errorf("expected 0 opponents beaten, got %d", awards[0].OpponentsBeaten)
-	}
-
-	if awards[1].MemberID != "untagged" {
-		t.Errorf("expected untagged player to be last, got %s", awards[1].MemberID)
-	}
-	if awards[1].Points != 0 {
-		t.Errorf("expected untagged player to earn 0 points, got %d", awards[1].Points)
 	}
 }
 
