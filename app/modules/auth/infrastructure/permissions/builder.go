@@ -170,13 +170,15 @@ func publishPatterns(clubUUID, guildID string, includeParticipant bool) []string
 			fmt.Sprintf("season.list.requested.v1.%s", id),
 			fmt.Sprintf("season.standings.requested.v1.%s", id),
 		)
-		if includeParticipant {
-			// Participant actions
-			patterns = append(patterns,
-				fmt.Sprintf("round.participant.join.v1.%s", id),
-				fmt.Sprintf("round.participant.leave.v1.%s", id),
-			)
-		}
+	}
+
+	if includeParticipant {
+		// Participant actions
+		patterns = append(patterns,
+			"round.participant.join.requested.v1",
+			"round.participant.declined.v1",
+			"round.participant.removal.requested.v1",
+		)
 	}
 
 	// Club info request - scoped to the user's active club
@@ -204,19 +206,14 @@ func (b *Builder) editorPermissions(clubUUID, userUUID, guildID, userID string) 
 	pubAllow := publishPatterns(clubUUID, guildID, true)
 
 	// Editors can also create/update/delete rounds and submit scores
-	for _, id := range []string{clubUUID, guildID} {
-		if id == "" {
-			continue
-		}
-		pubAllow = append(pubAllow,
-			fmt.Sprintf("round.create.v1.%s", id),
-			fmt.Sprintf("round.update.v1.%s", id),
-			fmt.Sprintf("round.delete.v1.%s", id),
-			fmt.Sprintf("score.submit.v1.%s", id),
-			fmt.Sprintf("leaderboard.point.history.requested.v1.%s", id),
-			fmt.Sprintf("leaderboard.get.season.standings.v1.%s", id),
-		)
-	}
+	pubAllow = append(pubAllow,
+		"round.creation.requested.v1",
+		"round.update.requested.v1",
+		"round.delete.requested.v1",
+		"round.score.update.requested.v1",
+		"leaderboard.point.history.requested.v1",
+		"leaderboard.get.season.standings.v1",
+	)
 
 	return &Permissions{
 		Subscribe: PermissionSet{
@@ -234,28 +231,23 @@ func (b *Builder) editorPermissions(clubUUID, userUUID, guildID, userID string) 
 func (b *Builder) adminPermissions(clubUUID, userUUID, guildID, userID string) *Permissions {
 	editor := b.editorPermissions(clubUUID, userUUID, guildID, userID)
 
-	// Admin-only publish subjects (scoped by guild/club ID)
-	for _, id := range []string{clubUUID, guildID} {
-		if id == "" {
-			continue
-		}
-		editor.Publish.Allow = append(editor.Publish.Allow,
-			fmt.Sprintf("leaderboard.manual.point.adjustment.v1.%s", id),
-			fmt.Sprintf("leaderboard.recalculate.round.v1.%s", id),
-			fmt.Sprintf("leaderboard.start.new.season.v1.%s", id),
-			fmt.Sprintf("leaderboard.end.season.v1.%s", id),
-			fmt.Sprintf("leaderboard.batch.tag.assignment.requested.v1.%s", id),
-			fmt.Sprintf("round.scorecard.admin.upload.requested.v1.%s", id),
-		)
+	// Admin-only publish subjects (unscoped global topics)
+	editor.Publish.Allow = append(editor.Publish.Allow,
+		"leaderboard.manual.point.adjustment.v1",
+		"leaderboard.recalculate.round.v1",
+		"leaderboard.start.new.season.v1",
+		"leaderboard.end.season.v1",
+		"leaderboard.batch.tag.assignment.requested.v1",
+		"round.scorecard.admin.upload.requested.v1",
+	)
 
-		// Admin-only subscribe subjects for operation feedback (scoped)
-		editor.Subscribe.Allow = append(editor.Subscribe.Allow,
-			fmt.Sprintf("leaderboard.batch.tag.assigned.v1.%s", id),
-			fmt.Sprintf("leaderboard.batch.tag.assignment.failed.v1.%s", id),
-			fmt.Sprintf("leaderboard.manual.point.adjustment.success.v1.%s", id),
-			fmt.Sprintf("leaderboard.manual.point.adjustment.failed.v1.%s", id),
-		)
-	}
+	// Admin-only subscribe subjects for operation feedback (unscoped global topics)
+	editor.Subscribe.Allow = append(editor.Subscribe.Allow,
+		"leaderboard.batch.tag.assigned.v1",
+		"leaderboard.batch.tag.assignment.failed.v1",
+		"leaderboard.manual.point.adjustment.success.v1",
+		"leaderboard.manual.point.adjustment.failed.v1",
+	)
 
 	return editor
 }
