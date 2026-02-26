@@ -714,10 +714,12 @@ func (s *LeaderboardService) applyTagAssignmentsInTx(
 
 	for _, assignment := range assignments {
 		requestedUsers[assignment.memberID] = struct{}{}
-		if otherUser, exists := requestedTags[assignment.tag]; exists && otherUser != assignment.memberID {
-			return nil, fmt.Errorf("duplicate requested tag %d for users %s and %s", assignment.tag, otherUser, assignment.memberID)
+		if assignment.tag != 0 {
+			if otherUser, exists := requestedTags[assignment.tag]; exists && otherUser != assignment.memberID {
+				return nil, fmt.Errorf("duplicate requested tag %d for users %s and %s", assignment.tag, otherUser, assignment.memberID)
+			}
+			requestedTags[assignment.tag] = assignment.memberID
 		}
-		requestedTags[assignment.tag] = assignment.memberID
 
 		uniqueMemberIDs = append(uniqueMemberIDs, assignment.memberID)
 		uniqueTags = append(uniqueTags, assignment.tag)
