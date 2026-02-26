@@ -208,7 +208,8 @@ type FakeCommandPipeline struct {
 	StartSeasonFunc         func(ctx context.Context, guildID, seasonID, seasonName string) error
 	EndSeasonFunc           func(ctx context.Context, guildID string) error
 	ResetTagsFunc           func(ctx context.Context, guildID string, finishOrder []string) ([]leaderboarddomain.TagChange, error)
-	GetTaggedFunc           func(ctx context.Context, guildID string, clubUUID *string) ([]TaggedMemberView, error)
+	GetTaggedMembersFunc    func(ctx context.Context, guildID string, clubUUID *string) ([]TaggedMemberView, error)
+	GetAllMembersFunc       func(ctx context.Context, guildID string, clubUUID *string) ([]MemberTagView, error)
 	GetMemberTagFunc        func(ctx context.Context, guildID, memberID string) (int, bool, error)
 	CheckTagFunc            func(ctx context.Context, guildID, memberID string, tagNumber int) (bool, string, error)
 	GetTagHistoryFunc       func(ctx context.Context, guildID, memberID string, limit int) ([]TagHistoryView, error)
@@ -257,8 +258,15 @@ func (f *FakeCommandPipeline) ResetTags(ctx context.Context, guildID string, fin
 }
 
 func (f *FakeCommandPipeline) GetTaggedMembers(ctx context.Context, guildID string, clubUUID *string) ([]TaggedMemberView, error) {
-	if f.GetTaggedFunc != nil {
-		return f.GetTaggedFunc(ctx, guildID, clubUUID)
+	if f.GetTaggedMembersFunc != nil {
+		return f.GetTaggedMembersFunc(ctx, guildID, clubUUID)
+	}
+	return nil, nil
+}
+
+func (f *FakeCommandPipeline) GetAllMembers(ctx context.Context, guildID string, clubUUID *string) ([]MemberTagView, error) {
+	if f.GetAllMembersFunc != nil {
+		return f.GetAllMembersFunc(ctx, guildID, clubUUID)
 	}
 	return nil, nil
 }

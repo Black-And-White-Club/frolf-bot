@@ -121,7 +121,7 @@ func (h *LeaderboardHandlers) HandleTagListRequest(
 	for i, m := range tagList {
 		members[i] = leaderboardevents.TagListMemberV1{
 			MemberID:   m.MemberID,
-			CurrentTag: &m.Tag,
+			CurrentTag: m.Tag,
 		}
 	}
 

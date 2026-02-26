@@ -102,10 +102,11 @@ func TestLeaderboardService_GetTagList(t *testing.T) {
 		{
 			name: "returns sorted tag list",
 			setupFake: func(f *FakeCommandPipeline) {
-				f.GetTaggedFunc = func(ctx context.Context, guildID string, clubUUID *string) ([]TaggedMemberView, error) {
-					return []TaggedMemberView{
-						{MemberID: "user-2", Tag: 2},
-						{MemberID: "user-1", Tag: 1},
+				f.GetAllMembersFunc = func(ctx context.Context, guildID string, clubUUID *string) ([]MemberTagView, error) {
+					tag1, tag2 := 1, 2
+					return []MemberTagView{
+						{MemberID: "user-2", Tag: &tag2},
+						{MemberID: "user-1", Tag: &tag1},
 					}, nil
 				}
 			},
@@ -114,8 +115,8 @@ func TestLeaderboardService_GetTagList(t *testing.T) {
 		{
 			name: "returns empty list when no tagged members",
 			setupFake: func(f *FakeCommandPipeline) {
-				f.GetTaggedFunc = func(ctx context.Context, guildID string, clubUUID *string) ([]TaggedMemberView, error) {
-					return []TaggedMemberView{}, nil
+				f.GetAllMembersFunc = func(ctx context.Context, guildID string, clubUUID *string) ([]MemberTagView, error) {
+					return []MemberTagView{}, nil
 				}
 			},
 			wantCount: 0,
@@ -123,7 +124,7 @@ func TestLeaderboardService_GetTagList(t *testing.T) {
 		{
 			name: "pipeline error propagates",
 			setupFake: func(f *FakeCommandPipeline) {
-				f.GetTaggedFunc = func(ctx context.Context, guildID string, clubUUID *string) ([]TaggedMemberView, error) {
+				f.GetAllMembersFunc = func(ctx context.Context, guildID string, clubUUID *string) ([]MemberTagView, error) {
 					return nil, errors.New("db error")
 				}
 			},

@@ -80,6 +80,32 @@ func (s *LeaderboardService) GetTaggedMembers(ctx context.Context, guildID share
 	return members, nil
 }
 
+// getAllMembersCore returns ALL members for a guild including those without an active tag (optionally filtered by club).
+func (s *LeaderboardService) getAllMembersCore(ctx context.Context, guildID sharedtypes.GuildID, clubUUID *string) ([]MemberTagView, error) {
+	// 5. Get current tags (pass s.db)
+	repoMembers, err := s.memberRepo.GetMembersByGuild(ctx, s.db, string(guildID))
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to get all members",
+			"guild_id", guildID,
+			"club_uuid", clubUUID,
+			"error", err.Error(),
+		)
+		return nil, fmt.Errorf("failed to get all members: %w", err)
+	}
+
+	// Map DB model to Service View Model
+	members := make([]MemberTagView, 0, len(repoMembers))
+	for _, m := range repoMembers {
+		// PWA needs to receive Members with nil tags, so no filter here.
+		members = append(members, MemberTagView{
+			MemberID: m.MemberID,
+			Tag:      m.CurrentTag,
+		})
+	}
+
+	return members, nil
+}
+
 // GetTagByUserID returns the tag number for a given user.
 func (s *LeaderboardService) GetTagByUserID(
 	ctx context.Context,

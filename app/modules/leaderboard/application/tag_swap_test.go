@@ -37,7 +37,7 @@ func TestLeaderboardService_TagSwapRequested(t *testing.T) {
 					}
 					return 0, false, nil
 				}
-				p.GetTaggedFunc = func(ctx context.Context, guildID string, clubUUID *string) ([]TaggedMemberView, error) {
+				p.GetTaggedMembersFunc = func(ctx context.Context, guildID string, clubUUID *string) ([]TaggedMemberView, error) {
 					return []TaggedMemberView{
 						{MemberID: string(requestorID), Tag: 1},
 						{MemberID: string(targetID), Tag: 2},
@@ -77,7 +77,7 @@ func TestLeaderboardService_TagSwapRequested(t *testing.T) {
 				p.GetMemberTagFunc = func(ctx context.Context, guildID, memberID string) (int, bool, error) {
 					return 1, true, nil
 				}
-				p.GetTaggedFunc = func(ctx context.Context, guildID string, clubUUID *string) ([]TaggedMemberView, error) {
+				p.GetTaggedMembersFunc = func(ctx context.Context, guildID string, clubUUID *string) ([]TaggedMemberView, error) {
 					return []TaggedMemberView{{MemberID: string(requestorID), Tag: 1}}, nil
 				}
 			},
@@ -118,7 +118,7 @@ func TestLeaderboardService_TagSwapRequested(t *testing.T) {
 				p.GetMemberTagFunc = func(ctx context.Context, guildID, memberID string) (int, bool, error) {
 					return 1, true, nil
 				}
-				p.GetTaggedFunc = func(ctx context.Context, guildID string, clubUUID *string) ([]TaggedMemberView, error) {
+				p.GetTaggedMembersFunc = func(ctx context.Context, guildID string, clubUUID *string) ([]TaggedMemberView, error) {
 					return []TaggedMemberView{{MemberID: string(requestorID), Tag: 1}}, nil
 				}
 			},
@@ -156,7 +156,7 @@ func TestLeaderboardService_TagSwapRequested(t *testing.T) {
 				p.GetMemberTagFunc = func(ctx context.Context, guildID, memberID string) (int, bool, error) {
 					return 1, true, nil
 				}
-				p.GetTaggedFunc = func(ctx context.Context, guildID string, clubUUID *string) ([]TaggedMemberView, error) {
+				p.GetTaggedMembersFunc = func(ctx context.Context, guildID string, clubUUID *string) ([]TaggedMemberView, error) {
 					return []TaggedMemberView{
 						{MemberID: string(requestorID), Tag: 1},
 						{MemberID: string(targetID), Tag: 2},

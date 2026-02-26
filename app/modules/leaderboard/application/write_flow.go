@@ -46,6 +46,13 @@ type TaggedMemberView struct {
 	Tag      int
 }
 
+// MemberTagView is similar to TaggedMemberView, but explicitly supports nullable tags.
+// Used by admin interfaces (like PWA) to identify members who hold no tag.
+type MemberTagView struct {
+	MemberID string
+	Tag      *int
+}
+
 const RecalculationWindow = 24 * time.Hour
 
 // DefaultTagHistoryLimit is the default number of tag history entries returned.

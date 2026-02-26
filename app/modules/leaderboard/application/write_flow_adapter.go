@@ -44,6 +44,10 @@ func (p *serviceCommandPipeline) GetTaggedMembers(ctx context.Context, guildID s
 	return p.service.GetTaggedMembers(ctx, sharedtypes.GuildID(guildID), clubUUID)
 }
 
+func (p *serviceCommandPipeline) GetAllMembers(ctx context.Context, guildID string, clubUUID *string) ([]MemberTagView, error) {
+	return p.service.getAllMembersCore(ctx, sharedtypes.GuildID(guildID), clubUUID)
+}
+
 func (p *serviceCommandPipeline) GetMemberTag(ctx context.Context, guildID, memberID string) (int, bool, error) {
 	return p.service.getMemberTagCore(ctx, guildID, memberID)
 }

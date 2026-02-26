@@ -160,10 +160,12 @@ func TestLeaderboardHandlers_HandleTagListRequest(t *testing.T) {
 			name:    "success with members",
 			payload: &leaderboardevents.TagListRequestedPayloadV1{GuildID: string(guildID)},
 			setupFake: func(f *FakeService) {
-				f.GetTagListFunc = func(ctx context.Context, g sharedtypes.GuildID, clubUUID *string) ([]leaderboardservice.TaggedMemberView, error) {
-					return []leaderboardservice.TaggedMemberView{
-						{MemberID: "user-1", Tag: 1},
-						{MemberID: "user-2", Tag: 2},
+				f.GetTagListFunc = func(ctx context.Context, g sharedtypes.GuildID, clubUUID *string) ([]leaderboardservice.MemberTagView, error) {
+					tag1 := 1
+					tag2 := 2
+					return []leaderboardservice.MemberTagView{
+						{MemberID: "user-1", Tag: &tag1},
+						{MemberID: "user-2", Tag: &tag2},
 					}, nil
 				}
 			},
@@ -173,8 +175,8 @@ func TestLeaderboardHandlers_HandleTagListRequest(t *testing.T) {
 			name:    "success with empty list",
 			payload: &leaderboardevents.TagListRequestedPayloadV1{GuildID: string(guildID)},
 			setupFake: func(f *FakeService) {
-				f.GetTagListFunc = func(ctx context.Context, g sharedtypes.GuildID, clubUUID *string) ([]leaderboardservice.TaggedMemberView, error) {
-					return []leaderboardservice.TaggedMemberView{}, nil
+				f.GetTagListFunc = func(ctx context.Context, g sharedtypes.GuildID, clubUUID *string) ([]leaderboardservice.MemberTagView, error) {
+					return []leaderboardservice.MemberTagView{}, nil
 				}
 			},
 			wantTopic: leaderboardevents.LeaderboardTagListResponseV1,
@@ -183,7 +185,7 @@ func TestLeaderboardHandlers_HandleTagListRequest(t *testing.T) {
 			name:    "service error returns failure topic",
 			payload: &leaderboardevents.TagListRequestedPayloadV1{GuildID: string(guildID)},
 			setupFake: func(f *FakeService) {
-				f.GetTagListFunc = func(ctx context.Context, g sharedtypes.GuildID, clubUUID *string) ([]leaderboardservice.TaggedMemberView, error) {
+				f.GetTagListFunc = func(ctx context.Context, g sharedtypes.GuildID, clubUUID *string) ([]leaderboardservice.MemberTagView, error) {
 					return nil, errors.New("db error")
 				}
 			},

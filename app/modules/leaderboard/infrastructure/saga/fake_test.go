@@ -157,7 +157,7 @@ func (f *FakeLeaderboardService) GetTagHistory(ctx context.Context, guildID shar
 	return nil, nil
 }
 
-func (f *FakeLeaderboardService) GetTagList(ctx context.Context, guildID sharedtypes.GuildID, clubUUID *string) ([]leaderboardservice.TaggedMemberView, error) {
+func (f *FakeLeaderboardService) GetTagList(ctx context.Context, guildID sharedtypes.GuildID, clubUUID *string) ([]leaderboardservice.MemberTagView, error) {
 	f.trace = append(f.trace, "GetTagList")
 	return nil, nil
 }
