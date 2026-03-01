@@ -9,9 +9,9 @@ import (
 )
 
 // findParRowXLSX identifies the par row and extracts par values.
-// Returns: parRowIndex, headerRowIndex, nameColIndex, holeStartColIdx, layoutType, parScores, error
-func findParRowXLSX(rows [][]string) (int, int, int, int, string, []int, error) {
-	headerRowIdx, nameColIdx, holeStartColIdx, layoutType := detectLayout(rows)
+// Returns: parRowIndex, headerRowIndex, nameColIndex, holeStartColIdx, positionColIdx, layoutType, parScores, error
+func findParRowXLSX(rows [][]string) (int, int, int, int, int, string, []int, error) {
+	headerRowIdx, nameColIdx, holeStartColIdx, positionColIdx, layoutType := detectLayout(rows)
 
 	if headerRowIdx != -1 {
 		if layoutType == "leaderboard" {
@@ -41,7 +41,7 @@ func findParRowXLSX(rows [][]string) (int, int, int, int, string, []int, error) 
 
 			if numHoles > 0 {
 				parScores := make([]int, numHoles)
-				return headerRowIdx, headerRowIdx, nameColIdx, holeStartColIdx, layoutType, parScores, nil
+				return headerRowIdx, headerRowIdx, nameColIdx, holeStartColIdx, positionColIdx, layoutType, parScores, nil
 			}
 		}
 
@@ -54,14 +54,14 @@ func findParRowXLSX(rows [][]string) (int, int, int, int, string, []int, error) 
 			nameVal := strings.TrimSpace(row[nameColIdx])
 			if strings.Contains(strings.ToLower(nameVal), "par") {
 				if len(row) <= holeStartColIdx {
-					return -1, -1, -1, -1, "", nil, fmt.Errorf("par row too short")
+					return -1, -1, -1, -1, -1, "", nil, fmt.Errorf("par row too short")
 				}
 
 				parScores, err := parseScoreRowXLSX(row[holeStartColIdx:])
 				if err != nil {
-					return -1, -1, -1, -1, "", nil, fmt.Errorf("invalid par row at line %d: %w", i+1, err)
+					return -1, -1, -1, -1, -1, "", nil, fmt.Errorf("invalid par row at line %d: %w", i+1, err)
 				}
-				return i, headerRowIdx, nameColIdx, holeStartColIdx, layoutType, parScores, nil
+				return i, headerRowIdx, nameColIdx, holeStartColIdx, positionColIdx, layoutType, parScores, nil
 			}
 		}
 
@@ -78,7 +78,7 @@ func findParRowXLSX(rows [][]string) (int, int, int, int, string, []int, error) 
 
 			parScores, err := parseScoreRowXLSX(row[holeStartColIdx:])
 			if err == nil && len(parScores) > 0 {
-				return i, headerRowIdx, nameColIdx, holeStartColIdx, layoutType, parScores, nil
+				return i, headerRowIdx, nameColIdx, holeStartColIdx, positionColIdx, layoutType, parScores, nil
 			}
 		}
 	}
@@ -105,28 +105,29 @@ func findParRowXLSX(rows [][]string) (int, int, int, int, string, []int, error) 
 		if strings.Contains(strings.ToLower(firstVal), "par") {
 			parScores, err := parseScoreRowXLSX(row[firstColIdx+1:])
 			if err != nil {
-				return -1, -1, -1, -1, "", nil, fmt.Errorf("invalid par row at line %d: %w", i+1, err)
+				return -1, -1, -1, -1, -1, "", nil, fmt.Errorf("invalid par row at line %d: %w", i+1, err)
 			}
-			return i, -1, firstColIdx, firstColIdx + 1, "scorecard", parScores, nil
+			return i, -1, firstColIdx, firstColIdx + 1, -1, "scorecard", parScores, nil
 		}
 
 		parScores, err := parseScoreRowXLSX(row[firstColIdx:])
 		if err == nil && len(parScores) >= 9 && !isLikelyPlayerNameXLSX(firstVal) {
-			return i, -1, firstColIdx, firstColIdx, "scorecard", parScores, nil
+			return i, -1, firstColIdx, firstColIdx, -1, "scorecard", parScores, nil
 		}
 	}
 
-	return -1, -1, -1, -1, "", nil, nil
+	return -1, -1, -1, -1, -1, "", nil, nil
 }
 
 // detectLayout attempts to find the header row and column indices.
-// Returns: headerRowIndex, nameColIndex, holeStartColIndex, layoutType
+// Returns: headerRowIndex, nameColIndex, holeStartColIndex, positionColIndex, layoutType
 // Returns -1s if not found.
-func detectLayout(rows [][]string) (int, int, int, string) {
+func detectLayout(rows [][]string) (int, int, int, int, string) {
 	for i, row := range rows {
 		nameIdx := -1
 		usernameIdx := -1
 		holeStartIdx := -1
+		positionIdx := -1
 		isLeaderboard := false
 
 		for c, val := range row {
@@ -145,6 +146,9 @@ func detectLayout(rows [][]string) (int, int, int, string) {
 			// Check for Leaderboard headers
 			if val == "division" || val == "position" {
 				isLeaderboard = true
+			}
+			if val == "position" {
+				positionIdx = c
 			}
 
 			// Check for Hole 1 (supports "hole1", "hole 1", "hole_1", "h1", "H1", "1")
@@ -166,10 +170,10 @@ func detectLayout(rows [][]string) (int, int, int, string) {
 			if isLeaderboard {
 				layout = "leaderboard"
 			}
-			return i, nameIdx, holeStartIdx, layout
+			return i, nameIdx, holeStartIdx, positionIdx, layout
 		}
 	}
-	return -1, -1, -1, ""
+	return -1, -1, -1, -1, ""
 }
 
 func isNumeric(s string) bool {
@@ -213,7 +217,7 @@ func parseScoreRowXLSX(row []string) ([]int, error) {
 }
 
 // extractPlayerScoresXLSX extracts all player score rows from XLSX
-func extractPlayerScoresXLSX(rows [][]string, parRowIndex int, headerRowIndex int, nameColIndex int, holeStartColIdx int, numHoles int) ([]roundtypes.PlayerScoreRow, error) {
+func extractPlayerScoresXLSX(rows [][]string, parRowIndex int, headerRowIndex int, nameColIndex int, holeStartColIdx int, positionColIdx int, numHoles int) ([]roundtypes.PlayerScoreRow, error) {
 	var players []roundtypes.PlayerScoreRow
 
 	// Detect relative score column
@@ -278,18 +282,23 @@ func extractPlayerScoresXLSX(rows [][]string, parRowIndex int, headerRowIndex in
 			total = calculateRelativeScoreXLSX(scores, parScores)
 		}
 
-		// =========================================================
+		// Check DNF status from the position column
+		isDNF := false
+		if positionColIdx >= 0 && positionColIdx < len(row) {
+			isDNF = strings.ToUpper(strings.TrimSpace(row[positionColIdx])) == "DNF"
+		}
+
 		// DOUBLES DETECTION LOGIC
-		// =========================================================
 		teamNames := SplitPlayerNames(playerName)
 		isTeam := len(teamNames) > 1
 
 		players = append(players, roundtypes.PlayerScoreRow{
-			PlayerName: playerName, // Keep raw "Alec + Jess"
+			PlayerName: playerName,
 			HoleScores: scores,
 			Total:      total,
-			IsTeam:     isTeam,    // Flag this row
-			TeamNames:  teamNames, // Store the split names for the service
+			IsTeam:     isTeam,
+			TeamNames:  teamNames,
+			IsDNF:      isDNF,
 		})
 	}
 
@@ -301,8 +310,8 @@ func extractPlayerScoresXLSX(rows [][]string, parRowIndex int, headerRowIndex in
 }
 
 // parsePlayerScoresXLSX is a wrapper for extractPlayerScoresXLSX to match the signature used in xlsx_core.go
-func parsePlayerScoresXLSX(rows [][]string, parRowIndex int, headerRowIndex int, nameColIndex int, holeStartColIdx int, parScores []int) ([]roundtypes.PlayerScoreRow, error) {
-	return extractPlayerScoresXLSX(rows, parRowIndex, headerRowIndex, nameColIndex, holeStartColIdx, len(parScores))
+func parsePlayerScoresXLSX(rows [][]string, parRowIndex int, headerRowIndex int, nameColIndex int, holeStartColIdx int, positionColIdx int, parScores []int) ([]roundtypes.PlayerScoreRow, error) {
+	return extractPlayerScoresXLSX(rows, parRowIndex, headerRowIndex, nameColIndex, holeStartColIdx, positionColIdx, len(parScores))
 }
 
 // detectRelativeScoreColumnXLSX looks for a relative score column ("+/-", "round_relative_score", etc.)

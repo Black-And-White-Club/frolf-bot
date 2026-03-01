@@ -57,8 +57,16 @@ func (s *ScoreService) executeProcessRoundScores(
 		return results.FailureResult[ProcessRoundScoresResult, error](ErrScoresAlreadyExist), nil
 	}
 
+	// Filter out DNF players before processing — they keep their tag and receive no points.
+	activeScores := make([]sharedtypes.ScoreInfo, 0, len(scores))
+	for _, sc := range scores {
+		if !sc.IsDNF {
+			activeScores = append(activeScores, sc)
+		}
+	}
+
 	// 2. Logic: Process scores
-	processedScores, err := s.ProcessScoresForStorage(ctx, guildID, roundID, scores)
+	processedScores, err := s.ProcessScoresForStorage(ctx, guildID, roundID, activeScores)
 	if err != nil {
 		return results.FailureResult[ProcessRoundScoresResult, error](
 			fmt.Errorf("score processing failed: %w", err),

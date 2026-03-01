@@ -142,6 +142,7 @@ func (s *RoundService) NotifyScoreModule(ctx context.Context, result *roundtypes
 				UserID:    p.UserID,
 				TagNumber: tagPtr,
 				Score:     *p.Score,
+				IsDNF:     p.IsDNF,
 			})
 		}
 

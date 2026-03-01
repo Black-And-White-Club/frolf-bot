@@ -280,6 +280,7 @@ func (h *RoundHandlers) HandleParticipantScoreUpdated(
 				Score:     *p.Score,
 				TagNumber: p.TagNumber,
 				TeamID:    teamID,
+				IsDNF:     p.IsDNF,
 			})
 		}
 

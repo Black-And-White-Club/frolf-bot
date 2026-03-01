@@ -95,6 +95,7 @@ func (s *RoundService) NormalizeParsedScorecard(ctx context.Context, data *round
 					DisplayName: strings.TrimSpace(p.PlayerName),
 					Total:       p.Total,
 					HoleScores:  cloneInts(p.HoleScores),
+					IsDNF:       p.IsDNF,
 				})
 			}
 		}
@@ -309,6 +310,7 @@ func (s *RoundService) IngestNormalizedScorecard(ctx context.Context, req roundt
 								RawName:    p.DisplayName,
 								Score:      sharedtypes.Score(p.Total),
 								HoleScores: cloneInts(p.HoleScores),
+								IsDNF:      p.IsDNF,
 							})
 						}
 						continue
@@ -317,6 +319,7 @@ func (s *RoundService) IngestNormalizedScorecard(ctx context.Context, req roundt
 						UserID:     discordID,
 						Score:      sharedtypes.Score(p.Total),
 						HoleScores: cloneInts(p.HoleScores),
+						IsDNF:      p.IsDNF,
 					})
 					matchedCount++
 				}

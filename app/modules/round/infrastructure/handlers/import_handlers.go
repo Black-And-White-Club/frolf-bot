@@ -345,6 +345,7 @@ func (h *RoundHandlers) HandleImportCompleted(
 			Score:      int(s.Score),
 			TeamID:     s.TeamID,
 			HoleScores: s.HoleScores,
+			IsDNF:      s.IsDNF,
 		}
 	}
 

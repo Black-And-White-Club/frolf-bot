@@ -148,6 +148,7 @@ func (h *RoundHandlers) HandleRoundFinalized(
 					Score:     score,
 					TagNumber: p.TagNumber,
 					TeamID:    p.TeamID,
+					IsDNF:     p.IsDNF,
 				}
 			}
 

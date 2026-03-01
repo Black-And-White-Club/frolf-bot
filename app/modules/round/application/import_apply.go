@@ -128,6 +128,7 @@ func (s *RoundService) applySinglesScores(
 				existingParticipants[idx].Response = roundtypes.ResponseAccept
 				existingParticipants[idx].RawName = scoreInfo.RawName
 				existingParticipants[idx].HoleScores = scoreInfo.HoleScores
+				existingParticipants[idx].IsDNF = scoreInfo.IsDNF
 			} else {
 				existingParticipants = append(existingParticipants, roundtypes.Participant{
 					UserID:     "",
@@ -135,6 +136,7 @@ func (s *RoundService) applySinglesScores(
 					Score:      &score,
 					Response:   roundtypes.ResponseAccept,
 					HoleScores: scoreInfo.HoleScores,
+					IsDNF:      scoreInfo.IsDNF,
 				})
 				guestIndexByName[normalizedGuestName] = len(existingParticipants) - 1
 			}
@@ -149,6 +151,7 @@ func (s *RoundService) applySinglesScores(
 			existingParticipants[idx].Score = &score
 			existingParticipants[idx].Response = roundtypes.ResponseAccept
 			existingParticipants[idx].HoleScores = scoreInfo.HoleScores
+			existingParticipants[idx].IsDNF = scoreInfo.IsDNF
 		} else {
 			// Add new participant - user wasn't RSVP'd but is in the scorecard and has guild_membership
 			existingParticipants = append(existingParticipants, roundtypes.Participant{
@@ -156,6 +159,7 @@ func (s *RoundService) applySinglesScores(
 				Score:      &score,
 				Response:   roundtypes.ResponseAccept,
 				HoleScores: scoreInfo.HoleScores,
+				IsDNF:      scoreInfo.IsDNF,
 			})
 			// Update map to prevent duplicates within same import
 			existingMap[scoreInfo.UserID] = len(existingParticipants) - 1
@@ -226,6 +230,7 @@ func (s *RoundService) overwriteSinglesScores(
 			Score:      &score,
 			Response:   roundtypes.ResponseAccept,
 			HoleScores: scoreInfo.HoleScores,
+			IsDNF:      scoreInfo.IsDNF,
 		}
 
 		var key string
@@ -309,6 +314,7 @@ func (s *RoundService) applyTeamScores(
 				Response: roundtypes.ResponseAccept,
 				TeamID:   sc.TeamID,
 				RawName:  sc.RawName,
+				IsDNF:    sc.IsDNF,
 			}
 		}
 
@@ -334,6 +340,7 @@ func (s *RoundService) applyTeamScores(
 				Response: roundtypes.ResponseAccept,
 				TeamID:   sc.TeamID,
 				RawName:  sc.RawName,
+				IsDNF:    sc.IsDNF,
 			})
 			continue
 		}
@@ -344,6 +351,7 @@ func (s *RoundService) applyTeamScores(
 			existingParticipants[idx].Score = &score
 			existingParticipants[idx].Response = roundtypes.ResponseAccept
 			existingParticipants[idx].TeamID = sc.TeamID
+			existingParticipants[idx].IsDNF = sc.IsDNF
 		} else {
 			// Add new participant (user wasn't RSVP'd but is in the scorecard)
 			score := sharedtypes.Score(sc.Score)
@@ -352,6 +360,7 @@ func (s *RoundService) applyTeamScores(
 				Score:    &score,
 				Response: roundtypes.ResponseAccept,
 				TeamID:   sc.TeamID,
+				IsDNF:    sc.IsDNF,
 			})
 		}
 	}
