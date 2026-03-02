@@ -29,15 +29,19 @@ func TestBuilder_ForRole(t *testing.T) {
 				},
 			},
 			verify: func(t *testing.T, p *Permissions) {
-				// Subscribe patterns now use versioned format: round.*.v1.{id}
 				expectedSub := fmt.Sprintf("round.*.v1.%s", clubUUID)
 				if !contains(p.Subscribe.Allow, expectedSub) {
 					t.Errorf("expected subscription allow for %s, got %v", expectedSub, p.Subscribe.Allow)
 				}
-				// Publish patterns use versioned format: round.participant.join.v1.{id}
-				expectedPub := fmt.Sprintf("round.participant.join.v1.%s", clubUUID)
-				if !contains(p.Publish.Allow, expectedPub) {
-					t.Errorf("expected publish allow for %s, got %v", expectedPub, p.Publish.Allow)
+				// Participant publish actions are unscoped
+				for _, expectedPub := range []string{
+					"round.participant.join.requested.v1",
+					"round.participant.declined.v1",
+					"round.participant.removal.requested.v1",
+				} {
+					if !contains(p.Publish.Allow, expectedPub) {
+						t.Errorf("expected publish allow for %s, got %v", expectedPub, p.Publish.Allow)
+					}
 				}
 			},
 		},
@@ -52,15 +56,21 @@ func TestBuilder_ForRole(t *testing.T) {
 				},
 			},
 			verify: func(t *testing.T, p *Permissions) {
-				// Editor publish pattern: round.create.v1.{id}
-				expectedPub := fmt.Sprintf("round.create.v1.%s", clubUUID)
-				if !contains(p.Publish.Allow, expectedPub) {
-					t.Errorf("expected publish allow for %s, got %v", expectedPub, p.Publish.Allow)
+				// Editor publish actions are unscoped
+				for _, expectedPub := range []string{
+					"round.creation.requested.v1",
+					"round.update.requested.v1",
+					"round.delete.requested.v1",
+					"round.score.update.requested.v1",
+				} {
+					if !contains(p.Publish.Allow, expectedPub) {
+						t.Errorf("expected publish allow for %s, got %v", expectedPub, p.Publish.Allow)
+					}
 				}
 			},
 		},
 		{
-			name: "admin permissions include scoped scorecard upload",
+			name: "admin permissions include scorecard upload",
 			claims: &authdomain.Claims{
 				UserUUID:       userUUID,
 				ActiveClubUUID: clubUUID,
@@ -70,14 +80,15 @@ func TestBuilder_ForRole(t *testing.T) {
 				},
 			},
 			verify: func(t *testing.T, p *Permissions) {
-				expectedPub := fmt.Sprintf("round.scorecard.admin.upload.requested.v1.%s", clubUUID)
+				// Admin publish actions are unscoped
+				expectedPub := "round.scorecard.admin.upload.requested.v1"
 				if !contains(p.Publish.Allow, expectedPub) {
 					t.Errorf("expected admin publish allow for %s, got %v", expectedPub, p.Publish.Allow)
 				}
 			},
 		},
 		{
-			name: "admin permissions scoped correctly",
+			name: "admin permissions are unscoped",
 			claims: &authdomain.Claims{
 				UserUUID:       userUUID,
 				ActiveClubUUID: clubUUID,
@@ -88,18 +99,16 @@ func TestBuilder_ForRole(t *testing.T) {
 				},
 			},
 			verify: func(t *testing.T, p *Permissions) {
-				// Verify scoped admin actions for both club UUID and Guild ID
-				for _, id := range []string{clubUUID.String(), "123456789"} {
-					expected := fmt.Sprintf("leaderboard.manual.point.adjustment.v1.%s", id)
-					if !contains(p.Publish.Allow, expected) {
-						t.Errorf("expected scoped admin publish allow for %s, got %v", expected, p.Publish.Allow)
-					}
+				// Admin actions are unscoped (guild scoping done via payload)
+				expected := "leaderboard.manual.point.adjustment.v1"
+				if !contains(p.Publish.Allow, expected) {
+					t.Errorf("expected unscoped admin publish allow for %s, got %v", expected, p.Publish.Allow)
 				}
-
-				// Ensure unscoped subjects are NOT present (regression check)
-				unscoped := "leaderboard.manual.point.adjustment.v1"
-				if contains(p.Publish.Allow, unscoped) {
-					t.Errorf("unscoped subject %s should NOT be allowed", unscoped)
+				// Regression guard: the scoped variant must NOT be present.
+				// If someone accidentally re-adds a club/guild suffix, this catches it.
+				scoped := fmt.Sprintf("leaderboard.manual.point.adjustment.v1.%s", clubUUID)
+				if contains(p.Publish.Allow, scoped) {
+					t.Errorf("scoped admin publish subject %s must not be present (write subjects are intentionally unscoped)", scoped)
 				}
 			},
 		},

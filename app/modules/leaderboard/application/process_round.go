@@ -25,17 +25,20 @@ func (s *LeaderboardService) ProcessRound(
 			return results.OperationResult[ProcessRoundResult, error]{}, ErrCommandPipelineUnavailable
 		}
 
+		// noTagSortWeight places untagged / zero-tag players at the bottom of the
+		// ascending-tag sort without affecting normal comparisons.
+		const noTagSortWeight = math.MaxInt
+
 		ranked := make([]PlayerResult, len(playerResults))
 		copy(ranked, playerResults)
 		slices.SortFunc(ranked, func(a, b PlayerResult) int {
-			// Treat 0 (no tag) as max int to sort to bottom
 			aTag := a.TagNumber
 			if aTag <= 0 {
-				aTag = math.MaxInt
+				aTag = noTagSortWeight
 			}
 			bTag := b.TagNumber
 			if bTag <= 0 {
-				bTag = math.MaxInt
+				bTag = noTagSortWeight
 			}
 
 			if c := cmp.Compare(aTag, bTag); c != 0 {
@@ -44,11 +47,17 @@ func (s *LeaderboardService) ProcessRound(
 			return cmp.Compare(a.PlayerID, b.PlayerID)
 		})
 
+		// Assign competition-style finish ranks: players with equal TagNumber share
+		// the same rank and the subsequent rank is skipped (e.g. 1,1,3 not 1,2,3).
 		participants := make([]RoundParticipantInput, 0, len(ranked))
 		for i, res := range ranked {
+			finishRank := i + 1
+			if i > 0 && ranked[i].TagNumber == ranked[i-1].TagNumber && ranked[i].TagNumber > 0 {
+				finishRank = participants[i-1].FinishRank
+			}
 			participants = append(participants, RoundParticipantInput{
 				MemberID:   string(res.PlayerID),
-				FinishRank: i + 1,
+				FinishRank: finishRank,
 			})
 		}
 

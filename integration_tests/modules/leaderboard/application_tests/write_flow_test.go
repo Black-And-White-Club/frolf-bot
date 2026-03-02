@@ -99,10 +99,10 @@ func TestProcessRound_CoreFlow(t *testing.T) {
 	_, dInLb := tagMap["user_d"]
 	assert.False(t, dInLb)
 
-	// 4. Verify Points
+	// 4. Verify Points (tagless participants like user_d are excluded from point awards)
 	assert.False(t, output.PointsSkipped)
 	assert.Equal(t, seasonID, output.SeasonID)
-	assert.Len(t, output.PointAwards, 4)
+	assert.Len(t, output.PointAwards, 3)
 
 	// 5. Test Idempotency
 	output2, err := deps.Service.ProcessRoundCommand(ctx, cmd)
@@ -145,7 +145,7 @@ func TestProcessRound_CoreFlow(t *testing.T) {
 		Order("member_id ASC").
 		Scan(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 4, len(histories), "Should have 4 history entries")
+	assert.Equal(t, 3, len(histories), "Should have 3 history entries (tagless user_d excluded)")
 
 	// Verify specific point values for recalculation (A=1st, B=2nd...)
 	// Since we don't have the exact point calculation logic mocked or known here easily without duplication,
@@ -166,6 +166,85 @@ func TestProcessRound_CoreFlow(t *testing.T) {
 		Exists(ctx)
 	require.NoError(t, err)
 	assert.True(t, exists, "Tagless participant user_d should exist in league_members")
+}
+
+// TestProcessRound_TiedFinishRank verifies end-to-end behaviour when two
+// participants share the same FinishRank. The tied players must receive equal
+// points, and a player ranked below them must receive fewer points.
+func TestProcessRound_TiedFinishRank(t *testing.T) {
+	deps := SetupTestLeaderboardService(t)
+	defer deps.Cleanup()
+
+	ctx := context.Background()
+	guildID := sharedtypes.GuildID("test_guild_ties")
+	seasonID := "season_ties_1"
+	roundID := uuid.New()
+
+	_ = testutils.CleanLeaderboardIntegrationTables(ctx, deps.BunDB)
+
+	// Start a season
+	resSeason, err := deps.Service.StartNewSeason(ctx, guildID, seasonID, "Tie Test Season")
+	require.NoError(t, err)
+	require.True(t, resSeason.IsSuccess())
+
+	// Seed three members with tags
+	membersToSeed := []leaderboarddb.LeagueMember{
+		{GuildID: string(guildID), MemberID: "tie_user_a", CurrentTag: ptr(1)},
+		{GuildID: string(guildID), MemberID: "tie_user_b", CurrentTag: ptr(2)},
+		{GuildID: string(guildID), MemberID: "tie_user_c", CurrentTag: ptr(3)},
+	}
+	_, err = deps.BunDB.NewInsert().Model(&membersToSeed).Exec(ctx)
+	require.NoError(t, err)
+
+	// tie_user_a and tie_user_b both finish 1st (tied); tie_user_c finishes 3rd
+	cmd := leaderboardservice.ProcessRoundCommand{
+		GuildID: string(guildID),
+		RoundID: roundID,
+		Participants: []leaderboardservice.RoundParticipantInput{
+			{MemberID: "tie_user_a", FinishRank: 1},
+			{MemberID: "tie_user_b", FinishRank: 1},
+			{MemberID: "tie_user_c", FinishRank: 3},
+		},
+	}
+
+	output, err := deps.Service.ProcessRoundCommand(ctx, cmd)
+	require.NoError(t, err)
+	require.NotNil(t, output)
+	assert.False(t, output.PointsSkipped)
+	assert.Len(t, output.PointAwards, 3)
+
+	// Build points map from output
+	pointMap := make(map[string]int)
+	for _, award := range output.PointAwards {
+		pointMap[award.MemberID] = award.Points
+	}
+
+	// Tied finishers must earn the same points
+	assert.Equal(t, pointMap["tie_user_a"], pointMap["tie_user_b"],
+		"tied finishers (rank 1) must earn equal points")
+
+	// Both tied players must earn more than the player ranked below them
+	assert.Greater(t, pointMap["tie_user_a"], pointMap["tie_user_c"],
+		"tied rank-1 finisher must earn more than rank-3 finisher")
+	assert.Greater(t, pointMap["tie_user_b"], pointMap["tie_user_c"],
+		"tied rank-1 finisher must earn more than rank-3 finisher")
+
+	// Confirm points persisted correctly in point_history
+	var histories []leaderboarddb.PointHistory
+	err = deps.BunDB.NewSelect().
+		Model(&histories).
+		Where("round_id = ?", roundID).
+		Order("member_id ASC").
+		Scan(ctx)
+	require.NoError(t, err)
+	assert.Len(t, histories, 3, "all three tagged participants should have point history entries")
+
+	dbPointMap := make(map[string]int)
+	for _, h := range histories {
+		dbPointMap[string(h.MemberID)] = h.Points
+	}
+	assert.Equal(t, dbPointMap["tie_user_a"], dbPointMap["tie_user_b"],
+		"persisted points must be equal for tied finishers")
 }
 
 func ptr(i int) *int {

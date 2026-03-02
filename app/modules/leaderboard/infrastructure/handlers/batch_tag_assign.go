@@ -88,11 +88,17 @@ func (h *LeaderboardHandlers) handleRoundBasedAssignmentWithCommandFlow(
 		return nil, fmt.Errorf("round_id is required for round-based assignment")
 	}
 
-	participants := make([]leaderboardservice.RoundParticipantInput, 0, len(requests))
-	for i, r := range requests {
+	// Iterate payload.Assignments directly (not the requests slice) because requests strips
+	// FinishRank when converting to TagAssignmentRequest. Both slices are the same length
+	// and in the same order.
+	participants := make([]leaderboardservice.RoundParticipantInput, 0, len(payload.Assignments))
+	for _, r := range payload.Assignments {
+		// Pass FinishRank as-is; 0 means "no rank" and opts into the domain's
+		// unranked path. Assigning sequential i+1 positions as a fallback would
+		// silently break tied finishers by giving them different ranks.
 		participants = append(participants, leaderboardservice.RoundParticipantInput{
 			MemberID:   string(r.UserID),
-			FinishRank: i + 1,
+			FinishRank: r.FinishRank,
 		})
 	}
 

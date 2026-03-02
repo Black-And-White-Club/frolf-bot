@@ -45,7 +45,7 @@ func BenchmarkProcessScoresForStorage_Scaling(b *testing.B) {
 				testData := make([]sharedtypes.ScoreInfo, len(originalScores))
 				copy(testData, originalScores)
 
-				_, err := s.ProcessScoresForStorage(ctx, guildID, roundID, testData)
+				_, _, err := s.ProcessScoresForStorage(ctx, guildID, roundID, testData)
 				if err != nil {
 					b.Fatal(err)
 				}

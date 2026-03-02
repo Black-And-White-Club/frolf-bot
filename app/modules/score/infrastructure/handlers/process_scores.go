@@ -50,7 +50,10 @@ func (h *ScoreHandlers) HandleProcessRoundScoresRequest(
 		}, nil
 	}
 
-	//  Non-singles rounds terminate here (DB updated only)
+	// Non-singles rounds terminate here (DB updated only).
+	// FinishRanksByDiscordID is computed but not forwarded because non-singles
+	// rounds do not drive tag assignments or points. If a future mode needs
+	// FinishRank, add a branch here rather than silently using zero values.
 	if payload.RoundMode != sharedtypes.RoundModeSingles {
 		return nil, nil
 	}
@@ -61,8 +64,9 @@ func (h *ScoreHandlers) HandleProcessRoundScoresRequest(
 		batchAssignments := make([]sharedevents.TagAssignmentInfoV1, 0, len(result.Success.TagMappings))
 		for _, tm := range result.Success.TagMappings {
 			batchAssignments = append(batchAssignments, sharedevents.TagAssignmentInfoV1{
-				UserID:    tm.DiscordID,
-				TagNumber: tm.TagNumber,
+				UserID:     tm.DiscordID,
+				TagNumber:  tm.TagNumber,
+				FinishRank: result.Success.FinishRanksByDiscordID[tm.DiscordID],
 			})
 		}
 

@@ -153,6 +153,22 @@ func subscribePatterns(clubUUID, guildID, userUUID, userID string) []string {
 }
 
 // publishPatterns generates publish patterns for request-reply calls.
+//
+// Read/query subjects (list, snapshot, etc.) are scoped to the club or guild UUID so
+// the NATS server limits a token to its own club's data.
+//
+// Write/action subjects (participant join, round create, etc.) are intentionally
+// unscoped — no club/guild suffix. Unscoped write subjects keep multi-club scenarios
+// simple and avoid subject proliferation.
+//
+// Trade-off: NATS alone cannot prevent an authenticated user from publishing to a
+// write subject with a foreign guild's ID in the payload. At present there is no
+// handler-level claim verification (context GuildID comes from message metadata, not
+// from the NATS JWT). Cross-guild payload spoofing is therefore not prevented at the
+// application layer today.
+//
+// TODO: propagate NATS JWT claims into handler context and verify payload.GuildID
+// against the authenticated claim before processing any write subject.
 func publishPatterns(clubUUID, guildID string, includeParticipant bool) []string {
 	patterns := []string{}
 

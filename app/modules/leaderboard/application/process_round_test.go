@@ -104,6 +104,41 @@ func TestLeaderboardService_ProcessRound(t *testing.T) {
 				}
 			},
 		},
+		// Two players sharing the same TagNumber must receive equal FinishRanks
+		// (competition style: 1,1,3 not 1,2,3). Tags are unique in normal play,
+		// but legacy data or admin recalc may encounter duplicates.
+		{
+			name: "tied tag numbers produce equal finish ranks (competition style)",
+			playerResults: []PlayerResult{
+				{PlayerID: "player-a", TagNumber: 5},
+				{PlayerID: "player-b", TagNumber: 5},
+				{PlayerID: "player-c", TagNumber: 6},
+			},
+			setupPipeline: func(p *FakeCommandPipeline) {
+				p.ProcessRoundFunc = func(ctx context.Context, cmd ProcessRoundCommand) (*ProcessRoundOutput, error) {
+					rankByMember := make(map[string]int, len(cmd.Participants))
+					for _, participant := range cmd.Participants {
+						rankByMember[participant.MemberID] = participant.FinishRank
+					}
+					if rankByMember["player-a"] != rankByMember["player-b"] {
+						t.Errorf("tied tag players must share FinishRank: player-a=%d player-b=%d",
+							rankByMember["player-a"], rankByMember["player-b"])
+					}
+					if rankByMember["player-a"] != 1 {
+						t.Errorf("tied tag-5 players must have FinishRank 1, got %d", rankByMember["player-a"])
+					}
+					if rankByMember["player-c"] != 3 {
+						t.Errorf("player-c (tag 6) must have FinishRank 3 (competition style), got %d", rankByMember["player-c"])
+					}
+					return &ProcessRoundOutput{
+						FinalParticipantTags: map[string]int{"player-a": 5, "player-b": 6, "player-c": 7},
+						PointAwards:          nil,
+					}, nil
+				}
+			},
+			expectErr: false,
+			verify:    func(t *testing.T, res results.OperationResult[ProcessRoundResult, error], err error) {},
+		},
 	}
 
 	for _, tt := range tests {
