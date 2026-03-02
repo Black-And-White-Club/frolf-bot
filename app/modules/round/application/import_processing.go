@@ -103,6 +103,7 @@ func (s *RoundService) NormalizeParsedScorecard(ctx context.Context, data *round
 		s.logger.InfoContext(ctx, "Normalization complete",
 			attr.String("mode", string(mode)),
 			attr.Int("player_count", len(data.PlayerScores)),
+			attr.Int("par_holes", len(data.ParScores)),
 		)
 
 		return results.SuccessResult[*roundtypes.NormalizedScorecard, error](&normalizedRound), nil
@@ -323,6 +324,20 @@ func (s *RoundService) IngestNormalizedScorecard(ctx context.Context, req roundt
 					})
 					matchedCount++
 				}
+			}
+
+			s.logger.InfoContext(ctx, "Ingest user matching complete",
+				attr.String("import_id", req.ImportID),
+				attr.String("mode", string(req.NormalizedData.Mode)),
+				attr.Int("matched", matchedCount),
+				attr.Int("unmatched", len(unmatchedPlayers)),
+				attr.Int("total_scores", len(finalScores)),
+			)
+			if len(unmatchedPlayers) > 0 {
+				s.logger.WarnContext(ctx, "Unmatched players during ingest",
+					attr.String("import_id", req.ImportID),
+					attr.String("unmatched_players", strings.Join(unmatchedPlayers, ", ")),
+				)
 			}
 
 			if len(finalScores) == 0 {

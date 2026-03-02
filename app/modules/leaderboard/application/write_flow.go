@@ -92,7 +92,16 @@ func (s *LeaderboardService) processRoundInTx(ctx context.Context, tx bun.Tx, cm
 		return nil, fmt.Errorf("acquire guild lock: %w", err)
 	}
 
-	// 2. Compute processing hash for idempotency
+	// 2. Compute processing hash for idempotency.
+	// FinishRank is included in the hash so that a re-submission with corrected finish
+	// ranks (e.g. a tie resolved after a card recount) triggers recalculation rather
+	// than a silent no-op.
+	//
+	// Migration note: rounds processed before FinishRank was added to RoundInput will
+	// have stored hashes that did not include FinishRank. Any re-submission of such a
+	// round will compute a different hash and enter the recalculation path instead of
+	// the idempotent no-op path. This is intentional and safe: recalculation rolls back
+	// and replaces previous points, so the outcome is correct even if unexpected.
 	hashInputs := make([]leaderboarddomain.RoundInput, len(cmd.Participants))
 	for i, p := range cmd.Participants {
 		hashInputs[i] = leaderboarddomain.RoundInput{
@@ -197,6 +206,26 @@ func (s *LeaderboardService) processRoundInTx(ctx context.Context, tx bun.Tx, cm
 	// tags if the finish order changed.
 	tagChanges := leaderboarddomain.AllocateTagsClosedPool(tagInputs)
 
+	// Build lookups from MemberID → FinishRank and pre-round tag for logging.
+	preTagByMember := make(map[string]int, len(tagInputs))
+	for _, ti := range tagInputs {
+		preTagByMember[ti.MemberID] = ti.CurrentTag
+	}
+	finishRankByMember := make(map[string]int, len(cmd.Participants))
+	for _, p := range cmd.Participants {
+		finishRankByMember[p.MemberID] = p.FinishRank
+	}
+
+	for _, ch := range tagChanges {
+		s.logger.InfoContext(ctx, "tag_change",
+			slog.Int("tag", ch.TagNumber),
+			slog.String("new_holder", ch.NewMemberID),
+			slog.String("old_holder", ch.OldMemberID),
+			slog.Int("finish_rank", finishRankByMember[ch.NewMemberID]),
+			slog.Int("pre_tag", preTagByMember[ch.NewMemberID]),
+		)
+	}
+
 	// 5. Persist tag changes
 	if len(tagChanges) > 0 {
 		if err := s.persistTagChanges(ctx, tx, cmd.GuildID, &cmd.RoundID, tagChanges, "round_swap"); err != nil {
@@ -244,6 +273,21 @@ func (s *LeaderboardService) processRoundInTx(ctx context.Context, tx bun.Tx, cm
 			return nil, fmt.Errorf("calculate and persist points: %w", err)
 		}
 		output.PointAwards = awards
+
+		// Build final tag map for logging
+		finalTagForMember := make(map[string]int, len(assignments))
+		for _, a := range assignments {
+			finalTagForMember[a.MemberID] = a.Tag
+		}
+		for _, award := range awards {
+			s.logger.InfoContext(ctx, "points_award",
+				slog.String("member", award.MemberID),
+				slog.Int("tag", finalTagForMember[award.MemberID]),
+				slog.Int("finish_rank", finishRankByMember[award.MemberID]),
+				slog.Int("opponents_beaten", award.OpponentsBeaten),
+				slog.Int("points", award.Points),
+			)
+		}
 	}
 
 	// 8. Record round outcome for idempotency
@@ -445,6 +489,7 @@ func (s *LeaderboardService) calculateAndPersistPoints(
 		participants[i] = leaderboarddomain.RoundParticipant{
 			MemberID:     p.MemberID,
 			TagNumber:    tag,
+			FinishRank:   p.FinishRank,
 			RoundsPlayed: roundsPlayed,
 			BestTag:      bestTag,
 			CurrentTier:  leaderboarddomain.DetermineTier(bestTag, totalMembers),

@@ -13,7 +13,9 @@ type Service interface {
 	ProcessRoundScores(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, scores []sharedtypes.ScoreInfo, overwrite bool) (results.OperationResult[ProcessRoundScoresResult, error], error)
 	// Corrects an individual score and triggers a leaderboard update.
 	CorrectScore(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, userID sharedtypes.DiscordID, score sharedtypes.Score, tagNumber *sharedtypes.TagNumber) (ScoreOperationResult, error)
-	ProcessScoresForStorage(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, scores []sharedtypes.ScoreInfo) ([]sharedtypes.ScoreInfo, error)
+	// ProcessScoresForStorage validates, sorts, and enriches the score list.
+	// Returns: sorted scores, competition-style finish ranks keyed by Discord ID, error.
+	ProcessScoresForStorage(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, scores []sharedtypes.ScoreInfo) ([]sharedtypes.ScoreInfo, map[sharedtypes.DiscordID]int, error)
 
 	// Retrieves the stored scores (including original tag numbers) for a round.
 	GetScoresForRound(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) ([]sharedtypes.ScoreInfo, error)

@@ -124,6 +124,49 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 			wantErr:        true,
 			expectedErrMsg: "direct service error",
 		},
+		{
+			name:    "FinishRank propagated to batch event for tied players",
+			payload: basePayload,
+			setupFake: func(f *FakeScoreService) {
+				tag1 := sharedtypes.TagNumber(1)
+				tag2 := sharedtypes.TagNumber(5)
+				f.ProcessRoundScoresFunc = func(ctx context.Context, gID sharedtypes.GuildID, rID sharedtypes.RoundID, scores []sharedtypes.ScoreInfo, overwrite bool) (results.OperationResult[scoreservice.ProcessRoundScoresResult, error], error) {
+					return results.OperationResult[scoreservice.ProcessRoundScoresResult, error]{
+						Success: &scoreservice.ProcessRoundScoresResult{
+							TagMappings: []sharedtypes.TagMapping{
+								{DiscordID: "user-a", TagNumber: tag1},
+								{DiscordID: "user-b", TagNumber: tag2},
+							},
+							// Both players tied at rank 1
+							FinishRanksByDiscordID: map[sharedtypes.DiscordID]int{
+								"user-a": 1,
+								"user-b": 1,
+							},
+						},
+					}, nil
+				}
+			},
+			wantErr: false,
+			checkResults: func(t *testing.T, res []handlerwrapper.Result) {
+				if len(res) != 1 {
+					t.Fatalf("expected 1 result, got %d", len(res))
+				}
+				batchPayload, ok := res[0].Payload.(*sharedevents.BatchTagAssignmentRequestedPayloadV1)
+				if !ok {
+					t.Fatalf("expected *BatchTagAssignmentRequestedPayloadV1, got %T", res[0].Payload)
+				}
+				rankByUser := make(map[sharedtypes.DiscordID]int, len(batchPayload.Assignments))
+				for _, a := range batchPayload.Assignments {
+					rankByUser[a.UserID] = a.FinishRank
+				}
+				if rankByUser["user-a"] != 1 {
+					t.Errorf("user-a: expected FinishRank=1 in batch event, got %d", rankByUser["user-a"])
+				}
+				if rankByUser["user-b"] != 1 {
+					t.Errorf("user-b: expected FinishRank=1 in batch event, got %d", rankByUser["user-b"])
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {

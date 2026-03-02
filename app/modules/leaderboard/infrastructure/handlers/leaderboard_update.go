@@ -165,16 +165,13 @@ func buildParticipantsFromUpdatePayload(payload *leaderboardevents.LeaderboardUp
 
 	if len(payload.Participants) > 0 {
 		participants := make([]leaderboardservice.RoundParticipantInput, 0, len(payload.Participants))
-		for i, participant := range payload.Participants {
-			finishRank := participant.FinishRank
-			if finishRank <= 0 {
-				// Fallback to index-based rank if explicit rank is missing,
-				// assuming the participants list is sorted by finish order.
-				finishRank = i + 1
-			}
+		for _, participant := range payload.Participants {
+			// Pass FinishRank as-is. Zero means "no rank" and opts into the domain's
+			// unranked path. A sequential i+1 fallback would silently break tied
+			// finishers by giving them different ranks.
 			participants = append(participants, leaderboardservice.RoundParticipantInput{
 				MemberID:   string(participant.MemberID),
-				FinishRank: finishRank,
+				FinishRank: participant.FinishRank,
 			})
 		}
 		return participants

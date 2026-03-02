@@ -9,6 +9,7 @@ import (
 type RoundParticipant struct {
 	MemberID     string
 	TagNumber    int // tag after allocation
+	FinishRank   int // 1-based finish position; equal rank = tied (tied players do not beat each other)
 	RoundsPlayed int
 	BestTag      int // season-best tag (lowest achieved)
 	CurrentTier  Tier
@@ -68,10 +69,21 @@ func CalculateRoundPoints(participants []RoundParticipant) []PointAward {
 		totalPoints := 0
 		opponentsBeaten := 0
 
-		// Winner beats every tagged opponent ranked below them
+		// Winner beats every tagged opponent ranked below them (excluding tied players).
+		// Two participants with equal FinishRank share the same finish position and
+		// do not count each other as opponents. Points may still differ for tied
+		// finishers when tier/provisional matchup modifiers differ.
+		//
+		// Asymmetry note: the j > i direction only skips the (i, j) pair when they
+		// are tied — it does NOT skip participants at positions k < i from counting
+		// both i and j as beaten opponents. This is intentional: a player who
+		// finished above a tied group still beats every member of that group.
 		for j := i + 1; j < len(sorted); j++ {
 			if sorted[j].TagNumber <= 0 {
 				continue // untagged players are not counted as opponents
+			}
+			if sorted[i].FinishRank > 0 && sorted[j].FinishRank > 0 && sorted[i].FinishRank == sorted[j].FinishRank {
+				continue // tied players share the finish position — skip each other
 			}
 
 			loser := PlayerContext{

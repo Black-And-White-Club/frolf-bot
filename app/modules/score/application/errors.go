@@ -14,4 +14,9 @@ var (
 
 	// ErrProcessingFailed indicates score processing failed during validation or storage preparation.
 	ErrProcessingFailed = errors.New("score processing failed")
+
+	// ErrAllScoresDNF indicates every participant in the round recorded a DNF,
+	// leaving no active scores to process. This is a valid business outcome and
+	// should not be treated as a data error.
+	ErrAllScoresDNF = errors.New("all scores are DNF")
 )

@@ -19,7 +19,7 @@ type FakeScoreService struct {
 
 	ProcessRoundScoresFunc      func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, scores []sharedtypes.ScoreInfo, overwrite bool) (results.OperationResult[scoreservice.ProcessRoundScoresResult, error], error)
 	CorrectScoreFunc            func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, userID sharedtypes.DiscordID, score sharedtypes.Score, tagNumber *sharedtypes.TagNumber) (scoreservice.ScoreOperationResult, error)
-	ProcessScoresForStorageFunc func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, scores []sharedtypes.ScoreInfo) ([]sharedtypes.ScoreInfo, error)
+	ProcessScoresForStorageFunc func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, scores []sharedtypes.ScoreInfo) ([]sharedtypes.ScoreInfo, map[sharedtypes.DiscordID]int, error)
 	GetScoresForRoundFunc       func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) ([]sharedtypes.ScoreInfo, error)
 }
 
@@ -59,12 +59,12 @@ func (f *FakeScoreService) CorrectScore(ctx context.Context, guildID sharedtypes
 	return scoreservice.ScoreOperationResult{}, nil
 }
 
-func (f *FakeScoreService) ProcessScoresForStorage(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, scores []sharedtypes.ScoreInfo) ([]sharedtypes.ScoreInfo, error) {
+func (f *FakeScoreService) ProcessScoresForStorage(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, scores []sharedtypes.ScoreInfo) ([]sharedtypes.ScoreInfo, map[sharedtypes.DiscordID]int, error) {
 	f.record("ProcessScoresForStorage")
 	if f.ProcessScoresForStorageFunc != nil {
 		return f.ProcessScoresForStorageFunc(ctx, guildID, roundID, scores)
 	}
-	return nil, nil
+	return nil, nil, nil
 }
 
 func (f *FakeScoreService) GetScoresForRound(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) ([]sharedtypes.ScoreInfo, error) {
