@@ -9,7 +9,10 @@ import (
 	"github.com/uptrace/bun"
 )
 
-type ProcessRoundScoresResult struct{ TagMappings []sharedtypes.TagMapping }
+type ProcessRoundScoresResult struct {
+	TagMappings            []sharedtypes.TagMapping
+	FinishRanksByDiscordID map[sharedtypes.DiscordID]int
+}
 
 // 1. Update the signature to use the specific Result type instead of the generic ScoreOperationResult alias
 func (s *ScoreService) ProcessRoundScores(
@@ -65,8 +68,15 @@ func (s *ScoreService) executeProcessRoundScores(
 		}
 	}
 
-	// 2. Logic: Process scores
-	processedScores, err := s.ProcessScoresForStorage(ctx, guildID, roundID, activeScores)
+	// Distinguish between:
+	// 1) Empty input (validation error from ProcessScoresForStorage)
+	// 2) Non-empty input where every score is DNF (valid domain failure)
+	if len(scores) > 0 && len(activeScores) == 0 {
+		return results.FailureResult[ProcessRoundScoresResult, error](ErrAllScoresDNF), nil
+	}
+
+	// 2. Logic: Process scores (also returns finish ranks to avoid recomputation)
+	processedScores, finishRanks, err := s.ProcessScoresForStorage(ctx, guildID, roundID, activeScores)
 	if err != nil {
 		return results.FailureResult[ProcessRoundScoresResult, error](
 			fmt.Errorf("score processing failed: %w", err),
@@ -78,7 +88,7 @@ func (s *ScoreService) executeProcessRoundScores(
 		return results.OperationResult[ProcessRoundScoresResult, error]{}, fmt.Errorf("failed to log scores: %w", err)
 	}
 
-	// 4. Mapping (The payoff!)
+	// 5. Mapping
 	tagMappings := make([]sharedtypes.TagMapping, 0, len(processedScores))
 	for _, scoreInfo := range processedScores {
 		if scoreInfo.TagNumber != nil {
@@ -94,6 +104,7 @@ func (s *ScoreService) executeProcessRoundScores(
 
 	// Return the actual data the handler is waiting for
 	return results.SuccessResult[ProcessRoundScoresResult, error](ProcessRoundScoresResult{
-		TagMappings: tagMappings,
+		TagMappings:            tagMappings,
+		FinishRanksByDiscordID: finishRanks,
 	}), nil
 }
