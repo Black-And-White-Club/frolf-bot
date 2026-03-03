@@ -179,6 +179,25 @@ func TestRoundService_ScorecardURLRequested(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "Failure - Round Not In Progress",
+			payload: &roundtypes.ImportCreateJobInput{
+				GuildID: guildID, RoundID: roundID, UDiscURL: "https://udisc.com/courses/12345/rounds/67890/leaderboard",
+			},
+			setupRepo: func(f *FakeRepo) {
+				f.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{ID: r, GuildID: g, State: roundtypes.RoundStateUpcoming}, nil
+				}
+			},
+			assertFunc: func(t *testing.T, res results.OperationResult[roundtypes.CreateImportJobResult, error]) {
+				if res.Failure == nil {
+					t.Fatal("expected failure")
+				}
+				if !strings.Contains((*res.Failure).Error(), "IN_PROGRESS") {
+					t.Fatalf("expected state gating failure, got %v", (*res.Failure).Error())
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
