@@ -7,7 +7,9 @@ const (
 	staleImportThreshold = 2 * time.Minute
 
 	// Import sources
-	importSourceAdminPWA = "admin_pwa_upload"
+	importSourceAdminPWA      = "admin_pwa_upload"
+	importSourceDiscordUpload = "discord_upload"
+	importSourceDiscordURL    = "discord_url"
 
 	// Download limits
 	downloadTimeout = 30 * time.Second

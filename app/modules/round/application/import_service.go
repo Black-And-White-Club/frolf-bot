@@ -151,7 +151,7 @@ func (s *RoundService) downloadFile(ctx context.Context, url string) ([]byte, er
 func (s *RoundService) ParseScorecard(ctx context.Context, req *roundtypes.ImportParseScorecardInput) (ParseScorecardResult, error) {
 	result, err := withTelemetry(s, ctx, "ParseScorecard", req.RoundID, func(ctx context.Context) (ParseScorecardResult, error) {
 		source := normalizeImportSource(req.Source)
-		importInputKind := inputKind(req.FileData, req.FileURL, "")
+		importInputKind := inputKindForRequest(source, req.FileData, req.FileURL)
 		importFileExt := fileExt(req.FileName, req.FileURL, "")
 		roundState := "unknown"
 

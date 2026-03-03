@@ -51,7 +51,9 @@ func (s *RoundService) executeApplyImportedScores(
 		importFileExt = fileExt(round.FileName, "", round.UDiscURL)
 
 		applyStart := time.Now()
-		defer s.recordImportPhaseDuration(ctx, importPhaseApply, source, importInputKind, importFileExt, time.Since(applyStart))
+		defer func() {
+			s.recordImportPhaseDuration(ctx, importPhaseApply, source, importInputKind, importFileExt, time.Since(applyStart))
+		}()
 
 		var result ApplyImportedScoresResult
 		if len(round.Teams) > 0 {

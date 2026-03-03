@@ -18,9 +18,7 @@ import (
 func (s *RoundService) NormalizeParsedScorecard(ctx context.Context, data *roundtypes.ParsedScorecard, meta roundtypes.Metadata) (results.OperationResult[*roundtypes.NormalizedScorecard, error], error) {
 	result, err := withTelemetry[*roundtypes.NormalizedScorecard, error](s, ctx, "NormalizeParsedScorecard", meta.RoundID, func(ctx context.Context) (results.OperationResult[*roundtypes.NormalizedScorecard, error], error) {
 		source := normalizeImportSource(meta.Source)
-		importInputKind := "unknown"
-		importFileExt := "unknown"
-		roundState := "unknown"
+		importInputKind, importFileExt, roundState := s.resolveImportContext(ctx, nil, meta.GuildID, meta.RoundID, source)
 
 		s.logger.InfoContext(ctx, "Normalizing parsed scorecard",
 			attr.String("import_id", meta.ImportID),
@@ -227,12 +225,12 @@ func normalizeName(name string) string {
 func (s *RoundService) IngestNormalizedScorecard(ctx context.Context, req roundtypes.ImportIngestScorecardInput) (results.OperationResult[*roundtypes.IngestScorecardResult, error], error) {
 	result, err := withTelemetry[*roundtypes.IngestScorecardResult, error](s, ctx, "IngestNormalizedScorecard", req.RoundID, func(ctx context.Context) (results.OperationResult[*roundtypes.IngestScorecardResult, error], error) {
 		source := normalizeImportSource(req.Source)
-		importInputKind := "unknown"
-		importFileExt := "unknown"
-		roundState := "unknown"
+		importInputKind, importFileExt, roundState := s.resolveImportContext(ctx, nil, req.GuildID, req.RoundID, source)
 
 		start := time.Now()
-		defer s.recordImportPhaseDuration(ctx, importPhaseMatch, source, importInputKind, importFileExt, time.Since(start))
+		defer func() {
+			s.recordImportPhaseDuration(ctx, importPhaseMatch, source, importInputKind, importFileExt, time.Since(start))
+		}()
 
 		return runInTx[*roundtypes.IngestScorecardResult, error](s, ctx, func(ctx context.Context, tx bun.IDB) (results.OperationResult[*roundtypes.IngestScorecardResult, error], error) {
 			s.logger.InfoContext(ctx, "Ingesting normalized scorecard",

@@ -9,6 +9,9 @@ import (
 	"time"
 
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/google/uuid"
+	"github.com/uptrace/bun"
 )
 
 const (
@@ -94,6 +97,57 @@ func inputKindFromRound(round *roundtypes.Round) string {
 		return "file"
 	}
 	return "unknown"
+}
+
+func defaultInputKindForSource(source string) string {
+	switch normalizeImportSource(source) {
+	case importSourceAdminPWA, importSourceDiscordUpload:
+		return "file"
+	case importSourceDiscordURL:
+		return "url"
+	default:
+		return "unknown"
+	}
+}
+
+func inputKindForRequest(source string, fileData []byte, fileURL string) string {
+	if len(fileData) > 0 {
+		return "file"
+	}
+	if strings.TrimSpace(fileURL) != "" {
+		if normalizeImportSource(source) == importSourceDiscordURL {
+			return "url"
+		}
+		return "file"
+	}
+	return defaultInputKindForSource(source)
+}
+
+func (s *RoundService) resolveImportContext(
+	ctx context.Context,
+	db bun.IDB,
+	guildID sharedtypes.GuildID,
+	roundID sharedtypes.RoundID,
+	source string,
+) (importInputKind, importFileExt, roundState string) {
+	importInputKind = defaultInputKindForSource(source)
+	importFileExt = "unknown"
+	roundState = "unknown"
+
+	if s.repo == nil {
+		return importInputKind, importFileExt, roundState
+	}
+
+	if guildID == "" || roundID.UUID() == uuid.Nil {
+		return importInputKind, importFileExt, roundState
+	}
+
+	round, err := s.repo.GetRound(ctx, db, guildID, roundID)
+	if err != nil || round == nil {
+		return importInputKind, importFileExt, roundState
+	}
+
+	return inputKindFromRound(round), fileExt(round.FileName, "", round.UDiscURL), roundStateValue(round)
 }
 
 func classifyImportFailure(err error) string {
