@@ -115,7 +115,7 @@ func TestRoundService_ValidateRoundUpdate(t *testing.T) {
 			}
 
 			repo := NewFakeRepo()
-			s := NewRoundService(repo, nil, nil, nil, &roundmetrics.NoOpMetrics{}, slog.New(slog.NewTextHandler(io.Discard, nil)), noop.NewTracerProvider().Tracer("test"), &FakeRoundValidator{}, nil)
+			s := NewRoundService(repo, nil, nil, nil, &roundmetrics.NoOpMetrics{}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), noop.NewTracerProvider().Tracer("test"), &FakeRoundValidator{}, nil)
 
 			// For "valid request with time parsing", we need to dynamically set the expected StartTime in 'want'
 			if tt.name == "valid request with time parsing" {
@@ -257,7 +257,7 @@ func TestRoundService_UpdateRoundEntity(t *testing.T) {
 				tt.setup(repo)
 			}
 
-			s := NewRoundService(repo, nil, nil, nil, &roundmetrics.NoOpMetrics{}, slog.New(slog.NewTextHandler(io.Discard, nil)), noop.NewTracerProvider().Tracer("test"), &FakeRoundValidator{}, nil)
+			s := NewRoundService(repo, nil, nil, nil, &roundmetrics.NoOpMetrics{}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), noop.NewTracerProvider().Tracer("test"), &FakeRoundValidator{}, nil)
 
 			got, err := s.UpdateRoundEntity(context.Background(), &tt.payload)
 			if (err != nil) != tt.wantErr {
@@ -355,7 +355,7 @@ func TestRoundService_UpdateScheduledRoundEvents(t *testing.T) {
 				tt.setup(repo, queue)
 			}
 
-			s := NewRoundService(repo, queue, nil, nil, &roundmetrics.NoOpMetrics{}, slog.New(slog.NewTextHandler(io.Discard, nil)), noop.NewTracerProvider().Tracer("test"), &FakeRoundValidator{}, nil)
+			s := NewRoundService(repo, queue, nil, nil, &roundmetrics.NoOpMetrics{}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), noop.NewTracerProvider().Tracer("test"), &FakeRoundValidator{}, nil)
 
 			got, err := s.UpdateScheduledRoundEvents(context.Background(), &tt.payload)
 			if (err != nil) != tt.wantErr {

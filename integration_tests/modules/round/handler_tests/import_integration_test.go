@@ -36,7 +36,7 @@ func TestImportDoublesCreatesTeams(t *testing.T) {
 		StartTime:    *roundData.StartTime,
 		Finalized:    roundData.Finalized,
 		CreatedBy:    roundData.CreatedBy,
-		State:        roundData.State,
+		State:        roundtypes.RoundStateInProgress,
 		Participants: roundData.Participants,
 		GuildID:      "test-guild",
 	}
@@ -142,7 +142,7 @@ func TestImportSinglesCreatesPlayers(t *testing.T) {
 		StartTime:    *roundData.StartTime,
 		Finalized:    roundData.Finalized,
 		CreatedBy:    roundData.CreatedBy,
-		State:        roundData.State,
+		State:        roundtypes.RoundStateInProgress,
 		Participants: roundData.Participants,
 		GuildID:      "test-guild",
 	}

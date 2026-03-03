@@ -10,6 +10,7 @@ import (
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	importermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/importer"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
@@ -30,6 +31,7 @@ type RoundService struct {
 	eventBus            eventbus.EventBus
 	userLookup          UserLookup
 	metrics             roundmetrics.RoundMetrics
+	importerMetrics     importermetrics.ImporterMetrics
 	logger              *slog.Logger
 	tracer              trace.Tracer
 	roundValidator      roundutil.RoundValidator
@@ -51,17 +53,24 @@ func NewRoundService(
 	eventBus eventbus.EventBus,
 	userLookup UserLookup,
 	metrics roundmetrics.RoundMetrics,
+	importerMetrics importermetrics.ImporterMetrics,
 	logger *slog.Logger,
 	tracer trace.Tracer,
 	roundValidator roundutil.RoundValidator,
 	db *bun.DB,
 ) *RoundService {
 	return &RoundService{
-		repo:           repo,
-		queueService:   queueService,
-		eventBus:       eventBus,
-		userLookup:     userLookup,
-		metrics:        metrics,
+		repo:         repo,
+		queueService: queueService,
+		eventBus:     eventBus,
+		userLookup:   userLookup,
+		metrics:      metrics,
+		importerMetrics: func() importermetrics.ImporterMetrics {
+			if importerMetrics == nil {
+				return importermetrics.NewNoOpMetrics()
+			}
+			return importerMetrics
+		}(),
 		logger:         logger,
 		tracer:         tracer,
 		roundValidator: roundValidator,

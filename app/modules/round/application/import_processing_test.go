@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	loggerfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/logging"
+	importermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/importer"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
@@ -192,11 +193,12 @@ func TestRoundService_ImportProcessing(t *testing.T) {
 			}
 
 			s := &RoundService{
-				repo:       repo,
-				userLookup: lookup,
-				logger:     logger,
-				tracer:     tracer,
-				metrics:    metrics,
+				repo:            repo,
+				userLookup:      lookup,
+				logger:          logger,
+				tracer:          tracer,
+				metrics:         metrics,
+				importerMetrics: importermetrics.NewNoOpMetrics(),
 			}
 
 			if tt.isNormalize {
@@ -264,11 +266,12 @@ func TestRoundService_IngestNormalizedScorecard_UsesBatchLookup(t *testing.T) {
 	}
 
 	service := &RoundService{
-		repo:       NewFakeRepo(),
-		userLookup: lookup,
-		logger:     loggerfrolfbot.NoOpLogger,
-		tracer:     noop.NewTracerProvider().Tracer("test"),
-		metrics:    &roundmetrics.NoOpMetrics{},
+		repo:            NewFakeRepo(),
+		userLookup:      lookup,
+		logger:          loggerfrolfbot.NoOpLogger,
+		tracer:          noop.NewTracerProvider().Tracer("test"),
+		metrics:         &roundmetrics.NoOpMetrics{},
+		importerMetrics: importermetrics.NewNoOpMetrics(),
 	}
 
 	req := roundtypes.ImportIngestScorecardInput{
@@ -345,9 +348,10 @@ func TestRoundService_HoleScorePassthrough(t *testing.T) {
 
 	t.Run("Normalize/Singles - HoleScores cloned into NormalizedPlayer", func(t *testing.T) {
 		svc := &RoundService{
-			logger:  loggerfrolfbot.NoOpLogger,
-			tracer:  noop.NewTracerProvider().Tracer("test"),
-			metrics: &roundmetrics.NoOpMetrics{},
+			logger:          loggerfrolfbot.NoOpLogger,
+			tracer:          noop.NewTracerProvider().Tracer("test"),
+			metrics:         &roundmetrics.NoOpMetrics{},
+			importerMetrics: importermetrics.NewNoOpMetrics(),
 		}
 		meta := roundtypes.Metadata{GuildID: guildID, RoundID: roundID, ImportID: importID}
 		data := &roundtypes.ParsedScorecard{
@@ -377,9 +381,10 @@ func TestRoundService_HoleScorePassthrough(t *testing.T) {
 
 	t.Run("Normalize/Singles - Partial HoleScores cloned as-is", func(t *testing.T) {
 		svc := &RoundService{
-			logger:  loggerfrolfbot.NoOpLogger,
-			tracer:  noop.NewTracerProvider().Tracer("test"),
-			metrics: &roundmetrics.NoOpMetrics{},
+			logger:          loggerfrolfbot.NoOpLogger,
+			tracer:          noop.NewTracerProvider().Tracer("test"),
+			metrics:         &roundmetrics.NoOpMetrics{},
+			importerMetrics: importermetrics.NewNoOpMetrics(),
 		}
 		meta := roundtypes.Metadata{GuildID: guildID, RoundID: roundID, ImportID: importID}
 		data := &roundtypes.ParsedScorecard{
@@ -400,9 +405,10 @@ func TestRoundService_HoleScorePassthrough(t *testing.T) {
 
 	t.Run("Normalize/Doubles - HoleScores cloned into NormalizedTeam", func(t *testing.T) {
 		svc := &RoundService{
-			logger:  loggerfrolfbot.NoOpLogger,
-			tracer:  noop.NewTracerProvider().Tracer("test"),
-			metrics: &roundmetrics.NoOpMetrics{},
+			logger:          loggerfrolfbot.NoOpLogger,
+			tracer:          noop.NewTracerProvider().Tracer("test"),
+			metrics:         &roundmetrics.NoOpMetrics{},
+			importerMetrics: importermetrics.NewNoOpMetrics(),
 		}
 		meta := roundtypes.Metadata{GuildID: guildID, RoundID: roundID, ImportID: importID}
 		data := &roundtypes.ParsedScorecard{
@@ -427,9 +433,10 @@ func TestRoundService_HoleScorePassthrough(t *testing.T) {
 
 	t.Run("Normalize - ParScores cloned into NormalizedScorecard", func(t *testing.T) {
 		svc := &RoundService{
-			logger:  loggerfrolfbot.NoOpLogger,
-			tracer:  noop.NewTracerProvider().Tracer("test"),
-			metrics: &roundmetrics.NoOpMetrics{},
+			logger:          loggerfrolfbot.NoOpLogger,
+			tracer:          noop.NewTracerProvider().Tracer("test"),
+			metrics:         &roundmetrics.NoOpMetrics{},
+			importerMetrics: importermetrics.NewNoOpMetrics(),
 		}
 		meta := roundtypes.Metadata{GuildID: guildID, RoundID: roundID, ImportID: importID}
 		data := &roundtypes.ParsedScorecard{
@@ -457,11 +464,12 @@ func TestRoundService_HoleScorePassthrough(t *testing.T) {
 			resolved: map[string]sharedtypes.DiscordID{"alice": "alice-id"},
 		}
 		svc := &RoundService{
-			repo:       NewFakeRepo(),
-			userLookup: lookup,
-			logger:     loggerfrolfbot.NoOpLogger,
-			tracer:     noop.NewTracerProvider().Tracer("test"),
-			metrics:    &roundmetrics.NoOpMetrics{},
+			repo:            NewFakeRepo(),
+			userLookup:      lookup,
+			logger:          loggerfrolfbot.NoOpLogger,
+			tracer:          noop.NewTracerProvider().Tracer("test"),
+			metrics:         &roundmetrics.NoOpMetrics{},
+			importerMetrics: importermetrics.NewNoOpMetrics(),
 		}
 		req := roundtypes.ImportIngestScorecardInput{
 			GuildID:  guildID,
@@ -496,11 +504,12 @@ func TestRoundService_HoleScorePassthrough(t *testing.T) {
 			resolved: map[string]sharedtypes.DiscordID{"alice": "alice-id"},
 		}
 		svc := &RoundService{
-			repo:       NewFakeRepo(),
-			userLookup: lookup,
-			logger:     loggerfrolfbot.NoOpLogger,
-			tracer:     noop.NewTracerProvider().Tracer("test"),
-			metrics:    &roundmetrics.NoOpMetrics{},
+			repo:            NewFakeRepo(),
+			userLookup:      lookup,
+			logger:          loggerfrolfbot.NoOpLogger,
+			tracer:          noop.NewTracerProvider().Tracer("test"),
+			metrics:         &roundmetrics.NoOpMetrics{},
+			importerMetrics: importermetrics.NewNoOpMetrics(),
 		}
 		req := roundtypes.ImportIngestScorecardInput{
 			GuildID:  guildID,
@@ -528,11 +537,12 @@ func TestRoundService_HoleScorePassthrough(t *testing.T) {
 			resolved: map[string]sharedtypes.DiscordID{}, // no matches → guest
 		}
 		svc := &RoundService{
-			repo:       NewFakeRepo(),
-			userLookup: lookup,
-			logger:     loggerfrolfbot.NoOpLogger,
-			tracer:     noop.NewTracerProvider().Tracer("test"),
-			metrics:    &roundmetrics.NoOpMetrics{},
+			repo:            NewFakeRepo(),
+			userLookup:      lookup,
+			logger:          loggerfrolfbot.NoOpLogger,
+			tracer:          noop.NewTracerProvider().Tracer("test"),
+			metrics:         &roundmetrics.NoOpMetrics{},
+			importerMetrics: importermetrics.NewNoOpMetrics(),
 		}
 		req := roundtypes.ImportIngestScorecardInput{
 			GuildID:           guildID,
@@ -568,11 +578,12 @@ func TestRoundService_HoleScorePassthrough(t *testing.T) {
 			resolved: map[string]sharedtypes.DiscordID{"alice": "alice-id"},
 		}
 		svc := &RoundService{
-			repo:       NewFakeRepo(),
-			userLookup: lookup,
-			logger:     loggerfrolfbot.NoOpLogger,
-			tracer:     noop.NewTracerProvider().Tracer("test"),
-			metrics:    &roundmetrics.NoOpMetrics{},
+			repo:            NewFakeRepo(),
+			userLookup:      lookup,
+			logger:          loggerfrolfbot.NoOpLogger,
+			tracer:          noop.NewTracerProvider().Tracer("test"),
+			metrics:         &roundmetrics.NoOpMetrics{},
+			importerMetrics: importermetrics.NewNoOpMetrics(),
 		}
 		req := roundtypes.ImportIngestScorecardInput{
 			GuildID:  guildID,

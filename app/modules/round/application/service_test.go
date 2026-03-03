@@ -29,7 +29,7 @@ func TestNewRoundService(t *testing.T) {
 				fakeUserLookup := &FakeUserLookup{}
 
 				// Call the function being tested
-				service := NewRoundService(fakeRepo, fakeQueue, fakeEventBus, fakeUserLookup, fakeMetrics, logger, tracer, fakeValidator, nil)
+				service := NewRoundService(fakeRepo, fakeQueue, fakeEventBus, fakeUserLookup, fakeMetrics, nil, logger, tracer, fakeValidator, nil)
 
 				// Ensure service is correctly created
 				if service == nil {
@@ -61,7 +61,7 @@ func TestNewRoundService(t *testing.T) {
 			name: "Handles nil dependencies",
 			test: func(t *testing.T) {
 				// Call with nil dependencies
-				service := NewRoundService(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+				service := NewRoundService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 				// Ensure service is correctly created
 				if service == nil {

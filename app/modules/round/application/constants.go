@@ -6,6 +6,11 @@ const (
 	// Import behavior
 	staleImportThreshold = 2 * time.Minute
 
+	// Import sources
+	importSourceAdminPWA      = "admin_pwa_upload"
+	importSourceDiscordUpload = "discord_upload"
+	importSourceDiscordURL    = "discord_url"
+
 	// Download limits
 	downloadTimeout = 30 * time.Second
 	maxRedirects    = 5
@@ -19,6 +24,7 @@ const (
 	errCodeUnsupported       = "UNSUPPORTED_FORMAT"
 	errCodeFileTooLarge      = "FILE_TOO_LARGE"
 	errCodeInvalidUDiscURL   = "INVALID_UDISC_URL"
+	errCodeRoundStateInvalid = "ROUND_STATE_INVALID"
 	errCodeCtxCancelled      = "CTX_CANCELLED"
 	errCodeImportApplyFailed = "IMPORT_APPLY_FAILED"
 	errCodeParseError        = "PARSE_ERROR"

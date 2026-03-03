@@ -106,6 +106,7 @@ func NewRoundModule(
 		eventBus,
 		roundadapters.NewUserLookupAdapter(userDB, db),
 		metrics,
+		obs.Registry.ImporterMetrics,
 		logger,
 		tracer,
 		roundValidator,

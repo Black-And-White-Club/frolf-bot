@@ -236,9 +236,9 @@ func TestProcessRoundScores_FinishRanks(t *testing.T) {
 	testRoundID := sharedtypes.RoundID(uuid.New())
 
 	tests := []struct {
-		name       string
-		scores     []sharedtypes.ScoreInfo
-		wantRanks  map[sharedtypes.DiscordID]int
+		name      string
+		scores    []sharedtypes.ScoreInfo
+		wantRanks map[sharedtypes.DiscordID]int
 	}{
 		{
 			name: "two players tied produce equal rank with competition skip",
