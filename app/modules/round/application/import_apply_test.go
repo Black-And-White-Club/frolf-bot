@@ -8,6 +8,7 @@ import (
 	"slices"
 	"testing"
 
+	importermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/importer"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
@@ -336,10 +337,11 @@ func TestRoundService_ApplyImportedScores_HoleScores(t *testing.T) {
 			}
 
 			svc := &RoundService{
-				repo:    repo,
-				logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
-				metrics: &roundmetrics.NoOpMetrics{},
-				tracer:  noop.NewTracerProvider().Tracer("test"),
+				repo:            repo,
+				logger:          slog.New(slog.NewTextHandler(io.Discard, nil)),
+				metrics:         &roundmetrics.NoOpMetrics{},
+				importerMetrics: importermetrics.NewNoOpMetrics(),
+				tracer:          noop.NewTracerProvider().Tracer("test"),
 			}
 
 			res, err := svc.ApplyImportedScores(context.Background(), tc.input)
@@ -583,10 +585,11 @@ func TestRoundService_ApplyImportedScores(t *testing.T) {
 
 			// We don't need UserLookup for this test, so pass nil or empty
 			svc := &RoundService{
-				repo:    repo,
-				logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
-				metrics: &roundmetrics.NoOpMetrics{},
-				tracer:  noop.NewTracerProvider().Tracer("test"),
+				repo:            repo,
+				logger:          slog.New(slog.NewTextHandler(io.Discard, nil)),
+				metrics:         &roundmetrics.NoOpMetrics{},
+				importerMetrics: importermetrics.NewNoOpMetrics(),
+				tracer:          noop.NewTracerProvider().Tracer("test"),
 			}
 
 			res, err := svc.ApplyImportedScores(context.Background(), tc.input)

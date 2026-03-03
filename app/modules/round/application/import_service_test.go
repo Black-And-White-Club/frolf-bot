@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	importermetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/importer"
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
@@ -40,7 +41,7 @@ func TestRoundService_CreateImportJob(t *testing.T) {
 			},
 			setupRepo: func(f *FakeRepo) {
 				f.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID) (*roundtypes.Round, error) {
-					return &roundtypes.Round{ID: r, GuildID: g}, nil
+					return &roundtypes.Round{ID: r, GuildID: g, State: roundtypes.RoundStateInProgress}, nil
 				}
 				f.UpdateRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID, r *roundtypes.Round) (*roundtypes.Round, error) {
 					if r.ImportStatus != "pending" {
@@ -77,6 +78,25 @@ func TestRoundService_CreateImportJob(t *testing.T) {
 				}
 				if (*res.Failure).Error() != "round not found" {
 					t.Errorf("expected error 'round not found', got %v", res.Failure)
+				}
+			},
+		},
+		{
+			name: "Failure - Round Not In Progress",
+			payload: &roundtypes.ImportCreateJobInput{
+				GuildID: guildID, RoundID: roundID, ImportID: "import-2", FileName: "test.csv", FileData: []byte("content"),
+			},
+			setupRepo: func(f *FakeRepo) {
+				f.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{ID: r, GuildID: g, State: roundtypes.RoundStateUpcoming}, nil
+				}
+			},
+			assertFunc: func(t *testing.T, res results.OperationResult[roundtypes.CreateImportJobResult, error], repo *FakeRepo) {
+				if res.Failure == nil {
+					t.Fatal("expected failure")
+				}
+				if !strings.Contains((*res.Failure).Error(), "IN_PROGRESS") {
+					t.Fatalf("expected state gating failure, got %v", (*res.Failure).Error())
 				}
 			},
 		},
@@ -121,7 +141,7 @@ func TestRoundService_ScorecardURLRequested(t *testing.T) {
 			},
 			setupRepo: func(f *FakeRepo) {
 				f.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID) (*roundtypes.Round, error) {
-					return &roundtypes.Round{ID: r, GuildID: g}, nil
+					return &roundtypes.Round{ID: r, GuildID: g, State: roundtypes.RoundStateInProgress}, nil
 				}
 				f.UpdateRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID, r *roundtypes.Round) (*roundtypes.Round, error) {
 					if r.ImportType != "url" {
@@ -147,7 +167,7 @@ func TestRoundService_ScorecardURLRequested(t *testing.T) {
 			},
 			setupRepo: func(f *FakeRepo) {
 				f.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, r sharedtypes.RoundID) (*roundtypes.Round, error) {
-					return &roundtypes.Round{ID: r, GuildID: g}, nil
+					return &roundtypes.Round{ID: r, GuildID: g, State: roundtypes.RoundStateInProgress}, nil
 				}
 			},
 			assertFunc: func(t *testing.T, res results.OperationResult[roundtypes.CreateImportJobResult, error]) {
@@ -272,10 +292,11 @@ func TestRoundService_ParseScorecard(t *testing.T) {
 // Helper to init service with dependencies
 func createTestService(repo *FakeRepo) *RoundService {
 	return &RoundService{
-		repo:          repo,
-		logger:        slog.New(slog.NewTextHandler(io.Discard, nil)),
-		metrics:       &roundmetrics.NoOpMetrics{},
-		tracer:        noop.NewTracerProvider().Tracer("test"),
-		parserFactory: parsers.NewFactory(),
+		repo:            repo,
+		logger:          slog.New(slog.NewTextHandler(io.Discard, nil)),
+		metrics:         &roundmetrics.NoOpMetrics{},
+		importerMetrics: importermetrics.NewNoOpMetrics(),
+		tracer:          noop.NewTracerProvider().Tracer("test"),
+		parserFactory:   parsers.NewFactory(),
 	}
 }

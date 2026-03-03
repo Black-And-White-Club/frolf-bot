@@ -17,13 +17,20 @@ import (
 // NormalizeParsedScorecard converts raw parsed data into a standard domain-friendly format.
 func (s *RoundService) NormalizeParsedScorecard(ctx context.Context, data *roundtypes.ParsedScorecard, meta roundtypes.Metadata) (results.OperationResult[*roundtypes.NormalizedScorecard, error], error) {
 	result, err := withTelemetry[*roundtypes.NormalizedScorecard, error](s, ctx, "NormalizeParsedScorecard", meta.RoundID, func(ctx context.Context) (results.OperationResult[*roundtypes.NormalizedScorecard, error], error) {
+		source := normalizeImportSource(meta.Source)
+		importInputKind := "unknown"
+		importFileExt := "unknown"
+		roundState := "unknown"
+
 		s.logger.InfoContext(ctx, "Normalizing parsed scorecard",
 			attr.String("import_id", meta.ImportID),
 			attr.String("round_id", meta.RoundID.String()),
 		)
 
 		if data == nil {
-			return results.FailureResult[*roundtypes.NormalizedScorecard, error](fmt.Errorf("parsed scorecard data is nil")), nil
+			failureErr := fmt.Errorf("parsed scorecard data is nil")
+			s.recordImportFailure(ctx, source, importInputKind, importFileExt, roundState, failureErr)
+			return results.FailureResult[*roundtypes.NormalizedScorecard, error](failureErr), nil
 		}
 
 		// Infer mode if not set by parser
@@ -219,6 +226,14 @@ func normalizeName(name string) string {
 // IngestNormalizedScorecard performs user matching and prepares the scores for final application.
 func (s *RoundService) IngestNormalizedScorecard(ctx context.Context, req roundtypes.ImportIngestScorecardInput) (results.OperationResult[*roundtypes.IngestScorecardResult, error], error) {
 	result, err := withTelemetry[*roundtypes.IngestScorecardResult, error](s, ctx, "IngestNormalizedScorecard", req.RoundID, func(ctx context.Context) (results.OperationResult[*roundtypes.IngestScorecardResult, error], error) {
+		source := normalizeImportSource(req.Source)
+		importInputKind := "unknown"
+		importFileExt := "unknown"
+		roundState := "unknown"
+
+		start := time.Now()
+		defer s.recordImportPhaseDuration(ctx, importPhaseMatch, source, importInputKind, importFileExt, time.Since(start))
+
 		return runInTx[*roundtypes.IngestScorecardResult, error](s, ctx, func(ctx context.Context, tx bun.IDB) (results.OperationResult[*roundtypes.IngestScorecardResult, error], error) {
 			s.logger.InfoContext(ctx, "Ingesting normalized scorecard",
 				attr.String("import_id", req.ImportID),
@@ -229,6 +244,7 @@ func (s *RoundService) IngestNormalizedScorecard(ctx context.Context, req roundt
 
 			var finalScores []sharedtypes.ScoreInfo
 			matchedCount := 0
+			guestCount := 0
 			unmatchedPlayers := make([]string, 0)
 			groupsToCreate := []roundtypes.Participant{}
 			normalizedNames := collectNormalizedImportNames(req.NormalizedData)
@@ -270,6 +286,7 @@ func (s *RoundService) IngestNormalizedScorecard(ctx context.Context, req roundt
 								HoleScores: cloneInts(team.HoleScores),
 							})
 							unmatchedPlayers = append(unmatchedPlayers, member.RawName)
+							guestCount++
 						}
 					}
 
@@ -283,12 +300,16 @@ func (s *RoundService) IngestNormalizedScorecard(ctx context.Context, req roundt
 				if len(groupsToCreate) > 0 {
 					hasGroups, err := s.repo.RoundHasGroups(ctx, tx, req.RoundID)
 					if err != nil {
-						return results.FailureResult[*roundtypes.IngestScorecardResult, error](fmt.Errorf("failed checking existing round groups: %w", err)), nil
+						failureErr := fmt.Errorf("failed checking existing round groups: %w", err)
+						s.recordImportFailure(ctx, source, importInputKind, importFileExt, roundState, failureErr)
+						return results.FailureResult[*roundtypes.IngestScorecardResult, error](failureErr), nil
 					}
 
 					if !hasGroups {
 						if err := s.repo.CreateRoundGroups(ctx, tx, req.RoundID, groupsToCreate); err != nil {
-							return results.FailureResult[*roundtypes.IngestScorecardResult, error](fmt.Errorf("failed creating round groups: %w", err)), nil
+							failureErr := fmt.Errorf("failed creating round groups: %w", err)
+							s.recordImportFailure(ctx, source, importInputKind, importFileExt, roundState, failureErr)
+							return results.FailureResult[*roundtypes.IngestScorecardResult, error](failureErr), nil
 						}
 					}
 				}
@@ -313,6 +334,7 @@ func (s *RoundService) IngestNormalizedScorecard(ctx context.Context, req roundt
 								HoleScores: cloneInts(p.HoleScores),
 								IsDNF:      p.IsDNF,
 							})
+							guestCount++
 						}
 						continue
 					}
@@ -339,12 +361,22 @@ func (s *RoundService) IngestNormalizedScorecard(ctx context.Context, req roundt
 					attr.String("unmatched_players", strings.Join(unmatchedPlayers, ", ")),
 				)
 			}
+			s.importerMetrics.RecordPlayersMatched(ctx, source, matchedCount)
+			s.importerMetrics.RecordPlayersUnmatched(ctx, source, len(unmatchedPlayers))
+			s.importerMetrics.RecordGuestPlayers(ctx, source, guestCount)
+			if matchedCount > 0 && len(unmatchedPlayers) > 0 {
+				s.importerMetrics.RecordPartialUpload(ctx, source, importInputKind, importFileExt)
+			}
 
 			if len(finalScores) == 0 {
 				if req.AllowGuestPlayers {
-					return results.FailureResult[*roundtypes.IngestScorecardResult, error](fmt.Errorf("no player scores found in scorecard")), nil
+					failureErr := fmt.Errorf("no player scores found in scorecard")
+					s.recordImportFailure(ctx, source, importInputKind, importFileExt, roundState, failureErr)
+					return results.FailureResult[*roundtypes.IngestScorecardResult, error](failureErr), nil
 				}
-				return results.FailureResult[*roundtypes.IngestScorecardResult, error](fmt.Errorf("no valid player scores matched")), nil
+				failureErr := fmt.Errorf("no valid player scores matched")
+				s.recordImportFailure(ctx, source, importInputKind, importFileExt, roundState, failureErr)
+				return results.FailureResult[*roundtypes.IngestScorecardResult, error](failureErr), nil
 			}
 
 			// --- Return IngestScorecardResult ---

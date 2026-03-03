@@ -127,7 +127,7 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 				tt.setup(queue)
 			}
 
-			s := NewRoundService(nil, queue, nil, nil, mockMetrics, logger, tracer, nil, nil)
+			s := NewRoundService(nil, queue, nil, nil, mockMetrics, nil, logger, tracer, nil, nil)
 
 			req := &roundtypes.ScheduleRoundEventsRequest{
 				RoundID:        testRoundID,

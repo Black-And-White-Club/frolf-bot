@@ -149,6 +149,7 @@ func SetupTestRoundService(t *testing.T) RoundTestDeps {
 		eventBusImpl,
 		roundadapters.NewUserLookupAdapter(userRepository, env.DB),
 		noOpMetrics,
+		nil,
 		testLogger,
 		noOpTracer,
 		roundValidator,

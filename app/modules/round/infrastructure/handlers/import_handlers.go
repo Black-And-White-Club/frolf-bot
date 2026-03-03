@@ -82,8 +82,25 @@ func (h *RoundHandlers) HandleAdminScorecardUploadRequested(ctx context.Context,
 			},
 		}}, nil
 	}
+	parsePayload := &roundevents.ScorecardUploadedPayloadV1{
+		ImportID:                payload.ImportID,
+		Source:                  adminPwaImportSource,
+		GuildID:                 payload.GuildID,
+		RoundID:                 payload.RoundID,
+		UserID:                  payload.UserID,
+		ChannelID:               payload.ChannelID,
+		MessageID:               payload.MessageID,
+		FileData:                payload.FileData,
+		FileURL:                 payload.FileURL,
+		FileName:                payload.FileName,
+		UDiscURL:                payload.UDiscURL,
+		Notes:                   payload.Notes,
+		AllowGuestPlayers:       true,
+		OverwriteExistingScores: true,
+		Timestamp:               time.Now().UTC(),
+	}
 
-	return []handlerwrapper.Result{{Topic: roundevents.ScorecardParseRequestedV1, Payload: result.Success.Job}}, nil
+	return []handlerwrapper.Result{{Topic: roundevents.ScorecardParseRequestedV1, Payload: parsePayload}}, nil
 }
 
 // HandleScorecardUploaded transforms a scorecard upload into an import job request.
@@ -129,8 +146,25 @@ func (h *RoundHandlers) HandleScorecardUploaded(ctx context.Context, payload *ro
 			},
 		}}, nil
 	}
+	parsePayload := &roundevents.ScorecardUploadedPayloadV1{
+		ImportID:                payload.ImportID,
+		Source:                  source,
+		GuildID:                 payload.GuildID,
+		RoundID:                 payload.RoundID,
+		UserID:                  payload.UserID,
+		ChannelID:               payload.ChannelID,
+		MessageID:               payload.MessageID,
+		FileData:                payload.FileData,
+		FileURL:                 payload.FileURL,
+		FileName:                payload.FileName,
+		UDiscURL:                payload.UDiscURL,
+		Notes:                   payload.Notes,
+		AllowGuestPlayers:       false,
+		OverwriteExistingScores: false,
+		Timestamp:               time.Now().UTC(),
+	}
 
-	return []handlerwrapper.Result{{Topic: roundevents.ScorecardParseRequestedV1, Payload: result.Success.Job}}, nil
+	return []handlerwrapper.Result{{Topic: roundevents.ScorecardParseRequestedV1, Payload: parsePayload}}, nil
 }
 
 // HandleScorecardURLRequested transforms a URL request into an import job.
@@ -168,8 +202,26 @@ func (h *RoundHandlers) HandleScorecardURLRequested(ctx context.Context, payload
 			},
 		}}, nil
 	}
+	normalizedURL := payload.UDiscURL
+	if result.Success.Job != nil && result.Success.Job.UDiscURL != "" {
+		normalizedURL = result.Success.Job.UDiscURL
+	}
+	parsePayload := &roundevents.ScorecardUploadedPayloadV1{
+		ImportID:                payload.ImportID,
+		Source:                  discordURLImportSource,
+		GuildID:                 payload.GuildID,
+		RoundID:                 payload.RoundID,
+		UserID:                  payload.UserID,
+		ChannelID:               payload.ChannelID,
+		MessageID:               payload.MessageID,
+		UDiscURL:                normalizedURL,
+		Notes:                   payload.Notes,
+		AllowGuestPlayers:       false,
+		OverwriteExistingScores: false,
+		Timestamp:               time.Now().UTC(),
+	}
 
-	return []handlerwrapper.Result{{Topic: roundevents.ScorecardParseRequestedV1, Payload: result.Success.Job}}, nil
+	return []handlerwrapper.Result{{Topic: roundevents.ScorecardParseRequestedV1, Payload: parsePayload}}, nil
 }
 
 // HandleParseScorecardRequest handles the actual parsing of file data (CSV or URL download).
@@ -183,9 +235,13 @@ func (h *RoundHandlers) HandleParseScorecardRequest(ctx context.Context, payload
 		ImportID: payload.ImportID,
 		GuildID:  payload.GuildID,
 		RoundID:  payload.RoundID,
+		Source:   payload.Source,
 		FileName: payload.FileName,
 		FileData: payload.FileData,
-		FileURL:  payload.UDiscURL,
+		FileURL:  payload.FileURL,
+	}
+	if req.FileURL == "" {
+		req.FileURL = payload.UDiscURL
 	}
 
 	result, err := h.service.ParseScorecard(ctx, &req)
@@ -231,6 +287,7 @@ func (h *RoundHandlers) HandleScorecardParsedForNormalization(ctx context.Contex
 		ImportID:       payload.ImportID,
 		GuildID:        payload.GuildID,
 		RoundID:        payload.RoundID,
+		Source:         payload.Source,
 		UserID:         payload.UserID,
 		ChannelID:      payload.ChannelID,
 		EventMessageID: payload.EventMessageID,

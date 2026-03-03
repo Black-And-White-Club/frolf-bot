@@ -30,6 +30,11 @@ func (s *RoundService) executeApplyImportedScores(
 	req roundtypes.ImportApplyScoresInput,
 ) (ApplyImportedScoresResult, error) {
 	return runInTx(s, ctx, func(ctx context.Context, tx bun.IDB) (ApplyImportedScoresResult, error) {
+		source := normalizeImportSource(req.Source)
+		importInputKind := "unknown"
+		importFileExt := "unknown"
+		roundState := "unknown"
+
 		if len(req.Scores) == 0 {
 			return results.OperationResult[*roundtypes.ImportApplyScoresResult, error]{}, nil
 		}
@@ -37,8 +42,16 @@ func (s *RoundService) executeApplyImportedScores(
 		// --- Singles vs Teams ---
 		round, err := s.repo.GetRound(ctx, tx, req.GuildID, req.RoundID)
 		if err != nil {
-			return results.FailureResult[*roundtypes.ImportApplyScoresResult, error](fmt.Errorf("failed to get round: %w", err)), nil
+			failureErr := fmt.Errorf("failed to get round: %w", err)
+			s.recordImportFailure(ctx, source, importInputKind, importFileExt, roundState, failureErr)
+			return results.FailureResult[*roundtypes.ImportApplyScoresResult, error](failureErr), nil
 		}
+		roundState = roundStateValue(round)
+		importInputKind = inputKindFromRound(round)
+		importFileExt = fileExt(round.FileName, "", round.UDiscURL)
+
+		applyStart := time.Now()
+		defer s.recordImportPhaseDuration(ctx, importPhaseApply, source, importInputKind, importFileExt, time.Since(applyStart))
 
 		var result ApplyImportedScoresResult
 		if len(round.Teams) > 0 {
@@ -47,9 +60,14 @@ func (s *RoundService) executeApplyImportedScores(
 			result, err = s.applySinglesScores(ctx, tx, req, round)
 		}
 		if err != nil {
+			s.recordImportFailure(ctx, source, importInputKind, importFileExt, roundState, err)
 			return result, err
 		}
-		if result.Failure != nil || req.ImportID == "" {
+		if result.Failure != nil {
+			s.recordImportFailure(ctx, source, importInputKind, importFileExt, roundState, *result.Failure)
+			return result, nil
+		}
+		if req.ImportID == "" {
 			return result, nil
 		}
 
@@ -63,10 +81,13 @@ func (s *RoundService) executeApplyImportedScores(
 			"",
 			"",
 		); err != nil {
+			failureErr := fmt.Errorf("failed to mark import as completed: %w", err)
+			s.recordImportFailure(ctx, source, importInputKind, importFileExt, roundState, failureErr)
 			return results.FailureResult[*roundtypes.ImportApplyScoresResult, error](
-				fmt.Errorf("failed to mark import as completed: %w", err),
+				failureErr,
 			), nil
 		}
+		s.importerMetrics.RecordImportSuccess(ctx, source, importInputKind, importFileExt, roundState)
 
 		return result, nil
 	})

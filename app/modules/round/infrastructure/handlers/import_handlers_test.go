@@ -334,3 +334,35 @@ func TestRoundHandlers_HandleParseScorecardRequest(t *testing.T) {
 		t.Errorf("service method not called, trace: %v", svc.Trace())
 	}
 }
+
+func TestRoundHandlers_HandleParseScorecardRequest_UsesFileURL(t *testing.T) {
+	ctx := context.Background()
+	payload := &roundevents.ScorecardUploadedPayloadV1{
+		ImportID: "imp-2",
+		FileURL:  "https://cdn.discordapp.com/attachments/123/scorecard.xlsx",
+		FileName: "scorecard.xlsx",
+		UDiscURL: "https://udisc.com/should-not-win",
+	}
+
+	svc := NewFakeService()
+	svc.ParseScorecardFunc = func(ctx context.Context, req *roundtypes.ImportParseScorecardInput) (roundservice.ParseScorecardResult, error) {
+		if req.FileURL != payload.FileURL {
+			return roundservice.ParseScorecardResult{}, errors.New("file URL not forwarded")
+		}
+		return results.SuccessResult[roundtypes.ParsedScorecard, error](roundtypes.ParsedScorecard{}), nil
+	}
+
+	h := &RoundHandlers{
+		service:     svc,
+		userService: NewFakeUserService(),
+		logger:      loggerfrolfbot.NoOpLogger,
+	}
+
+	res, err := h.HandleParseScorecardRequest(ctx, payload)
+	if err != nil {
+		t.Fatalf("handler failed: %v", err)
+	}
+	if len(res) != 1 || res[0].Topic != roundevents.ScorecardParsedForNormalizationV1 {
+		t.Fatalf("unexpected result: %+v", res)
+	}
+}

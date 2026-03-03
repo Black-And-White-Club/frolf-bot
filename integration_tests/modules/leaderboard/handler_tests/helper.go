@@ -192,6 +192,7 @@ func SetupTestLeaderboardHandler(t *testing.T) LeaderboardHandlerTestDeps {
 		eventBusImpl,
 		userLookup,
 		roundMetrics,
+		nil,
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		noop.NewTracerProvider().Tracer("noop"),
 		roundValidator,

@@ -133,7 +133,7 @@ func TestRoundService_StartRound(t *testing.T) {
 				tt.setup(repo)
 			}
 
-			s := NewRoundService(repo, nil, nil, nil, mockMetrics, logger, tracer, nil, nil)
+			s := NewRoundService(repo, nil, nil, nil, mockMetrics, nil, logger, tracer, nil, nil)
 
 			result, err := s.StartRound(context.Background(), tt.req)
 
