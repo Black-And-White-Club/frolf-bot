@@ -16,6 +16,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
+	"github.com/uptrace/bun"
 	"go.opentelemetry.io/otel/trace/noop"
 )
 
@@ -43,6 +44,7 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 		startTimeOffset time.Duration
 		eventMessageID  string
 		setup           func(*FakeQueueService)
+		setupRepo       func(*FakeRepo)
 		want            results.OperationResult[*roundtypes.ScheduleRoundEventsResult, error]
 		wantErr         bool
 	}{
@@ -114,6 +116,59 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name:            "linked discord event skips queue-based start scheduling",
+			startTimeOffset: 2 * time.Hour,
+			eventMessageID:  "",
+			setup: func(q *FakeQueueService) {
+				q.CancelRoundJobsFunc = func(ctx context.Context, rID sharedtypes.RoundID) error { return nil }
+				q.ScheduleRoundReminderFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, t time.Time, p roundevents.DiscordReminderPayloadV1) error {
+					return nil
+				}
+				q.ScheduleRoundStartFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, t time.Time, p roundevents.RoundStartedPayloadV1) error {
+					return errors.New("start should be skipped for linked discord native events")
+				}
+			},
+			setupRepo: func(r *FakeRepo) {
+				r.GetRoundFunc = func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{
+						ID:             roundID,
+						GuildID:        guildID,
+						DiscordEventID: "discord-event-123",
+					}, nil
+				}
+			},
+			want: results.OperationResult[*roundtypes.ScheduleRoundEventsResult, error]{
+				Success: ptr(&roundtypes.ScheduleRoundEventsResult{
+					RoundID:        testRoundID,
+					GuildID:        testGuildID,
+					Title:          testRoundTitle,
+					Description:    testDescription,
+					Location:       testLocation,
+					StartTime:      *startTimePtr(now.Add(2 * time.Hour)),
+					EventMessageID: "",
+				}),
+			},
+			wantErr: false,
+		},
+		{
+			name:            "native event lookup error falls back to queue-based start scheduling",
+			startTimeOffset: 2 * time.Hour,
+			eventMessageID:  "",
+			setup: func(q *FakeQueueService) {
+				q.CancelRoundJobsFunc = func(ctx context.Context, rID sharedtypes.RoundID) error { return nil }
+				q.ScheduleRoundStartFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, t time.Time, p roundevents.RoundStartedPayloadV1) error {
+					return errors.New("round start scheduling error")
+				}
+			},
+			setupRepo: func(r *FakeRepo) {
+				r.GetRoundFunc = func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return nil, errors.New("lookup failed")
+				}
+			},
+			want:    results.OperationResult[*roundtypes.ScheduleRoundEventsResult, error]{},
+			wantErr: true,
+		},
+		{
 			name:            "pwa-only scheduling skips reminder when event message id missing",
 			startTimeOffset: 2 * time.Hour,
 			eventMessageID:  "",
@@ -143,12 +198,16 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			repo := NewFakeRepo()
 			queue := NewFakeQueueService()
+			if tt.setupRepo != nil {
+				tt.setupRepo(repo)
+			}
 			if tt.setup != nil {
 				tt.setup(queue)
 			}
 
-			s := NewRoundService(nil, queue, nil, nil, mockMetrics, nil, logger, tracer, nil, nil)
+			s := NewRoundService(repo, queue, nil, nil, mockMetrics, nil, logger, tracer, nil, nil)
 
 			req := &roundtypes.ScheduleRoundEventsRequest{
 				RoundID:        testRoundID,

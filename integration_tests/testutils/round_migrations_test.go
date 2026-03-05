@@ -121,6 +121,80 @@ func runSingleRoundMigration(t *testing.T, ctx context.Context, db *bun.DB, migr
 	}
 }
 
+func runAllRoundMigrations(t *testing.T, ctx context.Context, db *bun.DB) {
+	t.Helper()
+
+	migrator := migrate.NewMigrator(db, roundmigrations.Migrations, migrate.WithUpsert(true))
+	if err := migrator.Init(ctx); err != nil {
+		t.Fatalf("failed to init round migrator: %v", err)
+	}
+
+	if _, err := migrator.Migrate(ctx); err != nil {
+		t.Fatalf("failed to run all round migrations: %v", err)
+	}
+}
+
+func assertTableExists(t *testing.T, ctx context.Context, db *bun.DB, tableName string) {
+	t.Helper()
+
+	var exists bool
+	err := db.QueryRowContext(
+		ctx,
+		`SELECT EXISTS (
+			SELECT 1
+			FROM information_schema.tables
+			WHERE table_schema = 'public' AND table_name = ?
+		)`,
+		tableName,
+	).Scan(&exists)
+	if err != nil {
+		t.Fatalf("failed to query table existence for %q: %v", tableName, err)
+	}
+	if !exists {
+		t.Fatalf("expected table %q to exist", tableName)
+	}
+}
+
+func assertIndexExists(t *testing.T, ctx context.Context, db *bun.DB, tableName, indexName string) {
+	t.Helper()
+
+	var count int
+	err := db.QueryRowContext(
+		ctx,
+		`SELECT COUNT(*)
+		 FROM pg_indexes
+		 WHERE schemaname = 'public' AND tablename = ? AND indexname = ?`,
+		tableName,
+		indexName,
+	).Scan(&count)
+	if err != nil {
+		t.Fatalf("failed to query index existence for %q: %v", indexName, err)
+	}
+	if count != 1 {
+		t.Fatalf("expected index %q on table %q exactly once, got %d", indexName, tableName, count)
+	}
+}
+
+func assertColumnType(t *testing.T, ctx context.Context, db *bun.DB, tableName, columnName, expectedType string) {
+	t.Helper()
+
+	var dataType string
+	err := db.QueryRowContext(
+		ctx,
+		`SELECT data_type
+		 FROM information_schema.columns
+		 WHERE table_schema = 'public' AND table_name = ? AND column_name = ?`,
+		tableName,
+		columnName,
+	).Scan(&dataType)
+	if err != nil {
+		t.Fatalf("failed to query column metadata for %s.%s: %v", tableName, columnName, err)
+	}
+	if dataType != expectedType {
+		t.Fatalf("expected %s.%s type %q, got %q", tableName, columnName, expectedType, dataType)
+	}
+}
+
 func TestRoundMigration_AddRoundGroups_BackfillsLegacyRows(t *testing.T) {
 	db, ctx := setupIsolatedPostgresDB(t)
 
@@ -252,4 +326,139 @@ func TestRoundMigration_EnsureDiscordEventID_EnforcesTextTypeAndIndex(t *testing
 	if indexCount != 1 {
 		t.Fatalf("expected idx_rounds_discord_event_id to exist exactly once, got %d", indexCount)
 	}
+}
+
+func TestRoundMigration_BackfillRoundsTeams_ReplacesNullWithEmptyArray(t *testing.T) {
+	db, ctx := setupIsolatedPostgresDB(t)
+
+	_, err := db.ExecContext(ctx, `
+		CREATE TABLE rounds (
+			id UUID PRIMARY KEY,
+			teams JSONB NULL
+		)
+	`)
+	if err != nil {
+		t.Fatalf("failed creating rounds table: %v", err)
+	}
+
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO rounds (id, teams) VALUES
+		('00000000-0000-0000-0000-000000000201', NULL),
+		('00000000-0000-0000-0000-000000000202', '["keep"]'::jsonb)
+	`)
+	if err != nil {
+		t.Fatalf("failed inserting rounds rows: %v", err)
+	}
+
+	runSingleRoundMigration(t, ctx, db, "backfill_rounds_teams")
+
+	var nullRowTeams string
+	err = db.QueryRowContext(
+		ctx,
+		`SELECT teams::text FROM rounds WHERE id = '00000000-0000-0000-0000-000000000201'`,
+	).Scan(&nullRowTeams)
+	if err != nil {
+		t.Fatalf("failed querying null-row teams: %v", err)
+	}
+	if nullRowTeams != "[]" {
+		t.Fatalf("expected null teams backfilled to [], got %q", nullRowTeams)
+	}
+
+	var preservedTeams string
+	err = db.QueryRowContext(
+		ctx,
+		`SELECT teams::text FROM rounds WHERE id = '00000000-0000-0000-0000-000000000202'`,
+	).Scan(&preservedTeams)
+	if err != nil {
+		t.Fatalf("failed querying preserved teams row: %v", err)
+	}
+	if preservedTeams != "[\"keep\"]" {
+		t.Fatalf("expected existing teams payload to stay unchanged, got %q", preservedTeams)
+	}
+}
+
+func TestRoundMigration_AddDiscordEventID_AddsColumnAndIndex(t *testing.T) {
+	db, ctx := setupIsolatedPostgresDB(t)
+
+	_, err := db.ExecContext(ctx, `
+		CREATE TABLE rounds (
+			id UUID PRIMARY KEY,
+			guild_id TEXT NOT NULL
+		)
+	`)
+	if err != nil {
+		t.Fatalf("failed creating rounds table: %v", err)
+	}
+
+	runSingleRoundMigration(t, ctx, db, "add_discord_event_id")
+
+	assertColumnType(t, ctx, db, "rounds", "discord_event_id", "character varying")
+	assertIndexExists(t, ctx, db, "rounds", "idx_rounds_discord_event_id")
+}
+
+func TestRoundMigration_AddRoundQueryPerfIndexes_CreatesExpectedIndexes(t *testing.T) {
+	db, ctx := setupIsolatedPostgresDB(t)
+
+	_, err := db.ExecContext(ctx, `
+		CREATE TABLE rounds (
+			id UUID PRIMARY KEY,
+			guild_id TEXT NOT NULL,
+			state TEXT NOT NULL,
+			start_time TIMESTAMPTZ NOT NULL,
+			participants JSONB NOT NULL DEFAULT '[]'::jsonb
+		)
+	`)
+	if err != nil {
+		t.Fatalf("failed creating rounds table: %v", err)
+	}
+
+	runSingleRoundMigration(t, ctx, db, "add_round_query_perf_indexes")
+
+	assertIndexExists(t, ctx, db, "rounds", "idx_rounds_guild_state_start_time_desc")
+	assertIndexExists(t, ctx, db, "rounds", "idx_rounds_participants_gin")
+}
+
+func TestRoundMigration_AddRoundEmbedPaginationSnapshots_CreatesTableAndIndex(t *testing.T) {
+	db, ctx := setupIsolatedPostgresDB(t)
+
+	runSingleRoundMigration(t, ctx, db, "add_round_embed_pagination_snapshots")
+
+	assertTableExists(t, ctx, db, "round_embed_pagination_snapshots")
+	assertIndexExists(t, ctx, db, "round_embed_pagination_snapshots", "idx_round_embed_pagination_snapshots_expires_at")
+}
+
+func TestRoundMigration_AddParScoresToRounds_AddsJSONBColumn(t *testing.T) {
+	db, ctx := setupIsolatedPostgresDB(t)
+
+	_, err := db.ExecContext(ctx, `
+		CREATE TABLE rounds (
+			id UUID PRIMARY KEY
+		)
+	`)
+	if err != nil {
+		t.Fatalf("failed creating rounds table: %v", err)
+	}
+
+	runSingleRoundMigration(t, ctx, db, "add_par_scores_to_rounds")
+
+	assertColumnType(t, ctx, db, "rounds", "par_scores", "jsonb")
+}
+
+func TestRoundMigrations_RunAllUp_SmokeAndSchemaInvariants(t *testing.T) {
+	db, ctx := setupIsolatedPostgresDB(t)
+
+	runAllRoundMigrations(t, ctx, db)
+
+	assertTableExists(t, ctx, db, "rounds")
+	assertTableExists(t, ctx, db, "round_groups")
+	assertTableExists(t, ctx, db, "round_group_members")
+	assertTableExists(t, ctx, db, "round_embed_pagination_snapshots")
+
+	assertColumnType(t, ctx, db, "rounds", "discord_event_id", "text")
+	assertColumnType(t, ctx, db, "rounds", "par_scores", "jsonb")
+
+	assertIndexExists(t, ctx, db, "rounds", "idx_rounds_discord_event_id")
+	assertIndexExists(t, ctx, db, "rounds", "idx_rounds_guild_state_start_time_desc")
+	assertIndexExists(t, ctx, db, "rounds", "idx_rounds_participants_gin")
+	assertIndexExists(t, ctx, db, "round_embed_pagination_snapshots", "idx_round_embed_pagination_snapshots_expires_at")
 }

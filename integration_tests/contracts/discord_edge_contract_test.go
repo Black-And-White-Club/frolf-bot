@@ -13,8 +13,9 @@ type eventContractCatalog struct {
 }
 
 type eventContract struct {
-	Subject  string        `json:"subject"`
-	Producer contractActor `json:"producer"`
+	Subject   string          `json:"subject"`
+	Producer  contractActor   `json:"producer"`
+	Producers []contractActor `json:"producers"`
 }
 
 type contractActor struct {
@@ -30,16 +31,22 @@ func TestDiscordEdgeContractsIncludeCoreSubjects(t *testing.T) {
 	}
 
 	expected := map[string]string{
-		"discord.round.created.v1":           "discord",
-		"discord.round.started.v1":           "discord",
-		"round.created.v1":                   "frolf-bot-backend",
-		"round.started.v1":                   "frolf-bot-backend",
-		"round.participant.joined.v1":        "frolf-bot-backend",
-		"round.participant.score.updated.v1": "frolf-bot-backend",
-		"leaderboard.updated.v1":             "frolf-bot-backend",
-		"leaderboard.tag.updated.v1":         "frolf-bot-backend",
-		"leaderboard.tag.swap.processed.v1":  "frolf-bot-backend",
-		"leaderboard.tag.list.requested.v1":  "pwa",
+		"discord.round.created.v1":                "discord",
+		"discord.round.started.v1":                "discord",
+		"round.created.v1":                        "frolf-bot-backend",
+		"round.started.v1":                        "frolf-bot-backend",
+		"round.participant.joined.v1":             "frolf-bot-backend",
+		"round.participant.score.updated.v1":      "frolf-bot-backend",
+		"leaderboard.updated.v1":                  "frolf-bot-backend",
+		"leaderboard.tag.updated.v1":              "frolf-bot-backend",
+		"leaderboard.tag.swap.processed.v1":       "frolf-bot-backend",
+		"leaderboard.tag.list.requested.v1":       "pwa",
+		"round.creation.requested.v1":             "pwa",
+		"round.participant.join.requested.v1":     "pwa",
+		"round.score.update.requested.v1":         "pwa",
+		"round.update.requested.v1":               "pwa",
+		"round.delete.requested.v1":               "pwa",
+		"user.udisc.identity.update.requested.v1": "pwa",
 	}
 
 	for subject, producerService := range expected {
@@ -47,15 +54,30 @@ func TestDiscordEdgeContractsIncludeCoreSubjects(t *testing.T) {
 		if !ok {
 			t.Fatalf("missing contract for subject %q", subject)
 		}
-		if contract.Producer.Service != producerService {
+		if !matchesProducerService(contract, producerService) {
 			t.Fatalf(
-				"subject %q producer mismatch: expected %q got %q",
+				"subject %q producer mismatch: expected %q in producer/producers, got primary=%q alternates=%v",
 				subject,
 				producerService,
 				contract.Producer.Service,
+				contract.Producers,
 			)
 		}
 	}
+}
+
+func matchesProducerService(contract eventContract, service string) bool {
+	if contract.Producer.Service == service {
+		return true
+	}
+
+	for _, producer := range contract.Producers {
+		if producer.Service == service {
+			return true
+		}
+	}
+
+	return false
 }
 
 func loadContractCatalog(t *testing.T) eventContractCatalog {

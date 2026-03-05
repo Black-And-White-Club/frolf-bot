@@ -37,6 +37,32 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, req *roundtypes.
 		startTimeUTC := req.StartTime.AsTime().UTC()
 		reminderTimeUTC := startTimeUTC.Add(-1 * time.Hour)
 
+		hasNativeDiscordEvent := false
+		nativeEventLookupFailed := false
+		if s.repo != nil {
+			storedRound, lookupErr := s.repo.GetRound(ctx, s.db, req.GuildID, req.RoundID)
+			if lookupErr != nil {
+				nativeEventLookupFailed = true
+				s.logger.WarnContext(ctx, "Failed to inspect round native event linkage; defaulting to queue-based start fallback",
+					attr.RoundID("round_id", req.RoundID),
+					attr.Error(lookupErr),
+				)
+			} else if storedRound != nil && storedRound.DiscordEventID != "" {
+				hasNativeDiscordEvent = true
+			}
+		} else {
+			s.logger.WarnContext(ctx, "Round repository unavailable during scheduling; using queue-based start fallback",
+				attr.RoundID("round_id", req.RoundID),
+			)
+		}
+
+		s.logger.DebugContext(ctx, "Round start scheduling decision",
+			attr.RoundID("round_id", req.RoundID),
+			attr.Bool("has_native_discord_event", hasNativeDiscordEvent),
+			attr.Bool("event_message_id_present", req.EventMessageID != ""),
+			attr.Bool("native_event_lookup_failed", nativeEventLookupFailed),
+		)
+
 		// Schedule reminder only when we have a Discord message context and enough lead time.
 		if req.EventMessageID != "" && reminderTimeUTC.After(now.Add(5*time.Second)) {
 			s.logger.InfoContext(ctx, "Scheduling 1-hour reminder",
@@ -92,10 +118,10 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, req *roundtypes.
 			)
 		}
 
-		// Schedule round start if in the future (at least 5 seconds buffer).
-		// PWA-only rounds have no Discord event/message context, so they rely on queue-based starts.
-		// Discord-backed rounds are started by native scheduled-event callbacks instead.
-		if startTimeUTC.After(now.Add(5*time.Second)) && req.EventMessageID == "" {
+		// Schedule round start if in the future (at least 5 seconds buffer) and no
+		// Discord native scheduled event is linked yet. Linked Discord events remain
+		// authoritative for lifecycle start transitions.
+		if startTimeUTC.After(now.Add(5*time.Second)) && !hasNativeDiscordEvent {
 			s.logger.InfoContext(ctx, "Scheduling round start",
 				attr.RoundID("round_id", req.RoundID),
 				attr.Time("start_time", startTimeUTC),
@@ -124,7 +150,7 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, req *roundtypes.
 				)
 				return results.OperationResult[*roundtypes.ScheduleRoundEventsResult, error]{}, err
 			}
-		} else if req.EventMessageID != "" {
+		} else if hasNativeDiscordEvent {
 			s.logger.InfoContext(ctx, "Skipping queue-based round start scheduling - Discord native event flow will trigger start",
 				attr.RoundID("round_id", req.RoundID),
 				attr.Time("start_time", startTimeUTC),
