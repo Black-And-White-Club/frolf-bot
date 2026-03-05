@@ -194,8 +194,12 @@ func publishPatterns(clubUUID, guildID string, includeParticipant bool) []string
 			"round.participant.join.requested.v1",
 			"round.participant.declined.v1",
 			"round.participant.removal.requested.v1",
+			"round.score.update.requested.v1",
 		)
 	}
+
+	// Allow authenticated users to manage their UDisc identity from the PWA.
+	patterns = append(patterns, "user.udisc.identity.update.requested.v1")
 
 	// Club info request - scoped to the user's active club
 	if clubUUID != "" {
@@ -221,12 +225,11 @@ func (b *Builder) playerPermissions(clubUUID, userUUID, guildID, userID string) 
 func (b *Builder) editorPermissions(clubUUID, userUUID, guildID, userID string) *Permissions {
 	pubAllow := publishPatterns(clubUUID, guildID, true)
 
-	// Editors can also create/update/delete rounds and submit scores
+	// Editors can also create/update/delete rounds.
 	pubAllow = append(pubAllow,
 		"round.creation.requested.v1",
 		"round.update.requested.v1",
 		"round.delete.requested.v1",
-		"round.score.update.requested.v1",
 		"leaderboard.point.history.requested.v1",
 		"leaderboard.get.season.standings.v1",
 	)

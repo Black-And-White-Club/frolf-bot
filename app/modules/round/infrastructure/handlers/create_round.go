@@ -181,6 +181,30 @@ func (h *RoundHandlers) HandleRoundEntityCreated(
 	// Add both legacy GuildID and internal ClubUUID scoped versions for PWA/NATS transition
 	handlerResults = h.addParallelIdentityResults(ctx, handlerResults, roundevents.RoundCreatedV1, payload.GuildID)
 
+	// PWA-only creation path does not emit a later RoundEventMessageIDUpdate.
+	// Trigger scheduling directly so queue-based start works without Discord native events.
+	if payload.DiscordChannelID == "" && mappedResult.Success != nil {
+		if createdPayload, ok := (*mappedResult.Success).(*roundevents.RoundCreatedPayloadV1); ok {
+			handlerResults = append(handlerResults, handlerwrapper.Result{
+				Topic: roundevents.RoundEventMessageIDUpdatedV1,
+				Payload: &roundevents.RoundScheduledPayloadV1{
+					GuildID: createdPayload.GuildID,
+					BaseRoundPayload: roundtypes.BaseRoundPayload{
+						RoundID:     createdPayload.RoundID,
+						Title:       createdPayload.Title,
+						Description: createdPayload.Description,
+						Location:    createdPayload.Location,
+						StartTime:   createdPayload.StartTime,
+						UserID:      createdPayload.UserID,
+					},
+					EventMessageID: payload.Round.EventMessageID,
+					Config:         createdPayload.Config,
+					ChannelID:      createdPayload.ChannelID,
+				},
+			})
+		}
+	}
+
 	if h.logger != nil {
 		if mappedResult.Failure != nil {
 			h.logger.WarnContext(ctx, "round creation persistence failed",

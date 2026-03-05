@@ -165,6 +165,7 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 		wantErr         bool
 		wantResultLen   int
 		wantResultTopic string
+		wantLastTopic   string
 		expectedErrMsg  string
 		assertPayload   func(t *testing.T, resultPayload any)
 	}{
@@ -241,8 +242,9 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 				DiscordGuildID:   "test-guild-id",
 			},
 			wantErr:         false,
-			wantResultLen:   3,
+			wantResultLen:   4,
 			wantResultTopic: roundevents.RoundCreatedV1,
+			wantLastTopic:   roundevents.RoundEventMessageIDUpdatedV1,
 			assertPayload: func(t *testing.T, resultPayload any) {
 				t.Helper()
 				createdPayload, ok := resultPayload.(*roundevents.RoundCreatedPayloadV1)
@@ -321,6 +323,13 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 			}
 			if tt.wantResultLen > 0 && results[0].Topic != tt.wantResultTopic {
 				t.Errorf("HandleRoundEntityCreated() result topic = %v, want %v", results[0].Topic, tt.wantResultTopic)
+			}
+			if tt.wantLastTopic != "" && len(results) > 0 && results[len(results)-1].Topic != tt.wantLastTopic {
+				t.Errorf(
+					"HandleRoundEntityCreated() last result topic = %v, want %v",
+					results[len(results)-1].Topic,
+					tt.wantLastTopic,
+				)
 			}
 			if tt.assertPayload != nil && len(results) > 0 {
 				tt.assertPayload(t, results[0].Payload)

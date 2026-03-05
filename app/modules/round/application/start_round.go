@@ -37,9 +37,18 @@ func (s *RoundService) StartRound(
 			return results.FailureResult[*roundtypes.Round, error](err), nil
 		}
 
-		// Ensure we have an event message id to update/notify Discord
-		if round.EventMessageID == "" {
-			return results.FailureResult[*roundtypes.Round, error](fmt.Errorf("round missing event_message_id")), nil
+		// Idempotency/guardrails around lifecycle transitions.
+		switch round.State {
+		case roundtypes.RoundStateInProgress:
+			s.logger.InfoContext(ctx, "Round already started; returning current state",
+				attr.RoundID("round_id", roundID),
+				attr.String("guild_id", string(guildID)),
+			)
+			return results.SuccessResult[*roundtypes.Round, error](round), nil
+		case roundtypes.RoundStateFinalized, roundtypes.RoundStateDeleted:
+			return results.FailureResult[*roundtypes.Round, error](
+				fmt.Errorf("round state %s cannot transition to in progress", round.State),
+			), nil
 		}
 
 		// Update the round state to "in progress"

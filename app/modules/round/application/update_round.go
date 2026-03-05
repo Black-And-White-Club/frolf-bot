@@ -340,8 +340,8 @@ func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, req *roun
 		// Calculate reminder time (1 hour before the round starts) in UTC
 		reminderTimeUTC := startTimeUTC.Add(-1 * time.Hour)
 
-		// Only schedule reminder if there's enough time (reminder time is in the future)
-		if reminderTimeUTC.After(now) {
+		// Only schedule reminder when we have a Discord message context and enough lead time.
+		if eventMessageID != "" && reminderTimeUTC.After(now) {
 			s.logger.InfoContext(ctx, "Rescheduling 1-hour reminder",
 				attr.RoundID("round_id", req.RoundID),
 				attr.Time("reminder_time", reminderTimeUTC),
@@ -388,6 +388,10 @@ func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, req *roun
 				attr.RoundID("round_id", req.RoundID),
 				attr.Time("reminder_time", reminderTimeUTC),
 			)
+		} else if eventMessageID == "" {
+			s.logger.InfoContext(ctx, "Skipping 1-hour reminder during reschedule - no event message id",
+				attr.RoundID("round_id", req.RoundID),
+			)
 		} else {
 			s.logger.InfoContext(ctx, "Skipping 1-hour reminder for rescheduling - not enough time",
 				attr.RoundID("round_id", req.RoundID),
@@ -397,36 +401,39 @@ func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, req *roun
 			)
 		}
 
-		// Schedule the round start event
-		s.logger.InfoContext(ctx, "Rescheduling round start event",
-			attr.RoundID("round_id", req.RoundID),
-			attr.Time("start_time", startTimeUTC),
-		)
+		if eventMessageID == "" {
+			// PWA-only rounds rely on queue-based start scheduling.
+			s.logger.InfoContext(ctx, "Rescheduling queue-based round start event",
+				attr.RoundID("round_id", req.RoundID),
+				attr.Time("start_time", startTimeUTC),
+			)
 
-		// startPayload := roundevents.RoundStartedPayloadV1{
-		// 	GuildID:   req.GuildID,
-		// 	RoundID:   req.RoundID,
-		// 	Title:     roundtypes.Title(finalTitle),
-		// 	Location:  roundtypes.Location(finalLocation),
-		// 	StartTime: req.StartTime,
-		// }
+			startPayload := roundevents.RoundStartedPayloadV1{
+				GuildID:   req.GuildID,
+				RoundID:   req.RoundID,
+				Title:     roundtypes.Title(finalTitle),
+				Location:  roundtypes.Location(finalLocation),
+				StartTime: req.StartTime,
+			}
 
-		// Enrich with config if available (checking again as it might have been skipped in reminder block)
-		// if cfg := s.getGuildConfigForEnrichment(ctx, req.GuildID); cfg != nil && cfg.EventChannelID != "" {
-		// 	startPayload.ChannelID = cfg.EventChannelID
-		// }
+			// Enrich with config if available (checking again as it might have been skipped in reminder block)
+			if cfg := s.getGuildConfigForEnrichment(ctx, req.GuildID); cfg != nil && cfg.EventChannelID != "" {
+				startPayload.ChannelID = cfg.EventChannelID
+			}
 
-		// if err := s.queueService.ScheduleRoundStart(ctx, req.GuildID, req.RoundID, startTimeUTC, startPayload); err != nil {
-		// 	s.logger.ErrorContext(ctx, "Failed to reschedule round start",
-		// 		attr.RoundID("round_id", req.RoundID),
-		// 		attr.Error(err),
-		// 	)
-		// 	return results.OperationResult[bool, error]{}, err
-		// }
-		s.logger.InfoContext(ctx, "Skipping round start rescheduling (disabled per configuration/request)",
-			attr.RoundID("round_id", req.RoundID),
-			attr.Time("start_time", startTimeUTC),
-		)
+			if err := s.queueService.ScheduleRoundStart(ctx, req.GuildID, req.RoundID, startTimeUTC, startPayload); err != nil {
+				s.logger.ErrorContext(ctx, "Failed to reschedule round start",
+					attr.RoundID("round_id", req.RoundID),
+					attr.Error(err),
+				)
+				return results.OperationResult[bool, error]{}, err
+			}
+		} else {
+			s.logger.InfoContext(ctx, "Skipping queue-based round start rescheduling - Discord native event flow will trigger start",
+				attr.RoundID("round_id", req.RoundID),
+				attr.Time("start_time", startTimeUTC),
+			)
+		}
 
 		s.logger.InfoContext(ctx, "Round events rescheduled successfully",
 			attr.RoundID("round_id", req.RoundID),

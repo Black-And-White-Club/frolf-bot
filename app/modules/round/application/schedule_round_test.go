@@ -41,6 +41,7 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 	tests := []struct {
 		name            string
 		startTimeOffset time.Duration
+		eventMessageID  string
 		setup           func(*FakeQueueService)
 		want            results.OperationResult[*roundtypes.ScheduleRoundEventsResult, error]
 		wantErr         bool
@@ -48,6 +49,7 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 		{
 			name:            "successful scheduling",
 			startTimeOffset: 2 * time.Hour,
+			eventMessageID:  testMessageID,
 			setup: func(q *FakeQueueService) {
 				q.CancelRoundJobsFunc = func(ctx context.Context, rID sharedtypes.RoundID) error { return nil }
 				q.ScheduleRoundReminderFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, t time.Time, p roundevents.DiscordReminderPayloadV1) error {
@@ -73,6 +75,7 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 		{
 			name:            "error cancelling jobs",
 			startTimeOffset: 2 * time.Hour,
+			eventMessageID:  testMessageID,
 			setup: func(q *FakeQueueService) {
 				q.CancelRoundJobsFunc = func(ctx context.Context, rID sharedtypes.RoundID) error {
 					return errors.New("job cancellation error")
@@ -84,6 +87,7 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 		{
 			name:            "error scheduling reminder",
 			startTimeOffset: 2 * time.Hour,
+			eventMessageID:  testMessageID,
 			setup: func(q *FakeQueueService) {
 				q.CancelRoundJobsFunc = func(ctx context.Context, rID sharedtypes.RoundID) error { return nil }
 				q.ScheduleRoundReminderFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, t time.Time, p roundevents.DiscordReminderPayloadV1) error {
@@ -96,14 +100,31 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 		{
 			name:            "error scheduling round start",
 			startTimeOffset: 2 * time.Hour,
+			eventMessageID:  "",
 			setup: func(q *FakeQueueService) {
 				q.CancelRoundJobsFunc = func(ctx context.Context, rID sharedtypes.RoundID) error { return nil }
 				q.ScheduleRoundReminderFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, t time.Time, p roundevents.DiscordReminderPayloadV1) error {
 					return nil
 				}
-				// q.ScheduleRoundStartFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, t time.Time, p roundevents.RoundStartedPayloadV1) error {
-				// 	return errors.New("round start scheduling error")
-				// }
+				q.ScheduleRoundStartFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, t time.Time, p roundevents.RoundStartedPayloadV1) error {
+					return errors.New("round start scheduling error")
+				}
+			},
+			want:    results.OperationResult[*roundtypes.ScheduleRoundEventsResult, error]{},
+			wantErr: true,
+		},
+		{
+			name:            "pwa-only scheduling skips reminder when event message id missing",
+			startTimeOffset: 2 * time.Hour,
+			eventMessageID:  "",
+			setup: func(q *FakeQueueService) {
+				q.CancelRoundJobsFunc = func(ctx context.Context, rID sharedtypes.RoundID) error { return nil }
+				q.ScheduleRoundReminderFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, t time.Time, p roundevents.DiscordReminderPayloadV1) error {
+					return errors.New("reminder should not be scheduled without event message id")
+				}
+				q.ScheduleRoundStartFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, t time.Time, p roundevents.RoundStartedPayloadV1) error {
+					return nil
+				}
 			},
 			want: results.OperationResult[*roundtypes.ScheduleRoundEventsResult, error]{
 				Success: ptr(&roundtypes.ScheduleRoundEventsResult{
@@ -113,7 +134,7 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 					Description:    testDescription,
 					Location:       testLocation,
 					StartTime:      *startTimePtr(now.Add(2 * time.Hour)),
-					EventMessageID: testMessageID,
+					EventMessageID: "",
 				}),
 			},
 			wantErr: false,
@@ -136,7 +157,7 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 				Description:    testDescription,
 				Location:       testLocation,
 				StartTime:      *startTimePtr(now.Add(tt.startTimeOffset)),
-				EventMessageID: testMessageID,
+				EventMessageID: tt.eventMessageID,
 			}
 
 			got, err := s.ScheduleRoundEvents(ctx, req)

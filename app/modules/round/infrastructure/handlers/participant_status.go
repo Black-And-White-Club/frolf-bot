@@ -232,6 +232,10 @@ func (h *RoundHandlers) HandleParticipantRemovalRequest(
 	results := []handlerwrapper.Result{
 		{Topic: roundevents.RoundParticipantRemovedV1, Payload: removedPayload},
 	}
+
+	// Add both legacy GuildID and internal ClubUUID scoped versions for PWA/NATS transition
+	results = h.addParallelIdentityResults(ctx, results, roundevents.RoundParticipantRemovedV1, payload.GuildID)
+
 	return results, nil
 }
 

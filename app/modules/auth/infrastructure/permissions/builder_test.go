@@ -38,6 +38,8 @@ func TestBuilder_ForRole(t *testing.T) {
 					"round.participant.join.requested.v1",
 					"round.participant.declined.v1",
 					"round.participant.removal.requested.v1",
+					"round.score.update.requested.v1",
+					"user.udisc.identity.update.requested.v1",
 				} {
 					if !contains(p.Publish.Allow, expectedPub) {
 						t.Errorf("expected publish allow for %s, got %v", expectedPub, p.Publish.Allow)
@@ -62,6 +64,7 @@ func TestBuilder_ForRole(t *testing.T) {
 					"round.update.requested.v1",
 					"round.delete.requested.v1",
 					"round.score.update.requested.v1",
+					"user.udisc.identity.update.requested.v1",
 				} {
 					if !contains(p.Publish.Allow, expectedPub) {
 						t.Errorf("expected publish allow for %s, got %v", expectedPub, p.Publish.Allow)
