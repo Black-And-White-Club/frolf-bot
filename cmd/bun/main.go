@@ -2,10 +2,12 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/Black-And-White-Club/frolf-bot/config"
@@ -23,6 +25,15 @@ import (
 	scoremigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories/migrations"
 	usermigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories/migrations"
 )
+
+var dependencyOrderedModules = []string{
+	"guild",
+	"user",
+	"club",
+	"round",
+	"score",
+	"leaderboard",
+}
 
 func main() {
 	// Load configuration for database connection ONLY
@@ -71,7 +82,12 @@ func newMultiModuleDBCommand(migrators map[string]*migrate.Migrator) *cli.Comman
 				Name:  "init",
 				Usage: "create migration tables",
 				Action: func(c *cli.Context) error {
-					for moduleName, migrator := range migrators {
+					moduleNames, err := orderedModuleNames(migrators, false)
+					if err != nil {
+						return err
+					}
+					for _, moduleName := range moduleNames {
+						migrator := migrators[moduleName]
 						fmt.Printf("Initializing migrations for module: %s\n", moduleName)
 						if err := migrator.Init(c.Context); err != nil {
 							fmt.Printf("Error initializing migrations for module %s: %v\n", moduleName, err)
@@ -85,7 +101,12 @@ func newMultiModuleDBCommand(migrators map[string]*migrate.Migrator) *cli.Comman
 				Name:  "migrate",
 				Usage: "migrate database",
 				Action: func(c *cli.Context) error {
-					for moduleName, migrator := range migrators {
+					moduleNames, err := orderedModuleNames(migrators, false)
+					if err != nil {
+						return err
+					}
+					for _, moduleName := range moduleNames {
+						migrator := migrators[moduleName]
 						fmt.Printf("Running migrations for module: %s\n", moduleName)
 						group, err := migrator.Migrate(c.Context)
 						if err != nil {
@@ -104,7 +125,12 @@ func newMultiModuleDBCommand(migrators map[string]*migrate.Migrator) *cli.Comman
 				Name:  "rollback",
 				Usage: "rollback the last migration group",
 				Action: func(c *cli.Context) error {
-					for moduleName, migrator := range migrators {
+					moduleNames, err := orderedModuleNames(migrators, true)
+					if err != nil {
+						return err
+					}
+					for _, moduleName := range moduleNames {
+						migrator := migrators[moduleName]
 						fmt.Printf("Rolling back migrations for module: %s\n", moduleName)
 						group, err := migrator.Rollback(c.Context)
 						if err != nil {
@@ -180,4 +206,45 @@ func newMultiModuleDBCommand(migrators map[string]*migrate.Migrator) *cli.Comman
 			},
 		},
 	}
+}
+
+func orderedModuleNames(migrators map[string]*migrate.Migrator, reverse bool) ([]string, error) {
+	if len(migrators) == 0 {
+		return nil, errors.New("no migrators configured")
+	}
+
+	known := make(map[string]struct{}, len(dependencyOrderedModules))
+	for _, moduleName := range dependencyOrderedModules {
+		known[moduleName] = struct{}{}
+	}
+
+	var missing []string
+	for _, moduleName := range dependencyOrderedModules {
+		if _, ok := migrators[moduleName]; !ok {
+			missing = append(missing, moduleName)
+		}
+	}
+
+	var unknown []string
+	for moduleName := range migrators {
+		if _, ok := known[moduleName]; !ok {
+			unknown = append(unknown, moduleName)
+		}
+	}
+
+	slices.Sort(missing)
+	slices.Sort(unknown)
+
+	if len(missing) > 0 || len(unknown) > 0 {
+		return nil, fmt.Errorf("invalid migrator set: missing=%v unknown=%v", missing, unknown)
+	}
+
+	moduleNames := make([]string, len(dependencyOrderedModules))
+	copy(moduleNames, dependencyOrderedModules)
+
+	if reverse {
+		slices.Reverse(moduleNames)
+	}
+
+	return moduleNames, nil
 }
