@@ -105,7 +105,7 @@ func TestHandleLeaderboardUpdateRequested(t *testing.T) {
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incoming *message.Message, received map[string][]*message.Message, initial leaderboardtypes.LeaderboardData) {
-				msgs := received[leaderboardevents.LeaderboardUpdatedV1]
+				msgs := received[leaderboardevents.LeaderboardUpdatedV2]
 				if len(msgs) == 0 {
 					// Current normalized flow does not emit this event in integration setup.
 					// Ensure it also didn't emit an explicit failure event and return.
@@ -187,7 +187,7 @@ func TestHandleLeaderboardUpdateRequested(t *testing.T) {
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incoming *message.Message, received map[string][]*message.Message, initial leaderboardtypes.LeaderboardData) {
-				if len(received[leaderboardevents.LeaderboardUpdatedV1]) > 0 {
+				if len(received[leaderboardevents.LeaderboardUpdatedV2]) > 0 {
 					t.Errorf("Unexpected success message published")
 				}
 				if len(received[leaderboardevents.LeaderboardUpdateFailedV1]) > 0 {
@@ -220,7 +220,7 @@ func TestHandleLeaderboardUpdateRequested(t *testing.T) {
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incoming *message.Message, received map[string][]*message.Message, initial leaderboardtypes.LeaderboardData) {
-				if len(received[leaderboardevents.LeaderboardUpdatedV1]) > 0 {
+				if len(received[leaderboardevents.LeaderboardUpdatedV2]) > 0 {
 					t.Errorf("Expected no success messages, but found some")
 				}
 				if len(received[leaderboardevents.LeaderboardUpdateFailedV1]) > 0 {
@@ -255,7 +255,7 @@ func TestHandleLeaderboardUpdateRequested(t *testing.T) {
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incoming *message.Message, received map[string][]*message.Message, initial leaderboardtypes.LeaderboardData) {
-				if len(received[leaderboardevents.LeaderboardUpdatedV1]) > 0 {
+				if len(received[leaderboardevents.LeaderboardUpdatedV2]) > 0 {
 					t.Errorf("Unexpected success message")
 				}
 				if len(received[leaderboardevents.LeaderboardUpdateFailedV1]) > 0 {

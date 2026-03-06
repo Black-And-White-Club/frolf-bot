@@ -445,7 +445,7 @@ func TestMapSuccessResults_TagRemovalBehavior(t *testing.T) {
 
 			batchPayload, ok := res[0].Payload.(*leaderboardevents.LeaderboardBatchTagAssignedPayloadV1)
 			assert.True(t, ok, "first result should be LeaderboardBatchTagAssignedPayloadV1")
-			assert.Equal(t, leaderboardevents.LeaderboardBatchTagAssignedV1, res[0].Topic)
+			assert.Equal(t, leaderboardevents.LeaderboardBatchTagAssignedV2, res[0].Topic)
 			assert.Equal(t, tt.wantAssignCount, batchPayload.AssignmentCount)
 			assert.Len(t, batchPayload.Assignments, tt.wantAssignLen)
 			for _, a := range batchPayload.Assignments {

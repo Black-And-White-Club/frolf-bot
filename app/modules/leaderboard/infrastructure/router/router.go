@@ -210,18 +210,18 @@ func (r *LeaderboardRouter) RegisterHandlers(ctx context.Context, handlers leade
 
 	// SPECIAL CASE: Use registerFanOutHandler for Batch Tag Assignments
 	// because it triggers both Leaderboard events and Round sync events.
-	registerFanOutHandler(deps, sharedevents.LeaderboardBatchTagAssignmentRequestedV1, handlers.HandleBatchTagAssignmentRequested)
+	registerFanOutHandler(deps, sharedevents.LeaderboardBatchTagAssignmentRequestedV2, handlers.HandleBatchTagAssignmentRequested)
 
 	// READS: Handlers that query the current state
 	registerHandler(deps, leaderboardevents.GetLeaderboardRequestedV1, handlers.HandleGetLeaderboardRequest)
-	registerHandler(deps, "leaderboard.snapshot.request.v1.>", handlers.HandleGetLeaderboardRequest)
+	registerHandler(deps, "leaderboard.snapshot.request.v2.>", handlers.HandleGetLeaderboardRequest)
 	registerHandler(deps, sharedevents.DiscordTagLookupRequestedV1, handlers.HandleGetTagByUserIDRequest)
 	registerHandler(deps, sharedevents.RoundTagLookupRequestedV1, handlers.HandleRoundGetTagRequest)
 	registerHandler(deps, sharedevents.TagAvailabilityCheckRequestedV1, handlers.HandleTagAvailabilityCheckRequested)
 
 	// ADMIN OPERATIONS
 	registerHandler(deps, leaderboardevents.LeaderboardPointHistoryRequestedV1, handlers.HandlePointHistoryRequested)
-	registerHandler(deps, leaderboardevents.LeaderboardManualPointAdjustmentV1, handlers.HandleManualPointAdjustment)
+	registerHandler(deps, leaderboardevents.LeaderboardManualPointAdjustmentV2, handlers.HandleManualPointAdjustment)
 	registerHandler(deps, leaderboardevents.LeaderboardRecalculateRoundV1, handlers.HandleRecalculateRound)
 	registerHandler(deps, leaderboardevents.LeaderboardStartNewSeasonV1, handlers.HandleStartNewSeason)
 	registerHandler(deps, leaderboardevents.LeaderboardEndSeasonV1, handlers.HandleEndSeason)

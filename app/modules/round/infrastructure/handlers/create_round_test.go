@@ -196,7 +196,7 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 			payload:         testPayload,
 			wantErr:         false,
 			wantResultLen:   3, // Original + Guild Scoped + Club Scoped
-			wantResultTopic: roundevents.RoundCreatedV1,
+			wantResultTopic: roundevents.RoundCreatedV2,
 			assertPayload: func(t *testing.T, resultPayload any) {
 				t.Helper()
 				createdPayload, ok := resultPayload.(*roundevents.RoundCreatedPayloadV1)
@@ -243,7 +243,7 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 			},
 			wantErr:         false,
 			wantResultLen:   4,
-			wantResultTopic: roundevents.RoundCreatedV1,
+			wantResultTopic: roundevents.RoundCreatedV2,
 			wantLastTopic:   roundevents.RoundEventMessageIDUpdatedV1,
 			assertPayload: func(t *testing.T, resultPayload any) {
 				t.Helper()

@@ -268,15 +268,15 @@ func TestRoundHandlers_HandleAllScoresSubmitted(t *testing.T) {
 				if results[0].Metadata["discord_message_id"] != testEventMessageID {
 					t.Errorf("Discord message ID metadata not set correctly")
 				}
-				if results[1].Topic != roundevents.RoundFinalizedV1 {
+				if results[1].Topic != roundevents.RoundFinalizedV2 {
 					t.Errorf("Second result should be backend finalization, got %v", results[1].Topic)
 				}
 				// Third result should be guild-scoped backend finalization
-				if results[2].Topic != "round.finalized.v1.guild-123" {
+				if results[2].Topic != "round.finalized.v2.guild-123" {
 					t.Errorf("Third result should be guild-scoped finalization, got %v", results[2].Topic)
 				}
 				// Fourth result should be club-scoped backend finalization
-				if results[3].Topic != fmt.Sprintf("%s.%s", roundevents.RoundFinalizedV1, testClubUUID.String()) {
+				if results[3].Topic != fmt.Sprintf("%s.%s", roundevents.RoundFinalizedV2, testClubUUID.String()) {
 					t.Errorf("Fourth result should be club-scoped finalization, got %v", results[3].Topic)
 				}
 			}

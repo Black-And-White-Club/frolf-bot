@@ -67,7 +67,7 @@ func mapOperationResult[S any, F any](
 }
 
 // addGuildScopedResult appends a guild-scoped version of the event for PWA permission scoping.
-// This enables PWA consumers to subscribe with patterns like "round.created.v1.{guild_id}".
+// This enables PWA consumers to subscribe with patterns like "round.created.v2.{guild_id}".
 // Maintains backward compatibility by keeping the original non-scoped event.
 func addGuildScopedResult(originalResults []handlerwrapper.Result, baseTopic string, guildID any) []handlerwrapper.Result {
 	// Convert guildID to string

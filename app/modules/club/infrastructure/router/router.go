@@ -72,14 +72,14 @@ func (r *ClubRouter) registerHandlers(handlers clubhandlers.Handlers) {
 	}
 
 	r.logger.Info("Registering club module handlers",
-		slog.String("club_info_request_subject", clubevents.ClubInfoRequestV1+".*"),
+		slog.String("club_info_request_subject", clubevents.ClubInfoRequestV2+".*"),
 		slog.String("guild_setup_subject", guildevents.GuildSetupRequestedV1),
-		slog.String("club_sync_subject", sharedevents.ClubSyncFromDiscordRequestedV1),
+		slog.String("club_sync_subject", sharedevents.ClubSyncFromDiscordRequestedV2),
 	)
 
-	registerHandler(deps, clubevents.ClubInfoRequestV1+".*", handlers.HandleClubInfoRequest)
+	registerHandler(deps, clubevents.ClubInfoRequestV2+".*", handlers.HandleClubInfoRequest)
 	registerHandler(deps, guildevents.GuildSetupRequestedV1, handlers.HandleGuildSetup)
-	registerHandler(deps, sharedevents.ClubSyncFromDiscordRequestedV1, handlers.HandleClubSyncFromDiscord)
+	registerHandler(deps, sharedevents.ClubSyncFromDiscordRequestedV2, handlers.HandleClubSyncFromDiscord)
 
 	r.logger.Info("Club module handlers registered successfully")
 }

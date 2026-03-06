@@ -62,7 +62,7 @@ func (h *RoundHandlers) HandleParticipantJoinRequest(
 	case "REMOVE":
 		results = []handlerwrapper.Result{
 			{
-				Topic: roundevents.RoundParticipantRemovalRequestedV1,
+				Topic: roundevents.RoundParticipantRemovalRequestedV2,
 				Payload: &roundevents.ParticipantRemovalRequestPayloadV1{
 					GuildID: (*checkResult).GuildID,
 					RoundID: (*checkResult).RoundID,
@@ -180,11 +180,11 @@ func (h *RoundHandlers) HandleParticipantStatusUpdateRequest(
 	joinedPayload := h.createJoinedPayload(*round, payload.JoinedLate)
 
 	results := []handlerwrapper.Result{
-		{Topic: roundevents.RoundParticipantJoinedV1, Payload: joinedPayload},
+		{Topic: roundevents.RoundParticipantJoinedV2, Payload: joinedPayload},
 	}
 
 	// Add both legacy GuildID and internal ClubUUID scoped versions for PWA/NATS transition
-	results = h.addParallelIdentityResults(ctx, results, roundevents.RoundParticipantJoinedV1, payload.GuildID)
+	results = h.addParallelIdentityResults(ctx, results, roundevents.RoundParticipantJoinedV2, payload.GuildID)
 
 	return results, nil
 }
@@ -230,11 +230,11 @@ func (h *RoundHandlers) HandleParticipantRemovalRequest(
 	removedPayload.AcceptedParticipants, removedPayload.DeclinedParticipants, removedPayload.TentativeParticipants = h.splitParticipants((*round).Participants)
 
 	results := []handlerwrapper.Result{
-		{Topic: roundevents.RoundParticipantRemovedV1, Payload: removedPayload},
+		{Topic: roundevents.RoundParticipantRemovedV2, Payload: removedPayload},
 	}
 
 	// Add both legacy GuildID and internal ClubUUID scoped versions for PWA/NATS transition
-	results = h.addParallelIdentityResults(ctx, results, roundevents.RoundParticipantRemovedV1, payload.GuildID)
+	results = h.addParallelIdentityResults(ctx, results, roundevents.RoundParticipantRemovedV2, payload.GuildID)
 
 	return results, nil
 }

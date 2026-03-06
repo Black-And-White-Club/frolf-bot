@@ -92,13 +92,13 @@ func TestHandleBatchTagAssignmentRequested(t *testing.T) {
 					t.Fatalf("%v", err)
 				}
 
-				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), sharedevents.LeaderboardBatchTagAssignmentRequestedV1, msg); err != nil {
+				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), sharedevents.LeaderboardBatchTagAssignmentRequestedV2, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard leaderboardtypes.LeaderboardData) {
-				expectedTopic := leaderboardevents.LeaderboardBatchTagAssignedV1
+				expectedTopic := leaderboardevents.LeaderboardBatchTagAssignedV2
 				msgs := receivedMsgs[expectedTopic]
 				if len(msgs) == 0 {
 					t.Fatalf("Expected at least one message on topic %q, but received none", expectedTopic)
@@ -182,12 +182,12 @@ func TestHandleBatchTagAssignmentRequested(t *testing.T) {
 				}
 
 				// Check for error messages
-				unexpectedTopic := leaderboardevents.LeaderboardBatchTagAssignmentFailedV1
+				unexpectedTopic := leaderboardevents.LeaderboardBatchTagAssignmentFailedV2
 				if len(receivedMsgs[unexpectedTopic]) > 0 {
 					t.Errorf("Expected no messages on topic %q, but received %d", unexpectedTopic, len(receivedMsgs[unexpectedTopic]))
 				}
 			},
-			expectedOutgoingTopics: []string{leaderboardevents.LeaderboardBatchTagAssignedV1},
+			expectedOutgoingTopics: []string{leaderboardevents.LeaderboardBatchTagAssignedV2},
 			expectHandlerError:     false,
 		},
 		{
@@ -210,13 +210,13 @@ func TestHandleBatchTagAssignmentRequested(t *testing.T) {
 				if err != nil {
 					t.Fatalf("%v", err)
 				}
-				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), sharedevents.LeaderboardBatchTagAssignmentRequestedV1, msg); err != nil {
+				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), sharedevents.LeaderboardBatchTagAssignmentRequestedV2, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard leaderboardtypes.LeaderboardData) {
-				expectedTopic := leaderboardevents.LeaderboardBatchTagAssignedV1
+				expectedTopic := leaderboardevents.LeaderboardBatchTagAssignedV2
 				msgs := receivedMsgs[expectedTopic]
 				if len(msgs) == 0 {
 					t.Fatalf("Expected at least one message on topic %q, but received none", expectedTopic)
@@ -233,7 +233,7 @@ func TestHandleBatchTagAssignmentRequested(t *testing.T) {
 					t.Fatalf("Expected 2 assigned members, got %d", len(finalData))
 				}
 			},
-			expectedOutgoingTopics: []string{leaderboardevents.LeaderboardBatchTagAssignedV1},
+			expectedOutgoingTopics: []string{leaderboardevents.LeaderboardBatchTagAssignedV2},
 			expectHandlerError:     false,
 		},
 		{
@@ -249,18 +249,18 @@ func TestHandleBatchTagAssignmentRequested(t *testing.T) {
 				msg := message.NewMessage(uuid.New().String(), []byte("invalid json payload"))
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
-				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), sharedevents.LeaderboardBatchTagAssignmentRequestedV1, msg); err != nil {
+				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), sharedevents.LeaderboardBatchTagAssignmentRequestedV2, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard leaderboardtypes.LeaderboardData) {
 				// Check for unexpected messages
-				unexpectedSuccessTopic := leaderboardevents.LeaderboardBatchTagAssignedV1
+				unexpectedSuccessTopic := leaderboardevents.LeaderboardBatchTagAssignedV2
 				if len(receivedMsgs[unexpectedSuccessTopic]) > 0 {
 					t.Errorf("Expected no messages on topic %q, but received %d", unexpectedSuccessTopic, len(receivedMsgs[unexpectedSuccessTopic]))
 				}
-				unexpectedFailureTopic := leaderboardevents.LeaderboardBatchTagAssignmentFailedV1
+				unexpectedFailureTopic := leaderboardevents.LeaderboardBatchTagAssignmentFailedV2
 				if len(receivedMsgs[unexpectedFailureTopic]) > 0 {
 					t.Errorf("Expected no messages on topic %q, but received %d", unexpectedFailureTopic, len(receivedMsgs[unexpectedFailureTopic]))
 				}
@@ -298,18 +298,18 @@ func TestHandleBatchTagAssignmentRequested(t *testing.T) {
 					t.Fatalf("%v", err)
 				}
 
-				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), sharedevents.LeaderboardBatchTagAssignmentRequestedV1, msg); err != nil {
+				if err := testutils.PublishMessage(t, deps.EventBus, context.Background(), sharedevents.LeaderboardBatchTagAssignmentRequestedV2, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialLeaderboard leaderboardtypes.LeaderboardData) {
 				// Check for unexpected messages
-				unexpectedSuccessTopic := leaderboardevents.LeaderboardBatchTagAssignedV1
+				unexpectedSuccessTopic := leaderboardevents.LeaderboardBatchTagAssignedV2
 				if len(receivedMsgs[unexpectedSuccessTopic]) > 0 {
 					t.Errorf("Expected no messages on topic %q, but received %d", unexpectedSuccessTopic, len(receivedMsgs[unexpectedSuccessTopic]))
 				}
-				unexpectedFailureTopic := leaderboardevents.LeaderboardBatchTagAssignmentFailedV1
+				unexpectedFailureTopic := leaderboardevents.LeaderboardBatchTagAssignmentFailedV2
 				if len(receivedMsgs[unexpectedFailureTopic]) > 0 {
 					t.Errorf("Expected no messages on topic %q, but received %d", unexpectedFailureTopic, len(receivedMsgs[unexpectedFailureTopic]))
 				}

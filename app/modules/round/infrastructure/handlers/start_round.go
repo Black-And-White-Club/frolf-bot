@@ -53,13 +53,13 @@ func (h *RoundHandlers) HandleRoundStartRequested(
 
 	results := []handlerwrapper.Result{
 		{
-			Topic:   roundevents.RoundStartedV1,
+			Topic:   roundevents.RoundStartedV2,
 			Payload: startedPayload,
 		},
 	}
 
 	// Publish both guild and club scoped start events so PWA-only consumers can react.
-	results = h.addParallelIdentityResults(ctx, results, roundevents.RoundStartedV1, req.GuildID)
+	results = h.addParallelIdentityResults(ctx, results, roundevents.RoundStartedV2, req.GuildID)
 
 	// Discord-specific start updates require a target message id.
 	if round.EventMessageID != "" {
@@ -72,7 +72,7 @@ func (h *RoundHandlers) HandleRoundStartRequested(
 		}
 
 		results = append(results, handlerwrapper.Result{
-			Topic: roundevents.RoundStartedDiscordV1,
+			Topic: roundevents.RoundStartedDiscordV2,
 			Payload: &roundevents.DiscordRoundStartPayloadV1{
 				GuildID:        round.GuildID,
 				RoundID:        round.ID,

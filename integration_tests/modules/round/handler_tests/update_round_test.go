@@ -34,7 +34,7 @@ func TestHandleRoundUpdateRequest(t *testing.T) {
 				title := roundtypes.Title("Updated Round Title")
 				return publishUpdateMsg(t, env, createRoundUpdateRequestPayload(roundID, "user-1", &title, nil, nil, nil))
 			},
-			expectedOutgoingTopics: []string{roundevents.RoundUpdatedV1},
+			expectedOutgoingTopics: []string{roundevents.RoundUpdatedV2},
 			validateFn: func(t *testing.T, msg *message.Message) {
 				var p roundevents.RoundEntityUpdatedPayloadV1
 				_ = json.Unmarshal(msg.Payload, &p)
@@ -53,7 +53,7 @@ func TestHandleRoundUpdateRequest(t *testing.T) {
 				desc := roundtypes.Description("Updated description")
 				return publishUpdateMsg(t, env, createRoundUpdateRequestPayload(roundID, "user-1", nil, &desc, nil, nil))
 			},
-			expectedOutgoingTopics: []string{roundevents.RoundUpdatedV1},
+			expectedOutgoingTopics: []string{roundevents.RoundUpdatedV2},
 			validateFn: func(t *testing.T, msg *message.Message) {
 				var p roundevents.RoundEntityUpdatedPayloadV1
 				_ = json.Unmarshal(msg.Payload, &p)
@@ -120,7 +120,7 @@ func publishUpdateMsg(t *testing.T, env *testutils.TestEnvironment, payload inte
 	b, _ := json.Marshal(payload)
 	m := message.NewMessage(uuid.New().String(), b)
 	m.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-	_ = testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundUpdateRequestedV1, m)
+	_ = testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundUpdateRequestedV2, m)
 	return m
 }
 

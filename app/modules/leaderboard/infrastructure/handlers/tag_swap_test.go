@@ -51,7 +51,7 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 			},
 			wantErr:       false,
 			wantResultLen: 2, // mapSuccessResults likely produces batch_assigned + tag_updated + guild_scoped
-			wantTopic:     leaderboardevents.LeaderboardBatchTagAssignedV1,
+			wantTopic:     leaderboardevents.LeaderboardBatchTagAssignedV2,
 		},
 		{
 			name: "Tag Swap Needed - Triggers Saga",
@@ -70,7 +70,7 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 			},
 			wantErr:       false,
 			wantResultLen: 1,
-			wantTopic:     leaderboardevents.TagSwapProcessedV1,
+			wantTopic:     leaderboardevents.TagSwapProcessedV2,
 		},
 		{
 			name: "Target User Has No Tag",
@@ -128,7 +128,7 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 			}
 
 			// Specific verification for the Saga flow
-			if tt.wantTopic == leaderboardevents.TagSwapProcessedV1 {
+			if tt.wantTopic == leaderboardevents.TagSwapProcessedV2 {
 				if len(fakeSaga.CapturedIntents) == 0 {
 					t.Error("Expected saga coordinator to capture intent, but it was empty")
 				}

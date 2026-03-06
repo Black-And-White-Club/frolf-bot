@@ -174,12 +174,12 @@ func (h *RoundHandlers) HandleRoundEntityCreated(
 	)
 
 	handlerResults := mapOperationResult(mappedResult,
-		roundevents.RoundCreatedV1,
+		roundevents.RoundCreatedV2,
 		roundevents.RoundCreationFailedV1,
 	)
 
 	// Add both legacy GuildID and internal ClubUUID scoped versions for PWA/NATS transition
-	handlerResults = h.addParallelIdentityResults(ctx, handlerResults, roundevents.RoundCreatedV1, payload.GuildID)
+	handlerResults = h.addParallelIdentityResults(ctx, handlerResults, roundevents.RoundCreatedV2, payload.GuildID)
 
 	// PWA-only creation path does not emit a later RoundEventMessageIDUpdate.
 	// Trigger scheduling directly so queue-based start works without Discord native events.

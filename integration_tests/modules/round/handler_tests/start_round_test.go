@@ -58,9 +58,9 @@ func TestHandleRoundStarted(t *testing.T) {
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{roundevents.RoundStartedDiscordV1},
+			expectedOutgoingTopics: []string{roundevents.RoundStartedDiscordV2},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
-				expectedTopic := roundevents.RoundStartedDiscordV1
+				expectedTopic := roundevents.RoundStartedDiscordV2
 				msgs := receivedMsgs[expectedTopic]
 				if len(msgs) == 0 {
 					t.Fatalf("Expected at least one message on topic %q, but received none", expectedTopic)

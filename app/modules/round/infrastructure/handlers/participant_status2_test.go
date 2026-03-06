@@ -54,7 +54,7 @@ func TestRoundHandlers_HandleTagNumberFound_Basic(t *testing.T) {
 			payload:         testPayload,
 			wantErr:         false,
 			wantResultLen:   1,
-			wantResultTopic: roundevents.RoundParticipantJoinedV1,
+			wantResultTopic: roundevents.RoundParticipantJoinedV2,
 		},
 		{
 			name: "Handle UpdateParticipantStatus error",
@@ -143,7 +143,7 @@ func TestRoundHandlers_HandleParticipantDeclined_Basic(t *testing.T) {
 			payload:         testPayload,
 			wantErr:         false,
 			wantResultLen:   3, // Original + Guild Scoped + Club Scoped
-			wantResultTopic: roundevents.RoundParticipantJoinedV1,
+			wantResultTopic: roundevents.RoundParticipantJoinedV2,
 		},
 		{
 			name: "Handle UpdateParticipantStatus error",

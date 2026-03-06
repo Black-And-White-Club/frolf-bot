@@ -301,7 +301,7 @@ func TestRoundHandlers_HandleImportCompleted_SingleTrigger(t *testing.T) {
 				t.Errorf("expected 4 trigger results, got %d", len(res))
 			}
 
-			if res[0].Topic != roundevents.RoundParticipantScoreUpdatedV1 {
+			if res[0].Topic != roundevents.RoundParticipantScoreUpdatedV2 {
 				t.Errorf("expected Topic ScoreUpdated, got %s", res[0].Topic)
 			}
 		})

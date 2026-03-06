@@ -72,7 +72,7 @@ func (h *LeaderboardHandlers) HandleTagSwapRequested(
 			}
 
 			return []handlerwrapper.Result{{
-				Topic: leaderboardevents.TagSwapProcessedV1,
+				Topic: leaderboardevents.TagSwapProcessedV2,
 				Payload: &leaderboardevents.TagSwapProcessedPayloadV1{
 					GuildID:     payload.GuildID,
 					RequestorID: payload.RequestorID,

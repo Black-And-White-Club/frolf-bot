@@ -441,7 +441,7 @@ func (h *RoundHandlers) HandleImportCompleted(
 	// Map Result to Event Payload
 	success := *res.Success
 
-	// 1. Emit RoundParticipantScoreUpdatedV1 for UI/Projections
+	// 1. Emit RoundParticipantScoreUpdatedV2 for UI/Projections
 	scoreUpdatedPayload := &roundevents.ParticipantScoreUpdatedPayloadV1{
 		GuildID:        success.GuildID,
 		RoundID:        success.RoundID,
@@ -469,7 +469,7 @@ func (h *RoundHandlers) HandleImportCompleted(
 
 	results := []handlerwrapper.Result{
 		{
-			Topic:   roundevents.RoundParticipantScoreUpdatedV1,
+			Topic:   roundevents.RoundParticipantScoreUpdatedV2,
 			Payload: scoreUpdatedPayload,
 		},
 		{
@@ -479,7 +479,7 @@ func (h *RoundHandlers) HandleImportCompleted(
 	}
 
 	// Add both legacy GuildID and internal ClubUUID scoped versions for PWA/NATS transition
-	results = h.addParallelIdentityResults(ctx, results, roundevents.RoundParticipantScoreUpdatedV1, success.GuildID)
+	results = h.addParallelIdentityResults(ctx, results, roundevents.RoundParticipantScoreUpdatedV2, success.GuildID)
 
 	return results, nil
 }

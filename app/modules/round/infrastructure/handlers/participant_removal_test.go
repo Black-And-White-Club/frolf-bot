@@ -58,9 +58,9 @@ func TestRoundHandlers_HandleParticipantRemovalRequest_Basic(t *testing.T) {
 			wantErr:       false,
 			wantResultLen: 3, // Original + Guild Scoped + Club Scoped
 			expectedTopics: []string{
-				roundevents.RoundParticipantRemovedV1,
-				roundevents.RoundParticipantRemovedV1 + "." + string(testGuildID),
-				roundevents.RoundParticipantRemovedV1 + "." + testClubUUID.String(),
+				roundevents.RoundParticipantRemovedV2,
+				roundevents.RoundParticipantRemovedV2 + "." + string(testGuildID),
+				roundevents.RoundParticipantRemovedV2 + "." + testClubUUID.String(),
 			},
 			assertPayload: func(t *testing.T, payload any) {
 				t.Helper()
@@ -105,8 +105,8 @@ func TestRoundHandlers_HandleParticipantRemovalRequest_Basic(t *testing.T) {
 			wantErr:       false,
 			wantResultLen: 2, // Original + Guild Scoped
 			expectedTopics: []string{
-				roundevents.RoundParticipantRemovedV1,
-				roundevents.RoundParticipantRemovedV1 + "." + string(testGuildID),
+				roundevents.RoundParticipantRemovedV2,
+				roundevents.RoundParticipantRemovedV2 + "." + string(testGuildID),
 			},
 		},
 		{

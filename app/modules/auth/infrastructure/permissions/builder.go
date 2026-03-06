@@ -113,7 +113,7 @@ func (b *Builder) viewerPermissions(clubUUID, guildID string) *Permissions {
 
 // subscribePatterns generates subscribe patterns for round/leaderboard/guild events.
 // Subjects follow pattern: {domain}.{action}[.{sub}...].v1.{id}
-// Examples: round.created.v1.{id}, round.participant.joined.v1.{id}, round.participant.score.updated.v1.{id}
+// Examples: round.created.v2.{id}, round.participant.joined.v2.{id}, round.participant.score.updated.v2.{id}
 func subscribePatterns(clubUUID, guildID, userUUID, userID string) []string {
 	patterns := []string{}
 
@@ -121,9 +121,9 @@ func subscribePatterns(clubUUID, guildID, userUUID, userID string) []string {
 		if id == "" {
 			continue
 		}
-		// round.*.v1.{id} - matches round.created.v1.{id}, round.updated.v1.{id}, etc. (4 tokens)
-		// round.*.*.v1.{id} - matches round.participant.joined.v1.{id}, round.list.request.v1.{id} (5 tokens)
-		// round.*.*.*.v1.{id} - matches round.participant.score.updated.v1.{id} (6 tokens)
+		// round.*.v1.{id} - matches round.created.v2.{id}, round.updated.v2.{id}, etc. (4 tokens)
+		// round.*.*.v1.{id} - matches round.participant.joined.v2.{id}, round.list.request.v2.{id} (5 tokens)
+		// round.*.*.*.v1.{id} - matches round.participant.score.updated.v2.{id} (6 tokens)
 		patterns = append(patterns,
 			fmt.Sprintf("round.*.v1.%s", id),
 			fmt.Sprintf("round.*.*.v1.%s", id),
@@ -178,8 +178,8 @@ func publishPatterns(clubUUID, guildID string, includeParticipant bool) []string
 		}
 		// Request-reply patterns for fetching data
 		patterns = append(patterns,
-			fmt.Sprintf("round.list.request.v1.%s", id),
-			fmt.Sprintf("leaderboard.snapshot.request.v1.%s", id),
+			fmt.Sprintf("round.list.request.v2.%s", id),
+			fmt.Sprintf("leaderboard.snapshot.request.v2.%s", id),
 			fmt.Sprintf("leaderboard.tag.list.requested.v1.%s", id),
 			fmt.Sprintf("leaderboard.tag.history.requested.v1.%s", id),
 			fmt.Sprintf("leaderboard.tag.graph.requested.v1.%s", id),
@@ -191,10 +191,10 @@ func publishPatterns(clubUUID, guildID string, includeParticipant bool) []string
 	if includeParticipant {
 		// Participant actions
 		patterns = append(patterns,
-			"round.participant.join.requested.v1",
+			"round.participant.join.requested.v2",
 			"round.participant.declined.v1",
-			"round.participant.removal.requested.v1",
-			"round.score.update.requested.v1",
+			"round.participant.removal.requested.v2",
+			"round.score.update.requested.v2",
 		)
 	}
 
@@ -203,7 +203,7 @@ func publishPatterns(clubUUID, guildID string, includeParticipant bool) []string
 
 	// Club info request - scoped to the user's active club
 	if clubUUID != "" {
-		patterns = append(patterns, fmt.Sprintf("club.info.request.v1.%s", clubUUID))
+		patterns = append(patterns, fmt.Sprintf("club.info.request.v2.%s", clubUUID))
 	}
 
 	return patterns
@@ -227,9 +227,9 @@ func (b *Builder) editorPermissions(clubUUID, userUUID, guildID, userID string) 
 
 	// Editors can also create/update/delete rounds.
 	pubAllow = append(pubAllow,
-		"round.creation.requested.v1",
-		"round.update.requested.v1",
-		"round.delete.requested.v1",
+		"round.creation.requested.v2",
+		"round.update.requested.v2",
+		"round.delete.requested.v2",
 		"leaderboard.point.history.requested.v1",
 		"leaderboard.get.season.standings.v1",
 	)
@@ -252,20 +252,20 @@ func (b *Builder) adminPermissions(clubUUID, userUUID, guildID, userID string) *
 
 	// Admin-only publish subjects (unscoped global topics)
 	editor.Publish.Allow = append(editor.Publish.Allow,
-		"leaderboard.manual.point.adjustment.v1",
+		"leaderboard.manual.point.adjustment.v2",
 		"leaderboard.recalculate.round.v1",
 		"leaderboard.start.new.season.v1",
 		"leaderboard.end.season.v1",
-		"leaderboard.batch.tag.assignment.requested.v1",
-		"round.scorecard.admin.upload.requested.v1",
+		"leaderboard.batch.tag.assignment.requested.v2",
+		"round.scorecard.admin.upload.requested.v2",
 	)
 
 	// Admin-only subscribe subjects for operation feedback (unscoped global topics)
 	editor.Subscribe.Allow = append(editor.Subscribe.Allow,
-		"leaderboard.batch.tag.assigned.v1",
-		"leaderboard.batch.tag.assignment.failed.v1",
-		"leaderboard.manual.point.adjustment.success.v1",
-		"leaderboard.manual.point.adjustment.failed.v1",
+		"leaderboard.batch.tag.assigned.v2",
+		"leaderboard.batch.tag.assignment.failed.v2",
+		"leaderboard.manual.point.adjustment.success.v2",
+		"leaderboard.manual.point.adjustment.failed.v2",
 	)
 
 	return editor

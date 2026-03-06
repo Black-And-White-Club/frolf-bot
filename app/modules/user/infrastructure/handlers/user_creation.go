@@ -21,7 +21,7 @@ func (h *UserHandlers) HandleUserSignupRequest(
 	var clubSyncResult *handlerwrapper.Result
 	if payload.GuildName != "" {
 		clubSyncResult = &handlerwrapper.Result{
-			Topic: sharedevents.ClubSyncFromDiscordRequestedV1,
+			Topic: sharedevents.ClubSyncFromDiscordRequestedV2,
 			Payload: &sharedevents.ClubSyncFromDiscordRequestedPayloadV1{
 				GuildID:   payload.GuildID,
 				GuildName: payload.GuildName,

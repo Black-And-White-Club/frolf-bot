@@ -125,14 +125,14 @@ func (r *RoundRouter) registerHandlers(h roundhandlers.Handlers) error {
 	}
 
 	registerHandler(deps, roundevents.ScorecardUploadedV1, h.HandleScorecardUploaded)
-	registerHandler(deps, roundevents.ScorecardAdminUploadRequestedV1, h.HandleAdminScorecardUploadRequested)
+	registerHandler(deps, roundevents.ScorecardAdminUploadRequestedV2, h.HandleAdminScorecardUploadRequested)
 	registerHandler(deps, roundevents.ScorecardURLRequestedV1, h.HandleScorecardURLRequested)
 	registerHandler(deps, roundevents.ScorecardParseRequestedV1, h.HandleParseScorecardRequest)
 	registerHandler(deps, roundevents.ScorecardParsedForNormalizationV1, h.HandleScorecardParsedForNormalization)
 	registerHandler(deps, roundevents.ScorecardNormalizedV1, h.HandleScorecardNormalized)
 	registerHandler(deps, roundevents.ImportCompletedV1, h.HandleImportCompleted)
 
-	registerHandler(deps, roundevents.RoundCreationRequestedV1, h.HandleCreateRoundRequest)
+	registerHandler(deps, roundevents.RoundCreationRequestedV2, h.HandleCreateRoundRequest)
 	registerHandler(deps, roundevents.RoundEntityCreatedV1, h.HandleRoundEntityCreated)
 	registerHandler(deps, roundevents.RoundEventMessageIDUpdateV1, h.HandleRoundEventMessageIDUpdate)
 
@@ -144,33 +144,33 @@ func (r *RoundRouter) registerHandlers(h roundhandlers.Handlers) error {
 	registerHandler(deps, roundevents.PaginationSnapshotGetRequestedV1, h.HandlePaginationSnapshotGetRequested)
 	registerHandler(deps, roundevents.PaginationSnapshotDeleteRequestedV1, h.HandlePaginationSnapshotDeleteRequested)
 
-	registerHandler(deps, roundevents.RoundDeleteRequestedV1, h.HandleRoundDeleteRequest)
+	registerHandler(deps, roundevents.RoundDeleteRequestedV2, h.HandleRoundDeleteRequest)
 	registerHandler(deps, roundevents.RoundDeleteValidatedV1, h.HandleRoundDeleteValidated)
 	registerHandler(deps, roundevents.RoundDeleteAuthorizedV1, h.HandleRoundDeleteAuthorized)
 
-	registerHandler(deps, roundevents.RoundDeletedV1, h.HandleRoundDeleted)
+	registerHandler(deps, roundevents.RoundDeletedV2, h.HandleRoundDeleted)
 	registerHandler(deps, roundevents.RoundCompletedV1, h.HandleRoundCompleted)
 
-	registerHandler(deps, roundevents.RoundUpdateRequestedV1, h.HandleRoundUpdateRequest)
+	registerHandler(deps, roundevents.RoundUpdateRequestedV2, h.HandleRoundUpdateRequest)
 	registerHandler(deps, roundevents.RoundUpdateValidatedV1, h.HandleRoundUpdateValidated)
 	registerHandler(deps, roundevents.RoundScheduleUpdatedV1, h.HandleRoundScheduleUpdate)
 
-	registerHandler(deps, roundevents.RoundScoreUpdateRequestedV1, h.HandleScoreUpdateRequest)
+	registerHandler(deps, roundevents.RoundScoreUpdateRequestedV2, h.HandleScoreUpdateRequest)
 	registerHandler(deps, roundevents.RoundScoreBulkUpdateRequestedV1, h.HandleScoreBulkUpdateRequest)
 	registerHandler(deps, roundevents.RoundScoreUpdateValidatedV1, h.HandleScoreUpdateValidated)
-	registerHandler(deps, roundevents.RoundParticipantScoreUpdatedV1, h.HandleParticipantScoreUpdated)
+	registerHandler(deps, roundevents.RoundParticipantScoreUpdatedV2, h.HandleParticipantScoreUpdated)
 
 	registerHandler(deps, roundevents.RoundAllScoresSubmittedV1, h.HandleAllScoresSubmitted)
 	registerHandler(deps, roundevents.RoundFinalizeRequestedV1, h.HandleRoundFinalizeRequested)
-	registerHandler(deps, roundevents.RoundFinalizedV1, h.HandleRoundFinalized)
+	registerHandler(deps, roundevents.RoundFinalizedV2, h.HandleRoundFinalized)
 	// Register the minimal 'start requested' command: worker/scheduler will publish
 	// RoundStartRequestedV1. The handler will consult the DB and perform domain logic.
 	registerHandler(deps, roundevents.RoundStartRequestedV1, h.HandleRoundStartRequested)
 
-	registerHandler(deps, roundevents.RoundParticipantJoinRequestedV1, h.HandleParticipantJoinRequest)
+	registerHandler(deps, roundevents.RoundParticipantJoinRequestedV2, h.HandleParticipantJoinRequest)
 	registerHandler(deps, roundevents.RoundParticipantJoinValidationRequestedV1, h.HandleParticipantJoinValidationRequest)
 	registerHandler(deps, roundevents.RoundParticipantStatusUpdateRequestedV1, h.HandleParticipantStatusUpdateRequest)
-	registerHandler(deps, roundevents.RoundParticipantRemovalRequestedV1, h.HandleParticipantRemovalRequest)
+	registerHandler(deps, roundevents.RoundParticipantRemovalRequestedV2, h.HandleParticipantRemovalRequest)
 	registerHandler(deps, roundevents.RoundParticipantDeclinedV1, h.HandleParticipantDeclined)
 
 	registerHandler(deps, sharedevents.RoundTagLookupFoundV1, h.HandleTagNumberFound)
@@ -190,7 +190,7 @@ func (r *RoundRouter) registerHandlers(h roundhandlers.Handlers) error {
 	registerHandler(deps, roundevents.RoundEventMessageIDUpdatedV1, h.HandleDiscordMessageIDUpdated)
 
 	// PWA request/reply handlers (with wildcard for guild_id)
-	registerHandler(deps, "round.list.request.v1.>", h.HandleRoundListRequest)
+	registerHandler(deps, "round.list.request.v2.>", h.HandleRoundListRequest)
 
 	return nil
 }

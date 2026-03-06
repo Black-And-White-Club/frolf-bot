@@ -107,13 +107,13 @@ func (h *RoundHandlers) finalizeRound(
 			},
 		},
 		{
-			Topic:   roundevents.RoundFinalizedV1,
+			Topic:   roundevents.RoundFinalizedV2,
 			Payload: backendFinalizationPayload,
 		},
 	}
 
 	// Add both legacy GuildID and internal ClubUUID scoped versions for PWA/NATS transition.
-	return h.addParallelIdentityResults(ctx, results, roundevents.RoundFinalizedV1, guildID), nil
+	return h.addParallelIdentityResults(ctx, results, roundevents.RoundFinalizedV2, guildID), nil
 }
 
 // HandleRoundFinalized handles the domain event after a round is finalized, notifying the score module.

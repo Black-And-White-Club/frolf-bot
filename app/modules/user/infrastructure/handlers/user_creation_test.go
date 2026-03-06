@@ -184,7 +184,7 @@ func TestUserHandlers_HandleUserSignupRequest(t *testing.T) {
 				}
 				if tt.wantClubSync {
 					lastResult := res[len(res)-1]
-					assert.Equal(t, sharedevents.ClubSyncFromDiscordRequestedV1, lastResult.Topic)
+					assert.Equal(t, sharedevents.ClubSyncFromDiscordRequestedV2, lastResult.Topic)
 					syncPayload, ok := lastResult.Payload.(*sharedevents.ClubSyncFromDiscordRequestedPayloadV1)
 					assert.True(t, ok)
 					assert.Equal(t, tt.payload.GuildID, syncPayload.GuildID)

@@ -59,10 +59,10 @@ func TestRoundHandlers_HandleRoundStartRequested_Basic(t *testing.T) {
 			wantErr:       false,
 			wantResultLen: 4,
 			expectedTopics: []string{
-				roundevents.RoundStartedV1,
-				roundevents.RoundStartedV1 + "." + string(testGuildID),
-				roundevents.RoundStartedV1 + "." + testClubUUID.String(),
-				roundevents.RoundStartedDiscordV1,
+				roundevents.RoundStartedV2,
+				roundevents.RoundStartedV2 + "." + string(testGuildID),
+				roundevents.RoundStartedV2 + "." + testClubUUID.String(),
+				roundevents.RoundStartedDiscordV2,
 			},
 		},
 		{
@@ -84,9 +84,9 @@ func TestRoundHandlers_HandleRoundStartRequested_Basic(t *testing.T) {
 			wantErr:       false,
 			wantResultLen: 3,
 			expectedTopics: []string{
-				roundevents.RoundStartedV1,
-				roundevents.RoundStartedV1 + "." + string(testGuildID),
-				roundevents.RoundStartedV1 + "." + testClubUUID.String(),
+				roundevents.RoundStartedV2,
+				roundevents.RoundStartedV2 + "." + string(testGuildID),
+				roundevents.RoundStartedV2 + "." + testClubUUID.String(),
 			},
 		},
 		{
