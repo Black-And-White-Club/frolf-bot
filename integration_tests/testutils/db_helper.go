@@ -6,105 +6,45 @@ import (
 	"log"
 	"strings"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/riverqueue/river/riverdriver/riverpgxv5"
-	"github.com/riverqueue/river/rivermigrate"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/migrate"
 
-	clubmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/club/infrastructure/repositories/migrations"
-	guildmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories/migrations"
-	leaderboardmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories/migrations"
-	roundmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/migrations"
-	scoremigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories/migrations"
-	usermigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories/migrations"
+	"github.com/Black-And-White-Club/frolf-bot/app/shared/migrationrunner"
 )
 
 // runMigrationsWithConnStr runs all module migrations with an optional connection string for River
 func runMigrationsWithConnStr(db *bun.DB, pgConnStr string) error {
 	ctx := context.Background()
 
-	// Initialize migration tables only once - use any migrations to create the table
-	migrator := migrate.NewMigrator(db, usermigrations.Migrations)
-	if err := migrator.Init(ctx); err != nil {
-		return fmt.Errorf("failed to initialize migration tables: %w", err)
-	}
+	moduleMigrators := migrationrunner.AsModuleMigrators(migrationrunner.BuildBunMigrators(db))
 
 	// Run River queue migrations first (required for queue system)
-	if err := runRiverMigrations(ctx, db, pgConnStr); err != nil {
+	if err := runRiverMigrations(ctx, pgConnStr); err != nil {
 		return fmt.Errorf("failed to run River migrations: %w", err)
 	}
 
-	// Run all module migrations in a deterministic order
-	// Order matters due to foreign key constraints (e.g. user -> guild)
-	orderedModules := []struct {
-		name       string
-		migrations *migrate.Migrations
-	}{
-		{"guild", guildmigrations.Migrations},
-		{"user", usermigrations.Migrations},
-		{"club", clubmigrations.Migrations},
-		{"round", roundmigrations.Migrations},
-		{"leaderboard", leaderboardmigrations.Migrations},
-		{"score", scoremigrations.Migrations},
+	if err := migrationrunner.InitModules(ctx, moduleMigrators); err != nil {
+		return fmt.Errorf("failed to initialize module migrations: %w", err)
+	}
+	if _, err := migrationrunner.MigrateModules(ctx, moduleMigrators); err != nil {
+		return fmt.Errorf("failed to run module migrations: %w", err)
 	}
 
-	for _, mod := range orderedModules {
-		if err := runModuleMigrations(ctx, db, mod.migrations, mod.name); err != nil {
-			return err
-		}
-	}
 	log.Println("All migrations ran successfully")
 	return nil
 }
 
 // runRiverMigrations runs River queue system migrations
-func runRiverMigrations(ctx context.Context, db *bun.DB, pgConnStr string) error {
+func runRiverMigrations(ctx context.Context, pgConnStr string) error {
 	// Use the provided connection string, or fallback to a default for tests
 	connStr := pgConnStr
 	if connStr == "" {
 		connStr = "postgres://testuser:testpass@localhost/testdb?sslmode=disable"
 	}
-
-	// Create pgx pool for River migrations
-	config, err := pgxpool.ParseConfig(connStr)
-	if err != nil {
-		return fmt.Errorf("failed to parse DSN for River migrations: %w", err)
-	}
-
-	pool, err := pgxpool.NewWithConfig(ctx, config)
-	if err != nil {
-		return fmt.Errorf("failed to create pgx pool for River migrations: %w", err)
-	}
-	defer pool.Close()
-
-	// Run River migrations
-	migrator, err := rivermigrate.New(riverpgxv5.New(pool), nil)
-	if err != nil {
-		return fmt.Errorf("failed to create River migrator: %w", err)
-	}
-
-	_, err = migrator.Migrate(ctx, rivermigrate.DirectionUp, &rivermigrate.MigrateOpts{})
-	if err != nil {
+	if err := migrationrunner.MigrateRiver(ctx, connStr); err != nil {
 		return fmt.Errorf("failed to run River migrations: %w", err)
 	}
 
 	log.Println("River queue migrations completed successfully")
-	return nil
-}
-
-// runModuleMigrations runs migrations for a specific module
-func runModuleMigrations(ctx context.Context, db *bun.DB, migrations *migrate.Migrations, name string) error {
-	migrator := migrate.NewMigrator(db, migrations)
-	group, err := migrator.Migrate(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to run %s migrations: %w", name, err)
-	}
-	if group.ID == 0 {
-		log.Printf("No %s migrations to run", name)
-	} else {
-		log.Printf("Ran %s migrations group #%d", name, group.ID)
-	}
 	return nil
 }
 
