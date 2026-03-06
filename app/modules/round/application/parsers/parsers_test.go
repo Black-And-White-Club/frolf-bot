@@ -162,15 +162,25 @@ func TestXLSXParser_Parse(t *testing.T) {
 }
 
 func Test_isLikelyPlayerNameXLSX(t *testing.T) {
-	t.Run("numeric is not a name", func(t *testing.T) {
-		require.False(t, isLikelyPlayerNameXLSX("123"))
-		require.False(t, isLikelyPlayerNameXLSX("  7  "))
-	})
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
+	}
 
-	t.Run("non-numeric looks like a name", func(t *testing.T) {
-		require.True(t, isLikelyPlayerNameXLSX("Player One"))
-		require.True(t, isLikelyPlayerNameXLSX("A"))
-	})
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			t.Run("numeric is not a name", func(t *testing.T) {
+				require.False(t, isLikelyPlayerNameXLSX("123"))
+				require.False(t, isLikelyPlayerNameXLSX("  7  "))
+			})
+
+			t.Run("non-numeric looks like a name", func(t *testing.T) {
+				require.True(t, isLikelyPlayerNameXLSX("Player One"))
+				require.True(t, isLikelyPlayerNameXLSX("A"))
+			})
+		})
+	}
 }
 
 func buildXLSX(t *testing.T, rows [][]string) []byte {

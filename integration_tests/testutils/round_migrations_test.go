@@ -196,269 +196,349 @@ func assertColumnType(t *testing.T, ctx context.Context, db *bun.DB, tableName, 
 }
 
 func TestRoundMigration_AddRoundGroups_BackfillsLegacyRows(t *testing.T) {
-	db, ctx := setupIsolatedPostgresDB(t)
-
-	_, err := db.ExecContext(ctx, `
-		CREATE TABLE rounds (
-			id UUID PRIMARY KEY,
-			title TEXT NOT NULL,
-			description TEXT NULL,
-			location TEXT NULL,
-			event_type TEXT DEFAULT 'casual',
-			start_time TIMESTAMPTZ NOT NULL,
-			finalized BOOLEAN NOT NULL DEFAULT FALSE,
-			created_by TEXT NOT NULL,
-			state TEXT NOT NULL DEFAULT 'UPCOMING',
-			participants JSONB NOT NULL DEFAULT '[]'::jsonb,
-			event_message_id TEXT,
-			guild_id TEXT NOT NULL,
-			created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-		)
-	`)
-	if err != nil {
-		t.Fatalf("failed creating legacy rounds table: %v", err)
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
 	}
 
-	roundID := "00000000-0000-0000-0000-000000000111"
-	_, err = db.ExecContext(ctx, `
-		INSERT INTO rounds (
-			id, title, description, location, start_time, created_by, state, participants, guild_id
-		) VALUES (
-			?, 'Legacy Round', NULL, NULL, NOW() + INTERVAL '2 hour', 'user-admin', 'UPCOMING',
-			'[{"user_id":"user-1"},{"user_id":"user-2"}]'::jsonb, 'guild-123'
-		)
-	`, roundID)
-	if err != nil {
-		t.Fatalf("failed inserting legacy round row: %v", err)
-	}
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			db, ctx := setupIsolatedPostgresDB(t)
 
-	runSingleRoundMigration(t, ctx, db, "add_round_groups")
+			_, err := db.ExecContext(ctx, `
+					CREATE TABLE rounds (
+						id UUID PRIMARY KEY,
+						title TEXT NOT NULL,
+						description TEXT NULL,
+						location TEXT NULL,
+						event_type TEXT DEFAULT 'casual',
+						start_time TIMESTAMPTZ NOT NULL,
+						finalized BOOLEAN NOT NULL DEFAULT FALSE,
+						created_by TEXT NOT NULL,
+						state TEXT NOT NULL DEFAULT 'UPCOMING',
+						participants JSONB NOT NULL DEFAULT '[]'::jsonb,
+						event_message_id TEXT,
+						guild_id TEXT NOT NULL,
+						created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+						updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+					)
+				`)
+			if err != nil {
+				t.Fatalf("failed creating legacy rounds table: %v", err)
+			}
 
-	var description, location, mode, teams string
-	err = db.QueryRowContext(
-		ctx,
-		`SELECT description, location, mode, teams::text FROM rounds WHERE id = ?`,
-		roundID,
-	).Scan(&description, &location, &mode, &teams)
-	if err != nil {
-		t.Fatalf("failed querying migrated round row: %v", err)
-	}
+			roundID := "00000000-0000-0000-0000-000000000111"
+			_, err = db.ExecContext(ctx, `
+					INSERT INTO rounds (
+						id, title, description, location, start_time, created_by, state, participants, guild_id
+					) VALUES (
+						?, 'Legacy Round', NULL, NULL, NOW() + INTERVAL '2 hour', 'user-admin', 'UPCOMING',
+						'[{"user_id":"user-1"},{"user_id":"user-2"}]'::jsonb, 'guild-123'
+					)
+				`, roundID)
+			if err != nil {
+				t.Fatalf("failed inserting legacy round row: %v", err)
+			}
 
-	if description != "" {
-		t.Fatalf("expected description backfilled to empty string, got %q", description)
-	}
-	if location != "" {
-		t.Fatalf("expected location backfilled to empty string, got %q", location)
-	}
-	if mode != "SINGLES" {
-		t.Fatalf("expected mode to default to SINGLES, got %q", mode)
-	}
-	if teams != "[]" {
-		t.Fatalf("expected teams to default to [], got %q", teams)
-	}
+			runSingleRoundMigration(t, ctx, db, "add_round_groups")
 
-	var groupCount int
-	err = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM round_groups WHERE round_id = ?`, roundID).Scan(&groupCount)
-	if err != nil {
-		t.Fatalf("failed counting round_groups rows: %v", err)
-	}
-	if groupCount != 2 {
-		t.Fatalf("expected 2 round_groups rows, got %d", groupCount)
-	}
+			var description, location, mode, teams string
+			err = db.QueryRowContext(
+				ctx,
+				`SELECT description, location, mode, teams::text FROM rounds WHERE id = ?`,
+				roundID,
+			).Scan(&description, &location, &mode, &teams)
+			if err != nil {
+				t.Fatalf("failed querying migrated round row: %v", err)
+			}
 
-	var memberCount int
-	err = db.QueryRowContext(
-		ctx,
-		`SELECT COUNT(*) FROM round_group_members rgm
-		 JOIN round_groups rg ON rgm.group_id = rg.id
-		 WHERE rg.round_id = ?`,
-		roundID,
-	).Scan(&memberCount)
-	if err != nil {
-		t.Fatalf("failed counting round_group_members rows: %v", err)
-	}
-	if memberCount != 2 {
-		t.Fatalf("expected 2 round_group_members rows, got %d", memberCount)
+			if description != "" {
+				t.Fatalf("expected description backfilled to empty string, got %q", description)
+			}
+			if location != "" {
+				t.Fatalf("expected location backfilled to empty string, got %q", location)
+			}
+			if mode != "SINGLES" {
+				t.Fatalf("expected mode to default to SINGLES, got %q", mode)
+			}
+			if teams != "[]" {
+				t.Fatalf("expected teams to default to [], got %q", teams)
+			}
+
+			var groupCount int
+			err = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM round_groups WHERE round_id = ?`, roundID).Scan(&groupCount)
+			if err != nil {
+				t.Fatalf("failed counting round_groups rows: %v", err)
+			}
+			if groupCount != 2 {
+				t.Fatalf("expected 2 round_groups rows, got %d", groupCount)
+			}
+
+			var memberCount int
+			err = db.QueryRowContext(
+				ctx,
+				`SELECT COUNT(*) FROM round_group_members rgm
+					 JOIN round_groups rg ON rgm.group_id = rg.id
+					 WHERE rg.round_id = ?`,
+				roundID,
+			).Scan(&memberCount)
+			if err != nil {
+				t.Fatalf("failed counting round_group_members rows: %v", err)
+			}
+			if memberCount != 2 {
+				t.Fatalf("expected 2 round_group_members rows, got %d", memberCount)
+			}
+		})
 	}
 }
 
 func TestRoundMigration_EnsureDiscordEventID_EnforcesTextTypeAndIndex(t *testing.T) {
-	db, ctx := setupIsolatedPostgresDB(t)
-
-	_, err := db.ExecContext(ctx, `
-		CREATE TABLE rounds (
-			id UUID PRIMARY KEY,
-			guild_id TEXT NOT NULL,
-			discord_event_id VARCHAR(255)
-		)
-	`)
-	if err != nil {
-		t.Fatalf("failed creating rounds table: %v", err)
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
 	}
 
-	runSingleRoundMigration(t, ctx, db, "ensure_discord_event_id")
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			db, ctx := setupIsolatedPostgresDB(t)
 
-	var dataType string
-	err = db.QueryRowContext(
-		ctx,
-		`SELECT data_type
-		 FROM information_schema.columns
-		 WHERE table_schema = 'public' AND table_name = 'rounds' AND column_name = 'discord_event_id'`,
-	).Scan(&dataType)
-	if err != nil {
-		t.Fatalf("failed querying discord_event_id column metadata: %v", err)
-	}
-	if dataType != "text" {
-		t.Fatalf("expected discord_event_id type text, got %q", dataType)
-	}
+			_, err := db.ExecContext(ctx, `
+					CREATE TABLE rounds (
+						id UUID PRIMARY KEY,
+						guild_id TEXT NOT NULL,
+						discord_event_id VARCHAR(255)
+					)
+				`)
+			if err != nil {
+				t.Fatalf("failed creating rounds table: %v", err)
+			}
 
-	var indexCount int
-	err = db.QueryRowContext(
-		ctx,
-		`SELECT COUNT(*)
-		 FROM pg_indexes
-		 WHERE schemaname = 'public' AND tablename = 'rounds' AND indexname = 'idx_rounds_discord_event_id'`,
-	).Scan(&indexCount)
-	if err != nil {
-		t.Fatalf("failed querying discord_event_id index: %v", err)
-	}
-	if indexCount != 1 {
-		t.Fatalf("expected idx_rounds_discord_event_id to exist exactly once, got %d", indexCount)
+			runSingleRoundMigration(t, ctx, db, "ensure_discord_event_id")
+
+			var dataType string
+			err = db.QueryRowContext(
+				ctx,
+				`SELECT data_type
+					 FROM information_schema.columns
+					 WHERE table_schema = 'public' AND table_name = 'rounds' AND column_name = 'discord_event_id'`,
+			).Scan(&dataType)
+			if err != nil {
+				t.Fatalf("failed querying discord_event_id column metadata: %v", err)
+			}
+			if dataType != "text" {
+				t.Fatalf("expected discord_event_id type text, got %q", dataType)
+			}
+
+			var indexCount int
+			err = db.QueryRowContext(
+				ctx,
+				`SELECT COUNT(*)
+					 FROM pg_indexes
+					 WHERE schemaname = 'public' AND tablename = 'rounds' AND indexname = 'idx_rounds_discord_event_id'`,
+			).Scan(&indexCount)
+			if err != nil {
+				t.Fatalf("failed querying discord_event_id index: %v", err)
+			}
+			if indexCount != 1 {
+				t.Fatalf("expected idx_rounds_discord_event_id to exist exactly once, got %d", indexCount)
+			}
+		})
 	}
 }
 
 func TestRoundMigration_BackfillRoundsTeams_ReplacesNullWithEmptyArray(t *testing.T) {
-	db, ctx := setupIsolatedPostgresDB(t)
-
-	_, err := db.ExecContext(ctx, `
-		CREATE TABLE rounds (
-			id UUID PRIMARY KEY,
-			teams JSONB NULL
-		)
-	`)
-	if err != nil {
-		t.Fatalf("failed creating rounds table: %v", err)
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
 	}
 
-	_, err = db.ExecContext(ctx, `
-		INSERT INTO rounds (id, teams) VALUES
-		('00000000-0000-0000-0000-000000000201', NULL),
-		('00000000-0000-0000-0000-000000000202', '["keep"]'::jsonb)
-	`)
-	if err != nil {
-		t.Fatalf("failed inserting rounds rows: %v", err)
-	}
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			db, ctx := setupIsolatedPostgresDB(t)
 
-	runSingleRoundMigration(t, ctx, db, "backfill_rounds_teams")
+			_, err := db.ExecContext(ctx, `
+					CREATE TABLE rounds (
+						id UUID PRIMARY KEY,
+						teams JSONB NULL
+					)
+				`)
+			if err != nil {
+				t.Fatalf("failed creating rounds table: %v", err)
+			}
 
-	var nullRowTeams string
-	err = db.QueryRowContext(
-		ctx,
-		`SELECT teams::text FROM rounds WHERE id = '00000000-0000-0000-0000-000000000201'`,
-	).Scan(&nullRowTeams)
-	if err != nil {
-		t.Fatalf("failed querying null-row teams: %v", err)
-	}
-	if nullRowTeams != "[]" {
-		t.Fatalf("expected null teams backfilled to [], got %q", nullRowTeams)
-	}
+			_, err = db.ExecContext(ctx, `
+					INSERT INTO rounds (id, teams) VALUES
+					('00000000-0000-0000-0000-000000000201', NULL),
+					('00000000-0000-0000-0000-000000000202', '["keep"]'::jsonb)
+				`)
+			if err != nil {
+				t.Fatalf("failed inserting rounds rows: %v", err)
+			}
 
-	var preservedTeams string
-	err = db.QueryRowContext(
-		ctx,
-		`SELECT teams::text FROM rounds WHERE id = '00000000-0000-0000-0000-000000000202'`,
-	).Scan(&preservedTeams)
-	if err != nil {
-		t.Fatalf("failed querying preserved teams row: %v", err)
-	}
-	if preservedTeams != "[\"keep\"]" {
-		t.Fatalf("expected existing teams payload to stay unchanged, got %q", preservedTeams)
+			runSingleRoundMigration(t, ctx, db, "backfill_rounds_teams")
+
+			var nullRowTeams string
+			err = db.QueryRowContext(
+				ctx,
+				`SELECT teams::text FROM rounds WHERE id = '00000000-0000-0000-0000-000000000201'`,
+			).Scan(&nullRowTeams)
+			if err != nil {
+				t.Fatalf("failed querying null-row teams: %v", err)
+			}
+			if nullRowTeams != "[]" {
+				t.Fatalf("expected null teams backfilled to [], got %q", nullRowTeams)
+			}
+
+			var preservedTeams string
+			err = db.QueryRowContext(
+				ctx,
+				`SELECT teams::text FROM rounds WHERE id = '00000000-0000-0000-0000-000000000202'`,
+			).Scan(&preservedTeams)
+			if err != nil {
+				t.Fatalf("failed querying preserved teams row: %v", err)
+			}
+			if preservedTeams != "[\"keep\"]" {
+				t.Fatalf("expected existing teams payload to stay unchanged, got %q", preservedTeams)
+			}
+		})
 	}
 }
 
 func TestRoundMigration_AddDiscordEventID_AddsColumnAndIndex(t *testing.T) {
-	db, ctx := setupIsolatedPostgresDB(t)
-
-	_, err := db.ExecContext(ctx, `
-		CREATE TABLE rounds (
-			id UUID PRIMARY KEY,
-			guild_id TEXT NOT NULL
-		)
-	`)
-	if err != nil {
-		t.Fatalf("failed creating rounds table: %v", err)
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
 	}
 
-	runSingleRoundMigration(t, ctx, db, "add_discord_event_id")
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			db, ctx := setupIsolatedPostgresDB(t)
 
-	assertColumnType(t, ctx, db, "rounds", "discord_event_id", "character varying")
-	assertIndexExists(t, ctx, db, "rounds", "idx_rounds_discord_event_id")
+			_, err := db.ExecContext(ctx, `
+					CREATE TABLE rounds (
+						id UUID PRIMARY KEY,
+						guild_id TEXT NOT NULL
+					)
+				`)
+			if err != nil {
+				t.Fatalf("failed creating rounds table: %v", err)
+			}
+
+			runSingleRoundMigration(t, ctx, db, "add_discord_event_id")
+
+			assertColumnType(t, ctx, db, "rounds", "discord_event_id", "character varying")
+			assertIndexExists(t, ctx, db, "rounds", "idx_rounds_discord_event_id")
+		})
+	}
 }
 
 func TestRoundMigration_AddRoundQueryPerfIndexes_CreatesExpectedIndexes(t *testing.T) {
-	db, ctx := setupIsolatedPostgresDB(t)
-
-	_, err := db.ExecContext(ctx, `
-		CREATE TABLE rounds (
-			id UUID PRIMARY KEY,
-			guild_id TEXT NOT NULL,
-			state TEXT NOT NULL,
-			start_time TIMESTAMPTZ NOT NULL,
-			participants JSONB NOT NULL DEFAULT '[]'::jsonb
-		)
-	`)
-	if err != nil {
-		t.Fatalf("failed creating rounds table: %v", err)
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
 	}
 
-	runSingleRoundMigration(t, ctx, db, "add_round_query_perf_indexes")
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			db, ctx := setupIsolatedPostgresDB(t)
 
-	assertIndexExists(t, ctx, db, "rounds", "idx_rounds_guild_state_start_time_desc")
-	assertIndexExists(t, ctx, db, "rounds", "idx_rounds_participants_gin")
+			_, err := db.ExecContext(ctx, `
+					CREATE TABLE rounds (
+						id UUID PRIMARY KEY,
+						guild_id TEXT NOT NULL,
+						state TEXT NOT NULL,
+						start_time TIMESTAMPTZ NOT NULL,
+						participants JSONB NOT NULL DEFAULT '[]'::jsonb
+					)
+				`)
+			if err != nil {
+				t.Fatalf("failed creating rounds table: %v", err)
+			}
+
+			runSingleRoundMigration(t, ctx, db, "add_round_query_perf_indexes")
+
+			assertIndexExists(t, ctx, db, "rounds", "idx_rounds_guild_state_start_time_desc")
+			assertIndexExists(t, ctx, db, "rounds", "idx_rounds_participants_gin")
+		})
+	}
 }
 
 func TestRoundMigration_AddRoundEmbedPaginationSnapshots_CreatesTableAndIndex(t *testing.T) {
-	db, ctx := setupIsolatedPostgresDB(t)
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
+	}
 
-	runSingleRoundMigration(t, ctx, db, "add_round_embed_pagination_snapshots")
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			db, ctx := setupIsolatedPostgresDB(t)
 
-	assertTableExists(t, ctx, db, "round_embed_pagination_snapshots")
-	assertIndexExists(t, ctx, db, "round_embed_pagination_snapshots", "idx_round_embed_pagination_snapshots_expires_at")
+			runSingleRoundMigration(t, ctx, db, "add_round_embed_pagination_snapshots")
+
+			assertTableExists(t, ctx, db, "round_embed_pagination_snapshots")
+			assertIndexExists(t, ctx, db, "round_embed_pagination_snapshots", "idx_round_embed_pagination_snapshots_expires_at")
+		})
+	}
 }
 
 func TestRoundMigration_AddParScoresToRounds_AddsJSONBColumn(t *testing.T) {
-	db, ctx := setupIsolatedPostgresDB(t)
-
-	_, err := db.ExecContext(ctx, `
-		CREATE TABLE rounds (
-			id UUID PRIMARY KEY
-		)
-	`)
-	if err != nil {
-		t.Fatalf("failed creating rounds table: %v", err)
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
 	}
 
-	runSingleRoundMigration(t, ctx, db, "add_par_scores_to_rounds")
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			db, ctx := setupIsolatedPostgresDB(t)
 
-	assertColumnType(t, ctx, db, "rounds", "par_scores", "jsonb")
+			_, err := db.ExecContext(ctx, `
+					CREATE TABLE rounds (
+						id UUID PRIMARY KEY
+					)
+				`)
+			if err != nil {
+				t.Fatalf("failed creating rounds table: %v", err)
+			}
+
+			runSingleRoundMigration(t, ctx, db, "add_par_scores_to_rounds")
+
+			assertColumnType(t, ctx, db, "rounds", "par_scores", "jsonb")
+		})
+	}
 }
 
 func TestRoundMigrations_RunAllUp_SmokeAndSchemaInvariants(t *testing.T) {
-	db, ctx := setupIsolatedPostgresDB(t)
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
+	}
 
-	runAllRoundMigrations(t, ctx, db)
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			db, ctx := setupIsolatedPostgresDB(t)
 
-	assertTableExists(t, ctx, db, "rounds")
-	assertTableExists(t, ctx, db, "round_groups")
-	assertTableExists(t, ctx, db, "round_group_members")
-	assertTableExists(t, ctx, db, "round_embed_pagination_snapshots")
+			runAllRoundMigrations(t, ctx, db)
 
-	assertColumnType(t, ctx, db, "rounds", "discord_event_id", "text")
-	assertColumnType(t, ctx, db, "rounds", "par_scores", "jsonb")
+			assertTableExists(t, ctx, db, "rounds")
+			assertTableExists(t, ctx, db, "round_groups")
+			assertTableExists(t, ctx, db, "round_group_members")
+			assertTableExists(t, ctx, db, "round_embed_pagination_snapshots")
 
-	assertIndexExists(t, ctx, db, "rounds", "idx_rounds_discord_event_id")
-	assertIndexExists(t, ctx, db, "rounds", "idx_rounds_guild_state_start_time_desc")
-	assertIndexExists(t, ctx, db, "rounds", "idx_rounds_participants_gin")
-	assertIndexExists(t, ctx, db, "round_embed_pagination_snapshots", "idx_round_embed_pagination_snapshots_expires_at")
+			assertColumnType(t, ctx, db, "rounds", "discord_event_id", "text")
+			assertColumnType(t, ctx, db, "rounds", "par_scores", "jsonb")
+
+			assertIndexExists(t, ctx, db, "rounds", "idx_rounds_discord_event_id")
+			assertIndexExists(t, ctx, db, "rounds", "idx_rounds_guild_state_start_time_desc")
+			assertIndexExists(t, ctx, db, "rounds", "idx_rounds_participants_gin")
+			assertIndexExists(t, ctx, db, "round_embed_pagination_snapshots", "idx_round_embed_pagination_snapshots_expires_at")
+		})
+	}
 }

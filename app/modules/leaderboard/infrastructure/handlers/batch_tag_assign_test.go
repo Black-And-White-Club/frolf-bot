@@ -326,48 +326,58 @@ func TestLeaderboardHandlers_HandleRoundBasedAssignment(t *testing.T) {
 // the service (opting into the domain's "no rank" path) rather than assigning
 // sequential i+1 positions that would silently break tied finishers.
 func TestHandleRoundBasedAssignment_LegacyFallbackUsesZeroNotSequential(t *testing.T) {
-	testGuildID := sharedtypes.GuildID("test-guild-fallback")
-	testRoundID := sharedtypes.RoundID(uuid.New())
-
-	var capturedParticipants []leaderboardservice.RoundParticipantInput
-
-	fakeSvc := NewFakeService()
-	fakeSvc.ProcessRoundCommandFunc = func(ctx context.Context, cmd leaderboardservice.ProcessRoundCommand) (*leaderboardservice.ProcessRoundOutput, error) {
-		capturedParticipants = cmd.Participants
-		return &leaderboardservice.ProcessRoundOutput{
-			FinalParticipantTags: map[string]int{"user-a": 1, "user-b": 2},
-			PointAwards:          []leaderboarddomain.PointAward{},
-			PointsSkipped:        true,
-		}, nil
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
 	}
 
-	h := &LeaderboardHandlers{
-		service:     fakeSvc,
-		userService: NewFakeUserService(),
-		logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),
-	}
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			testGuildID := sharedtypes.GuildID("test-guild-fallback")
+			testRoundID := sharedtypes.RoundID(uuid.New())
 
-	// Both assignments have FinishRank == 0 (legacy / unset)
-	payload := &sharedevents.BatchTagAssignmentRequestedPayloadV1{
-		ScopedGuildID: sharedevents.ScopedGuildID{GuildID: testGuildID},
-		BatchID:       uuid.New().String(),
-		RoundID:       &testRoundID,
-		Source:        sharedtypes.ServiceUpdateSourceProcessScores,
-		Assignments: []sharedevents.TagAssignmentInfoV1{
-			{UserID: "user-a", TagNumber: 1, FinishRank: 0},
-			{UserID: "user-b", TagNumber: 2, FinishRank: 0},
-		},
-	}
+			var capturedParticipants []leaderboardservice.RoundParticipantInput
 
-	_, err := h.HandleBatchTagAssignmentRequested(context.Background(), payload)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+			fakeSvc := NewFakeService()
+			fakeSvc.ProcessRoundCommandFunc = func(ctx context.Context, cmd leaderboardservice.ProcessRoundCommand) (*leaderboardservice.ProcessRoundOutput, error) {
+				capturedParticipants = cmd.Participants
+				return &leaderboardservice.ProcessRoundOutput{
+					FinalParticipantTags: map[string]int{"user-a": 1, "user-b": 2},
+					PointAwards:          []leaderboarddomain.PointAward{},
+					PointsSkipped:        true,
+				}, nil
+			}
 
-	for _, p := range capturedParticipants {
-		if p.FinishRank != 0 {
-			t.Errorf("participant %s: expected FinishRank 0 (no-rank sentinel), got %d (sequential i+1 fallback is broken for ties)", p.MemberID, p.FinishRank)
-		}
+			h := &LeaderboardHandlers{
+				service:     fakeSvc,
+				userService: NewFakeUserService(),
+				logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),
+			}
+
+			// Both assignments have FinishRank == 0 (legacy / unset)
+			payload := &sharedevents.BatchTagAssignmentRequestedPayloadV1{
+				ScopedGuildID: sharedevents.ScopedGuildID{GuildID: testGuildID},
+				BatchID:       uuid.New().String(),
+				RoundID:       &testRoundID,
+				Source:        sharedtypes.ServiceUpdateSourceProcessScores,
+				Assignments: []sharedevents.TagAssignmentInfoV1{
+					{UserID: "user-a", TagNumber: 1, FinishRank: 0},
+					{UserID: "user-b", TagNumber: 2, FinishRank: 0},
+				},
+			}
+
+			_, err := h.HandleBatchTagAssignmentRequested(context.Background(), payload)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			for _, p := range capturedParticipants {
+				if p.FinishRank != 0 {
+					t.Errorf("participant %s: expected FinishRank 0 (no-rank sentinel), got %d (sequential i+1 fallback is broken for ties)", p.MemberID, p.FinishRank)
+				}
+			}
+		})
 	}
 }
 

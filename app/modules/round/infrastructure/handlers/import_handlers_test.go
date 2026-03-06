@@ -242,127 +242,157 @@ func TestRoundHandlers_HandleAdminScorecardUploadRequested(t *testing.T) {
 }
 
 func TestRoundHandlers_HandleImportCompleted_SingleTrigger(t *testing.T) {
-	ctx := context.Background()
-	roundID := sharedtypes.RoundID(uuid.New())
-	guildID := sharedtypes.GuildID("guild-123")
-	initiatorID := sharedtypes.DiscordID("admin-user")
-	testClubUUID := uuid.New()
-
-	payload := &roundevents.ImportCompletedPayloadV1{
-		GuildID: guildID,
-		RoundID: roundID,
-		UserID:  initiatorID,
-		Scores: []sharedtypes.ScoreInfo{
-			{UserID: "player-1", Score: -5},
-			{UserID: "player-2", Score: 2},
-		},
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
 	}
 
-	svc := NewFakeService()
-	svc.ApplyImportedScoresFunc = func(ctx context.Context, req roundtypes.ImportApplyScoresInput) (roundservice.ApplyImportedScoresResult, error) {
-		s1, s2 := sharedtypes.Score(-5), sharedtypes.Score(2)
-		return results.SuccessResult[*roundtypes.ImportApplyScoresResult, error](&roundtypes.ImportApplyScoresResult{
-			GuildID: req.GuildID,
-			RoundID: req.RoundID,
-			Participants: []roundtypes.Participant{
-				{UserID: "player-1", Score: &s1},
-				{UserID: "player-2", Score: &s2},
-			},
-		}), nil
-	}
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			ctx := context.Background()
+			roundID := sharedtypes.RoundID(uuid.New())
+			guildID := sharedtypes.GuildID("guild-123")
+			initiatorID := sharedtypes.DiscordID("admin-user")
+			testClubUUID := uuid.New()
 
-	userService := NewFakeUserService()
-	userService.GetClubUUIDByDiscordGuildIDFunc = func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) {
-		return testClubUUID, nil
-	}
+			payload := &roundevents.ImportCompletedPayloadV1{
+				GuildID: guildID,
+				RoundID: roundID,
+				UserID:  initiatorID,
+				Scores: []sharedtypes.ScoreInfo{
+					{UserID: "player-1", Score: -5},
+					{UserID: "player-2", Score: 2},
+				},
+			}
 
-	h := &RoundHandlers{
-		service:     svc,
-		userService: userService,
-		logger:      loggerfrolfbot.NoOpLogger,
-	}
+			svc := NewFakeService()
+			svc.ApplyImportedScoresFunc = func(ctx context.Context, req roundtypes.ImportApplyScoresInput) (roundservice.ApplyImportedScoresResult, error) {
+				s1, s2 := sharedtypes.Score(-5), sharedtypes.Score(2)
+				return results.SuccessResult[*roundtypes.ImportApplyScoresResult, error](&roundtypes.ImportApplyScoresResult{
+					GuildID: req.GuildID,
+					RoundID: req.RoundID,
+					Participants: []roundtypes.Participant{
+						{UserID: "player-1", Score: &s1},
+						{UserID: "player-2", Score: &s2},
+					},
+				}), nil
+			}
 
-	res, err := h.HandleImportCompleted(ctx, payload)
+			userService := NewFakeUserService()
+			userService.GetClubUUIDByDiscordGuildIDFunc = func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) {
+				return testClubUUID, nil
+			}
 
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+			h := &RoundHandlers{
+				service:     svc,
+				userService: userService,
+				logger:      loggerfrolfbot.NoOpLogger,
+			}
 
-	// We expect 4 results now: RPSU, RASS, Guild-scoped RPSU, Club-scoped RPSU
-	if len(res) != 4 {
-		t.Errorf("expected 4 trigger results, got %d", len(res))
-	}
+			res, err := h.HandleImportCompleted(ctx, payload)
 
-	if res[0].Topic != roundevents.RoundParticipantScoreUpdatedV1 {
-		t.Errorf("expected Topic ScoreUpdated, got %s", res[0].Topic)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			// We expect 4 results now: RPSU, RASS, Guild-scoped RPSU, Club-scoped RPSU
+			if len(res) != 4 {
+				t.Errorf("expected 4 trigger results, got %d", len(res))
+			}
+
+			if res[0].Topic != roundevents.RoundParticipantScoreUpdatedV1 {
+				t.Errorf("expected Topic ScoreUpdated, got %s", res[0].Topic)
+			}
+		})
 	}
 }
 
 func TestRoundHandlers_HandleParseScorecardRequest(t *testing.T) {
-	ctx := context.Background()
-	payload := &roundevents.ScorecardUploadedPayloadV1{
-		ImportID: "imp-1",
-		FileData: []byte("test-data"),
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
 	}
 
-	svc := NewFakeService()
-	svc.ParseScorecardFunc = func(ctx context.Context, req *roundtypes.ImportParseScorecardInput) (roundservice.ParseScorecardResult, error) {
-		// Verify the handler actually passed the FileData from payload to service
-		if len(req.FileData) == 0 {
-			return roundservice.ParseScorecardResult{}, errors.New("no file data passed")
-		}
-		return results.SuccessResult[roundtypes.ParsedScorecard, error](roundtypes.ParsedScorecard{}), nil
-	}
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			ctx := context.Background()
+			payload := &roundevents.ScorecardUploadedPayloadV1{
+				ImportID: "imp-1",
+				FileData: []byte("test-data"),
+			}
 
-	h := &RoundHandlers{
-		service:     svc,
-		userService: NewFakeUserService(),
-		logger:      loggerfrolfbot.NoOpLogger,
-	}
-	res, err := h.HandleParseScorecardRequest(ctx, payload)
+			svc := NewFakeService()
+			svc.ParseScorecardFunc = func(ctx context.Context, req *roundtypes.ImportParseScorecardInput) (roundservice.ParseScorecardResult, error) {
+				// Verify the handler actually passed the FileData from payload to service
+				if len(req.FileData) == 0 {
+					return roundservice.ParseScorecardResult{}, errors.New("no file data passed")
+				}
+				return results.SuccessResult[roundtypes.ParsedScorecard, error](roundtypes.ParsedScorecard{}), nil
+			}
 
-	if err != nil {
-		t.Fatalf("handler failed: %v", err)
-	}
+			h := &RoundHandlers{
+				service:     svc,
+				userService: NewFakeUserService(),
+				logger:      loggerfrolfbot.NoOpLogger,
+			}
+			res, err := h.HandleParseScorecardRequest(ctx, payload)
 
-	if res[0].Topic != roundevents.ScorecardParsedForNormalizationV1 {
-		t.Errorf("wrong topic: %s", res[0].Topic)
-	}
+			if err != nil {
+				t.Fatalf("handler failed: %v", err)
+			}
 
-	// Verify trace
-	if svc.Trace()[0] != "ParseScorecard" {
-		t.Errorf("service method not called, trace: %v", svc.Trace())
+			if res[0].Topic != roundevents.ScorecardParsedForNormalizationV1 {
+				t.Errorf("wrong topic: %s", res[0].Topic)
+			}
+
+			// Verify trace
+			if svc.Trace()[0] != "ParseScorecard" {
+				t.Errorf("service method not called, trace: %v", svc.Trace())
+			}
+		})
 	}
 }
 
 func TestRoundHandlers_HandleParseScorecardRequest_UsesFileURL(t *testing.T) {
-	ctx := context.Background()
-	payload := &roundevents.ScorecardUploadedPayloadV1{
-		ImportID: "imp-2",
-		FileURL:  "https://cdn.discordapp.com/attachments/123/scorecard.xlsx",
-		FileName: "scorecard.xlsx",
-		UDiscURL: "https://udisc.com/should-not-win",
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
 	}
 
-	svc := NewFakeService()
-	svc.ParseScorecardFunc = func(ctx context.Context, req *roundtypes.ImportParseScorecardInput) (roundservice.ParseScorecardResult, error) {
-		if req.FileURL != payload.FileURL {
-			return roundservice.ParseScorecardResult{}, errors.New("file URL not forwarded")
-		}
-		return results.SuccessResult[roundtypes.ParsedScorecard, error](roundtypes.ParsedScorecard{}), nil
-	}
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			ctx := context.Background()
+			payload := &roundevents.ScorecardUploadedPayloadV1{
+				ImportID: "imp-2",
+				FileURL:  "https://cdn.discordapp.com/attachments/123/scorecard.xlsx",
+				FileName: "scorecard.xlsx",
+				UDiscURL: "https://udisc.com/should-not-win",
+			}
 
-	h := &RoundHandlers{
-		service:     svc,
-		userService: NewFakeUserService(),
-		logger:      loggerfrolfbot.NoOpLogger,
-	}
+			svc := NewFakeService()
+			svc.ParseScorecardFunc = func(ctx context.Context, req *roundtypes.ImportParseScorecardInput) (roundservice.ParseScorecardResult, error) {
+				if req.FileURL != payload.FileURL {
+					return roundservice.ParseScorecardResult{}, errors.New("file URL not forwarded")
+				}
+				return results.SuccessResult[roundtypes.ParsedScorecard, error](roundtypes.ParsedScorecard{}), nil
+			}
 
-	res, err := h.HandleParseScorecardRequest(ctx, payload)
-	if err != nil {
-		t.Fatalf("handler failed: %v", err)
-	}
-	if len(res) != 1 || res[0].Topic != roundevents.ScorecardParsedForNormalizationV1 {
-		t.Fatalf("unexpected result: %+v", res)
+			h := &RoundHandlers{
+				service:     svc,
+				userService: NewFakeUserService(),
+				logger:      loggerfrolfbot.NoOpLogger,
+			}
+
+			res, err := h.HandleParseScorecardRequest(ctx, payload)
+			if err != nil {
+				t.Fatalf("handler failed: %v", err)
+			}
+			if len(res) != 1 || res[0].Topic != roundevents.ScorecardParsedForNormalizationV1 {
+				t.Fatalf("unexpected result: %+v", res)
+			}
+		})
 	}
 }

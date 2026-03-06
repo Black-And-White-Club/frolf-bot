@@ -7,30 +7,40 @@ import (
 )
 
 func TestEncryptDecrypt(t *testing.T) {
-	// Setup 32-byte key
-	key := "12345678901234567890123456789012"
-	os.Setenv("TOKEN_ENCRYPTION_KEY", key)
-	defer os.Unsetenv("TOKEN_ENCRYPTION_KEY")
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
+	}
 
-	plaintext := "my-secret-token"
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			// Setup 32-byte key
+			key := "12345678901234567890123456789012"
+			os.Setenv("TOKEN_ENCRYPTION_KEY", key)
+			defer os.Unsetenv("TOKEN_ENCRYPTION_KEY")
 
-	// Test Encryption
-	ciphertext, err := Encrypt(plaintext)
-	assert.NoError(t, err)
-	assert.NotEmpty(t, ciphertext)
-	assert.NotEqual(t, plaintext, ciphertext)
+			plaintext := "my-secret-token"
 
-	// Test Decryption
-	decrypted, err := Decrypt(ciphertext)
-	assert.NoError(t, err)
-	assert.Equal(t, plaintext, decrypted)
+			// Test Encryption
+			ciphertext, err := Encrypt(plaintext)
+			assert.NoError(t, err)
+			assert.NotEmpty(t, ciphertext)
+			assert.NotEqual(t, plaintext, ciphertext)
 
-	// Test with wrong key
-	os.Setenv("TOKEN_ENCRYPTION_KEY", "wrong-key-length-123")
-	_, err = Encrypt(plaintext)
-	assert.Error(t, err)
+			// Test Decryption
+			decrypted, err := Decrypt(ciphertext)
+			assert.NoError(t, err)
+			assert.Equal(t, plaintext, decrypted)
 
-	os.Setenv("TOKEN_ENCRYPTION_KEY", "another-valid-32-byte-key-!@#$%^&")
-	_, err = Decrypt(ciphertext)
-	assert.Error(t, err, "Should fail to decrypt with wrong key")
+			// Test with wrong key
+			os.Setenv("TOKEN_ENCRYPTION_KEY", "wrong-key-length-123")
+			_, err = Encrypt(plaintext)
+			assert.Error(t, err)
+
+			os.Setenv("TOKEN_ENCRYPTION_KEY", "another-valid-32-byte-key-!@#$%^&")
+			_, err = Decrypt(ciphertext)
+			assert.Error(t, err, "Should fail to decrypt with wrong key")
+		})
+	}
 }

@@ -192,20 +192,30 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 // (opting into the domain's unranked path) rather than being given sequential i+1 positions
 // which would silently break tied finishers.
 func TestBuildParticipantsFromUpdatePayload_ZeroFinishRankPassesThroughAsZero(t *testing.T) {
-	payload := &leaderboardevents.LeaderboardUpdateRequestedPayloadV1{
-		GuildID: sharedtypes.GuildID("test-guild"),
-		Participants: []leaderboardevents.RoundParticipantInputV1{
-			{MemberID: sharedtypes.DiscordID("user-a"), FinishRank: 0},
-			{MemberID: sharedtypes.DiscordID("user-b"), FinishRank: 0},
-		},
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
 	}
 
-	participants := buildParticipantsFromUpdatePayload(payload)
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			payload := &leaderboardevents.LeaderboardUpdateRequestedPayloadV1{
+				GuildID: sharedtypes.GuildID("test-guild"),
+				Participants: []leaderboardevents.RoundParticipantInputV1{
+					{MemberID: sharedtypes.DiscordID("user-a"), FinishRank: 0},
+					{MemberID: sharedtypes.DiscordID("user-b"), FinishRank: 0},
+				},
+			}
 
-	for _, p := range participants {
-		if p.FinishRank != 0 {
-			t.Errorf("participant %s: expected FinishRank 0 (unranked sentinel), got %d (i+1 fallback is broken for ties)",
-				p.MemberID, p.FinishRank)
-		}
+			participants := buildParticipantsFromUpdatePayload(payload)
+
+			for _, p := range participants {
+				if p.FinishRank != 0 {
+					t.Errorf("participant %s: expected FinishRank 0 (unranked sentinel), got %d (i+1 fallback is broken for ties)",
+						p.MemberID, p.FinishRank)
+				}
+			}
+		})
 	}
 }

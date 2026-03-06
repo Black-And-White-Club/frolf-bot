@@ -21,23 +21,33 @@ import (
 // -----------------------------------------------------------------------------
 
 func TestNewUserService(t *testing.T) {
-	fakeRepo := NewFakeUserRepository()
-	testHandler := loggerfrolfbot.NewTestHandler()
-	logger := slog.New(testHandler)
-	mockMetrics := &usermetrics.NoOpMetrics{}
-	tracer := noop.NewTracerProvider().Tracer("test")
-	var db *bun.DB
-
-	service := NewUserService(fakeRepo, logger, mockMetrics, tracer, db)
-
-	if service == nil {
-		t.Fatal("NewUserService returned nil")
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
 	}
-	if service.repo != fakeRepo {
-		t.Error("repo not set correctly")
-	}
-	if service.logger != logger {
-		t.Error("logger not set correctly")
+
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			fakeRepo := NewFakeUserRepository()
+			testHandler := loggerfrolfbot.NewTestHandler()
+			logger := slog.New(testHandler)
+			mockMetrics := &usermetrics.NoOpMetrics{}
+			tracer := noop.NewTracerProvider().Tracer("test")
+			var db *bun.DB
+
+			service := NewUserService(fakeRepo, logger, mockMetrics, tracer, db)
+
+			if service == nil {
+				t.Fatal("NewUserService returned nil")
+			}
+			if service.repo != fakeRepo {
+				t.Error("repo not set correctly")
+			}
+			if service.logger != logger {
+				t.Error("logger not set correctly")
+			}
+		})
 	}
 }
 

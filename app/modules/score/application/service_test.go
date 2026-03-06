@@ -21,29 +21,39 @@ import (
 // -----------------------------------------------------------------------------
 
 func TestNewScoreService(t *testing.T) {
-	fakeRepo := NewFakeScoreRepository()
-	testHandler := loggerfrolfbot.NewTestHandler()
-	logger := slog.New(testHandler)
-	mockMetrics := &scoremetrics.NoOpMetrics{}
-	tracer := noop.NewTracerProvider().Tracer("test")
-	var db *bun.DB // bun.DB is fine as nil for simple assignment check
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
+	}
 
-	service := NewScoreService(fakeRepo, nil, logger, mockMetrics, tracer, db)
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			fakeRepo := NewFakeScoreRepository()
+			testHandler := loggerfrolfbot.NewTestHandler()
+			logger := slog.New(testHandler)
+			mockMetrics := &scoremetrics.NoOpMetrics{}
+			tracer := noop.NewTracerProvider().Tracer("test")
+			var db *bun.DB // bun.DB is fine as nil for simple assignment check
 
-	if service == nil {
-		t.Fatal("NewScoreService returned nil")
-	}
-	if service.repo != fakeRepo {
-		t.Error("repo not set correctly")
-	}
-	if service.logger != logger {
-		t.Error("logger not set correctly")
-	}
-	if service.metrics != mockMetrics {
-		t.Error("metrics not set correctly")
-	}
-	if service.db != db {
-		t.Error("db not set correctly")
+			service := NewScoreService(fakeRepo, nil, logger, mockMetrics, tracer, db)
+
+			if service == nil {
+				t.Fatal("NewScoreService returned nil")
+			}
+			if service.repo != fakeRepo {
+				t.Error("repo not set correctly")
+			}
+			if service.logger != logger {
+				t.Error("logger not set correctly")
+			}
+			if service.metrics != mockMetrics {
+				t.Error("metrics not set correctly")
+			}
+			if service.db != db {
+				t.Error("db not set correctly")
+			}
+		})
 	}
 }
 
@@ -132,21 +142,31 @@ func Test_withTelemetry(t *testing.T) {
 }
 
 func Test_runInTx(t *testing.T) {
-	t.Run("executes directly when db is nil", func(t *testing.T) {
-		s := &ScoreService{db: nil}
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
+	}
 
-		res, err := runInTx(s, context.Background(), func(ctx context.Context, db bun.IDB) (results.OperationResult[string, string], error) {
-			if db != nil {
-				return results.OperationResult[string, string]{}, errors.New("expected nil db when s.db is nil")
-			}
-			return results.SuccessResult[string, string]("no_tx_success"), nil
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			t.Run("executes directly when db is nil", func(t *testing.T) {
+				s := &ScoreService{db: nil}
+
+				res, err := runInTx(s, context.Background(), func(ctx context.Context, db bun.IDB) (results.OperationResult[string, string], error) {
+					if db != nil {
+						return results.OperationResult[string, string]{}, errors.New("expected nil db when s.db is nil")
+					}
+					return results.SuccessResult[string, string]("no_tx_success"), nil
+				})
+
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if !res.IsSuccess() || *res.Success != "no_tx_success" {
+					t.Errorf("expected success 'no_tx_success', got %v", res.Success)
+				}
+			})
 		})
-
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !res.IsSuccess() || *res.Success != "no_tx_success" {
-			t.Errorf("expected success 'no_tx_success', got %v", res.Success)
-		}
-	})
+	}
 }

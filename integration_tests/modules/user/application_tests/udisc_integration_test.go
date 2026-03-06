@@ -11,132 +11,142 @@ import (
 )
 
 func TestUDiscIntegration(t *testing.T) {
-	deps := SetupTestUserService(t)
-	defer deps.Cleanup()
-
-	// Setup test data
-	guildID := sharedtypes.GuildID("guild-integration-test")
-	userID1 := sharedtypes.DiscordID("user-1")
-	userID2 := sharedtypes.DiscordID("user-2")
-
-	// Create users first using the test helper
-	if err := testutils.InsertUser(t, deps.BunDB, userID1, guildID, sharedtypes.UserRoleUser); err != nil {
-		t.Fatalf("Failed to create user 1: %v", err)
-	}
-	if err := testutils.InsertUser(t, deps.BunDB, userID2, guildID, sharedtypes.UserRoleUser); err != nil {
-		t.Fatalf("Failed to create user 2: %v", err)
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
 	}
 
-	t.Run("UpdateUDiscIdentity and FindByUDiscUsername", func(t *testing.T) {
-		username := "TestUser1"
-		name := "Test Name 1"
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			deps := SetupTestUserService(t)
+			defer deps.Cleanup()
 
-		// Update identity
-		result, err := deps.Service.UpdateUDiscIdentity(deps.Ctx, userID1, &username, &name)
-		if err != nil {
-			t.Fatalf("UpdateUDiscIdentity failed: %v", err)
-		}
-		if !result.IsSuccess() || *result.Success != true {
-			t.Errorf("Expected success true, got %v", result.Success)
-		}
+			// Setup test data
+			guildID := sharedtypes.GuildID("guild-integration-test")
+			userID1 := sharedtypes.DiscordID("user-1")
+			userID2 := sharedtypes.DiscordID("user-2")
 
-		// Verify DB update via FindByUDiscUsername (case insensitive)
-		foundUser, err := deps.Service.FindByUDiscUsername(deps.Ctx, guildID, "testuser1")
-		if err != nil {
-			t.Logf("FindByUDiscUsername failed, skipping assertions: %v", err)
-			return
-		}
-		if !foundUser.IsSuccess() {
-			t.Logf("FindByUDiscUsername returned failure payload, skipping assertions: %+v", foundUser.Failure)
-			return
-		}
-		foundUserPayload := *foundUser.Success
-		if foundUserPayload.UserID != userID1 {
-			t.Errorf("Expected user ID %s, got %s", userID1, foundUserPayload.UserID)
-		}
-		if *foundUserPayload.UDiscUsername != "testuser1" {
-			t.Errorf("Expected normalized username 'testuser1', got '%s'", *foundUserPayload.UDiscUsername)
-		}
-	})
+			// Create users first using the test helper
+			if err := testutils.InsertUser(t, deps.BunDB, userID1, guildID, sharedtypes.UserRoleUser); err != nil {
+				t.Fatalf("Failed to create user 1: %v", err)
+			}
+			if err := testutils.InsertUser(t, deps.BunDB, userID2, guildID, sharedtypes.UserRoleUser); err != nil {
+				t.Fatalf("Failed to create user 2: %v", err)
+			}
 
-	t.Run("UpdateUDiscIdentity and FindByUDiscName", func(t *testing.T) {
-		username := "TestUser2"
-		name := "Test Name 2"
+			t.Run("UpdateUDiscIdentity and FindByUDiscUsername", func(t *testing.T) {
+				username := "TestUser1"
+				name := "Test Name 1"
 
-		// Update identity
-		_, err := deps.Service.UpdateUDiscIdentity(deps.Ctx, userID2, &username, &name)
-		if err != nil {
-			t.Fatalf("UpdateUDiscIdentity failed: %v", err)
-		}
+				// Update identity
+				result, err := deps.Service.UpdateUDiscIdentity(deps.Ctx, userID1, &username, &name)
+				if err != nil {
+					t.Fatalf("UpdateUDiscIdentity failed: %v", err)
+				}
+				if !result.IsSuccess() || *result.Success != true {
+					t.Errorf("Expected success true, got %v", result.Success)
+				}
 
-		// Verify DB update via FindByUDiscName (case insensitive)
-		foundUser, err := deps.Service.FindByUDiscName(deps.Ctx, guildID, "test name 2")
-		if err != nil {
-			t.Logf("FindByUDiscName failed, skipping assertions: %v", err)
-			return
-		}
-		if !foundUser.IsSuccess() {
-			t.Logf("FindByUDiscName returned failure payload, skipping assertions: %+v", foundUser.Failure)
-			return
-		}
-		foundUserPayload := *foundUser.Success
-		if foundUserPayload.UserID != userID2 {
-			t.Errorf("Expected user ID %s, got %s", userID2, foundUserPayload.UserID)
-		}
-		if *foundUserPayload.UDiscName != "test name 2" {
-			t.Errorf("Expected normalized name 'test name 2', got '%s'", *foundUserPayload.UDiscName)
-		}
-	})
+				// Verify DB update via FindByUDiscUsername (case insensitive)
+				foundUser, err := deps.Service.FindByUDiscUsername(deps.Ctx, guildID, "testuser1")
+				if err != nil {
+					t.Logf("FindByUDiscUsername failed, skipping assertions: %v", err)
+					return
+				}
+				if !foundUser.IsSuccess() {
+					t.Logf("FindByUDiscUsername returned failure payload, skipping assertions: %+v", foundUser.Failure)
+					return
+				}
+				foundUserPayload := *foundUser.Success
+				if foundUserPayload.UserID != userID1 {
+					t.Errorf("Expected user ID %s, got %s", userID1, foundUserPayload.UserID)
+				}
+				if *foundUserPayload.UDiscUsername != "testuser1" {
+					t.Errorf("Expected normalized username 'testuser1', got '%s'", *foundUserPayload.UDiscUsername)
+				}
+			})
 
-	t.Run("MatchParsedScorecard", func(t *testing.T) {
-		// User 1 has username "testuser1"
-		// User 2 has name "test name 2"
+			t.Run("UpdateUDiscIdentity and FindByUDiscName", func(t *testing.T) {
+				username := "TestUser2"
+				name := "Test Name 2"
 
-		payload := roundevents.ParsedScorecardPayloadV1{
-			ImportID: "import-1",
-			GuildID:  guildID,
-			RoundID:  sharedtypes.RoundID(uuid.New()),
-			UserID:   userID1,
-			ParsedData: &roundtypes.ParsedScorecard{
-				PlayerScores: []roundtypes.PlayerScoreRow{
-					{PlayerName: "TestUser1"},   // Should match user 1 by username
-					{PlayerName: "Test Name 2"}, // Should match user 2 by name
-					{PlayerName: "Unknown"},     // Should not match
-				},
-			},
-		}
+				// Update identity
+				_, err := deps.Service.UpdateUDiscIdentity(deps.Ctx, userID2, &username, &name)
+				if err != nil {
+					t.Fatalf("UpdateUDiscIdentity failed: %v", err)
+				}
 
-		playerNames := make([]string, len(payload.ParsedData.PlayerScores))
-		for i, ps := range payload.ParsedData.PlayerScores {
-			playerNames[i] = ps.PlayerName
-		}
+				// Verify DB update via FindByUDiscName (case insensitive)
+				foundUser, err := deps.Service.FindByUDiscName(deps.Ctx, guildID, "test name 2")
+				if err != nil {
+					t.Logf("FindByUDiscName failed, skipping assertions: %v", err)
+					return
+				}
+				if !foundUser.IsSuccess() {
+					t.Logf("FindByUDiscName returned failure payload, skipping assertions: %+v", foundUser.Failure)
+					return
+				}
+				foundUserPayload := *foundUser.Success
+				if foundUserPayload.UserID != userID2 {
+					t.Errorf("Expected user ID %s, got %s", userID2, foundUserPayload.UserID)
+				}
+				if *foundUserPayload.UDiscName != "test name 2" {
+					t.Errorf("Expected normalized name 'test name 2', got '%s'", *foundUserPayload.UDiscName)
+				}
+			})
 
-		result, err := deps.Service.MatchParsedScorecard(deps.Ctx, payload.GuildID, payload.UserID, playerNames)
-		if err != nil {
-			t.Logf("MatchParsedScorecard failed, skipping assertions: %v", err)
-			return
-		}
-		if !result.IsSuccess() {
-			t.Logf("MatchParsedScorecard returned failure payload, skipping assertions: %+v", result.Failure)
-			return
-		}
-		matchPayload := *result.Success
+			t.Run("MatchParsedScorecard", func(t *testing.T) {
+				// User 1 has username "testuser1"
+				// User 2 has name "test name 2"
 
-		if len(matchPayload.Mappings) != 2 {
-			t.Errorf("Expected 2 mappings, got %d", len(matchPayload.Mappings))
-		}
+				payload := roundevents.ParsedScorecardPayloadV1{
+					ImportID: "import-1",
+					GuildID:  guildID,
+					RoundID:  sharedtypes.RoundID(uuid.New()),
+					UserID:   userID1,
+					ParsedData: &roundtypes.ParsedScorecard{
+						PlayerScores: []roundtypes.PlayerScoreRow{
+							{PlayerName: "TestUser1"},   // Should match user 1 by username
+							{PlayerName: "Test Name 2"}, // Should match user 2 by name
+							{PlayerName: "Unknown"},     // Should not match
+						},
+					},
+				}
 
-		// Verify mappings
-		mappingMap := make(map[string]sharedtypes.DiscordID)
-		for _, m := range matchPayload.Mappings {
-			mappingMap[m.PlayerName] = m.DiscordUserID
-		}
+				playerNames := make([]string, len(payload.ParsedData.PlayerScores))
+				for i, ps := range payload.ParsedData.PlayerScores {
+					playerNames[i] = ps.PlayerName
+				}
 
-		if uid, ok := mappingMap["TestUser1"]; !ok || uid != userID1 {
-			t.Errorf("Expected TestUser1 to map to %s, got %s", userID1, uid)
-		}
-		if uid, ok := mappingMap["Test Name 2"]; !ok || uid != userID2 {
-			t.Errorf("Expected Test Name 2 to map to %s, got %s", userID2, uid)
-		}
-	})
+				result, err := deps.Service.MatchParsedScorecard(deps.Ctx, payload.GuildID, payload.UserID, playerNames)
+				if err != nil {
+					t.Logf("MatchParsedScorecard failed, skipping assertions: %v", err)
+					return
+				}
+				if !result.IsSuccess() {
+					t.Logf("MatchParsedScorecard returned failure payload, skipping assertions: %+v", result.Failure)
+					return
+				}
+				matchPayload := *result.Success
+
+				if len(matchPayload.Mappings) != 2 {
+					t.Errorf("Expected 2 mappings, got %d", len(matchPayload.Mappings))
+				}
+
+				// Verify mappings
+				mappingMap := make(map[string]sharedtypes.DiscordID)
+				for _, m := range matchPayload.Mappings {
+					mappingMap[m.PlayerName] = m.DiscordUserID
+				}
+
+				if uid, ok := mappingMap["TestUser1"]; !ok || uid != userID1 {
+					t.Errorf("Expected TestUser1 to map to %s, got %s", userID1, uid)
+				}
+				if uid, ok := mappingMap["Test Name 2"]; !ok || uid != userID2 {
+					t.Errorf("Expected Test Name 2 to map to %s, got %s", userID2, uid)
+				}
+			})
+		})
+	}
 }

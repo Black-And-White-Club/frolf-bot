@@ -12,66 +12,76 @@ import (
 )
 
 func TestHandleEndSeason(t *testing.T) {
-	ctx := context.Background()
-	guildID := sharedtypes.GuildID("guild-123")
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
+	}
 
-	t.Run("Success", func(t *testing.T) {
-		service := NewFakeService()
-		service.EndSeasonFunc = func(ctx context.Context, gID sharedtypes.GuildID) (results.OperationResult[bool, error], error) {
-			assert.Equal(t, guildID, gID)
-			return results.SuccessResult[bool, error](true), nil
-		}
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			ctx := context.Background()
+			guildID := sharedtypes.GuildID("guild-123")
 
-		handlers := &LeaderboardHandlers{service: service}
-		payload := &leaderboardevents.EndSeasonPayloadV1{GuildID: guildID}
+			t.Run("Success", func(t *testing.T) {
+				service := NewFakeService()
+				service.EndSeasonFunc = func(ctx context.Context, gID sharedtypes.GuildID) (results.OperationResult[bool, error], error) {
+					assert.Equal(t, guildID, gID)
+					return results.SuccessResult[bool, error](true), nil
+				}
 
-		res, err := handlers.HandleEndSeason(ctx, payload)
+				handlers := &LeaderboardHandlers{service: service}
+				payload := &leaderboardevents.EndSeasonPayloadV1{GuildID: guildID}
 
-		assert.NoError(t, err)
-		assert.Len(t, res, 1)
-		assert.Equal(t, leaderboardevents.LeaderboardEndSeasonSuccessV1, res[0].Topic)
-		successPayload, ok := res[0].Payload.(*leaderboardevents.EndSeasonSuccessPayloadV1)
-		assert.True(t, ok)
-		assert.Equal(t, guildID, successPayload.GuildID)
-	})
+				res, err := handlers.HandleEndSeason(ctx, payload)
 
-	t.Run("Service Error", func(t *testing.T) {
-		service := NewFakeService()
-		service.EndSeasonFunc = func(ctx context.Context, gID sharedtypes.GuildID) (results.OperationResult[bool, error], error) {
-			return results.OperationResult[bool, error]{}, errors.New("pipeline error")
-		}
+				assert.NoError(t, err)
+				assert.Len(t, res, 1)
+				assert.Equal(t, leaderboardevents.LeaderboardEndSeasonSuccessV1, res[0].Topic)
+				successPayload, ok := res[0].Payload.(*leaderboardevents.EndSeasonSuccessPayloadV1)
+				assert.True(t, ok)
+				assert.Equal(t, guildID, successPayload.GuildID)
+			})
 
-		handlers := &LeaderboardHandlers{service: service}
-		payload := &leaderboardevents.EndSeasonPayloadV1{GuildID: guildID}
+			t.Run("Service Error", func(t *testing.T) {
+				service := NewFakeService()
+				service.EndSeasonFunc = func(ctx context.Context, gID sharedtypes.GuildID) (results.OperationResult[bool, error], error) {
+					return results.OperationResult[bool, error]{}, errors.New("pipeline error")
+				}
 
-		res, err := handlers.HandleEndSeason(ctx, payload)
+				handlers := &LeaderboardHandlers{service: service}
+				payload := &leaderboardevents.EndSeasonPayloadV1{GuildID: guildID}
 
-		assert.NoError(t, err) // Handlers return events, not errors usually
-		assert.Len(t, res, 1)
-		assert.Equal(t, leaderboardevents.LeaderboardEndSeasonFailedV1, res[0].Topic)
-		failPayload, ok := res[0].Payload.(*leaderboardevents.AdminFailedPayloadV1)
-		assert.True(t, ok)
-		assert.Equal(t, guildID, failPayload.GuildID)
-		assert.Contains(t, failPayload.Reason, "pipeline error")
-	})
+				res, err := handlers.HandleEndSeason(ctx, payload)
 
-	t.Run("Operation Failure", func(t *testing.T) {
-		service := NewFakeService()
-		service.EndSeasonFunc = func(ctx context.Context, gID sharedtypes.GuildID) (results.OperationResult[bool, error], error) {
-			return results.FailureResult[bool, error](errors.New("business logic error")), nil
-		}
+				assert.NoError(t, err) // Handlers return events, not errors usually
+				assert.Len(t, res, 1)
+				assert.Equal(t, leaderboardevents.LeaderboardEndSeasonFailedV1, res[0].Topic)
+				failPayload, ok := res[0].Payload.(*leaderboardevents.AdminFailedPayloadV1)
+				assert.True(t, ok)
+				assert.Equal(t, guildID, failPayload.GuildID)
+				assert.Contains(t, failPayload.Reason, "pipeline error")
+			})
 
-		handlers := &LeaderboardHandlers{service: service}
-		payload := &leaderboardevents.EndSeasonPayloadV1{GuildID: guildID}
+			t.Run("Operation Failure", func(t *testing.T) {
+				service := NewFakeService()
+				service.EndSeasonFunc = func(ctx context.Context, gID sharedtypes.GuildID) (results.OperationResult[bool, error], error) {
+					return results.FailureResult[bool, error](errors.New("business logic error")), nil
+				}
 
-		res, err := handlers.HandleEndSeason(ctx, payload)
+				handlers := &LeaderboardHandlers{service: service}
+				payload := &leaderboardevents.EndSeasonPayloadV1{GuildID: guildID}
 
-		assert.NoError(t, err)
-		assert.Len(t, res, 1)
-		assert.Equal(t, leaderboardevents.LeaderboardEndSeasonFailedV1, res[0].Topic)
-		failPayload, ok := res[0].Payload.(*leaderboardevents.AdminFailedPayloadV1)
-		assert.True(t, ok)
-		assert.Equal(t, guildID, failPayload.GuildID)
-		assert.Contains(t, failPayload.Reason, "business logic error")
-	})
+				res, err := handlers.HandleEndSeason(ctx, payload)
+
+				assert.NoError(t, err)
+				assert.Len(t, res, 1)
+				assert.Equal(t, leaderboardevents.LeaderboardEndSeasonFailedV1, res[0].Topic)
+				failPayload, ok := res[0].Payload.(*leaderboardevents.AdminFailedPayloadV1)
+				assert.True(t, ok)
+				assert.Equal(t, guildID, failPayload.GuildID)
+				assert.Contains(t, failPayload.Reason, "business logic error")
+			})
+		})
+	}
 }

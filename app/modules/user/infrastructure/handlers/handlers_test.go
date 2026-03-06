@@ -9,30 +9,40 @@ import (
 )
 
 func TestNewUserHandlers(t *testing.T) {
-	// Arrange dependencies using Fakes/NoOps
-	fakeService := NewFakeUserService()
-	logger := loggerfrolfbot.NoOpLogger
-	tracer := noop.NewTracerProvider().Tracer("test")
-	metrics := &usermetrics.NoOpMetrics{}
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
+	}
 
-	t.Run("Initialize with all dependencies", func(t *testing.T) {
-		handlers := NewUserHandlers(fakeService, logger, tracer, nil, metrics)
-		if handlers == nil {
-			t.Fatal("Expected non-nil handlers")
-		}
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			// Arrange dependencies using Fakes/NoOps
+			fakeService := NewFakeUserService()
+			logger := loggerfrolfbot.NoOpLogger
+			tracer := noop.NewTracerProvider().Tracer("test")
+			metrics := &usermetrics.NoOpMetrics{}
 
-		// Verify the underlying type matches
-		if _, ok := handlers.(*UserHandlers); !ok {
-			t.Error("Expected handlers to be of type *UserHandlers")
-		}
-	})
+			t.Run("Initialize with all dependencies", func(t *testing.T) {
+				handlers := NewUserHandlers(fakeService, logger, tracer, nil, metrics)
+				if handlers == nil {
+					t.Fatal("Expected non-nil handlers")
+				}
 
-	t.Run("Initialize with nil dependencies", func(t *testing.T) {
-		// Even with nils, the factory should return an instance
-		// (though calling methods on it might panic depending on implementation)
-		handlersNil := NewUserHandlers(nil, nil, nil, nil, nil)
-		if handlersNil == nil {
-			t.Fatal("Expected non-nil handlers even with nil dependencies")
-		}
-	})
+				// Verify the underlying type matches
+				if _, ok := handlers.(*UserHandlers); !ok {
+					t.Error("Expected handlers to be of type *UserHandlers")
+				}
+			})
+
+			t.Run("Initialize with nil dependencies", func(t *testing.T) {
+				// Even with nils, the factory should return an instance
+				// (though calling methods on it might panic depending on implementation)
+				handlersNil := NewUserHandlers(nil, nil, nil, nil, nil)
+				if handlersNil == nil {
+					t.Fatal("Expected non-nil handlers even with nil dependencies")
+				}
+			})
+		})
+	}
 }

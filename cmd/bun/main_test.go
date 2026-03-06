@@ -8,84 +8,104 @@ import (
 )
 
 func TestOrderedModuleNames(t *testing.T) {
-	t.Parallel()
-
-	migrators := map[string]*migrate.Migrator{
-		"guild":       nil,
-		"user":        nil,
-		"club":        nil,
-		"round":       nil,
-		"score":       nil,
-		"leaderboard": nil,
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
 	}
 
-	t.Run("forward order", func(t *testing.T) {
-		t.Parallel()
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			t.Parallel()
 
-		got, err := orderedModuleNames(migrators, false)
-		if err != nil {
-			t.Fatalf("orderedModuleNames returned error: %v", err)
-		}
+			migrators := map[string]*migrate.Migrator{
+				"guild":       nil,
+				"user":        nil,
+				"club":        nil,
+				"round":       nil,
+				"score":       nil,
+				"leaderboard": nil,
+			}
 
-		if !reflect.DeepEqual(got, dependencyOrderedModules) {
-			t.Fatalf("unexpected forward order: got=%v want=%v", got, dependencyOrderedModules)
-		}
-	})
+			t.Run("forward order", func(t *testing.T) {
+				t.Parallel()
 
-	t.Run("reverse order", func(t *testing.T) {
-		t.Parallel()
+				got, err := orderedModuleNames(migrators, false)
+				if err != nil {
+					t.Fatalf("orderedModuleNames returned error: %v", err)
+				}
 
-		want := []string{"leaderboard", "score", "round", "club", "user", "guild"}
+				if !reflect.DeepEqual(got, dependencyOrderedModules) {
+					t.Fatalf("unexpected forward order: got=%v want=%v", got, dependencyOrderedModules)
+				}
+			})
 
-		got, err := orderedModuleNames(migrators, true)
-		if err != nil {
-			t.Fatalf("orderedModuleNames returned error: %v", err)
-		}
+			t.Run("reverse order", func(t *testing.T) {
+				t.Parallel()
 
-		if !reflect.DeepEqual(got, want) {
-			t.Fatalf("unexpected reverse order: got=%v want=%v", got, want)
-		}
-	})
+				want := []string{"leaderboard", "score", "round", "club", "user", "guild"}
+
+				got, err := orderedModuleNames(migrators, true)
+				if err != nil {
+					t.Fatalf("orderedModuleNames returned error: %v", err)
+				}
+
+				if !reflect.DeepEqual(got, want) {
+					t.Fatalf("unexpected reverse order: got=%v want=%v", got, want)
+				}
+			})
+		})
+	}
 }
 
 func TestOrderedModuleNames_ValidationErrors(t *testing.T) {
-	t.Parallel()
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
+	}
 
-	t.Run("missing module", func(t *testing.T) {
-		t.Parallel()
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			t.Parallel()
 
-		migrators := map[string]*migrate.Migrator{
-			"guild":       nil,
-			"user":        nil,
-			"club":        nil,
-			"round":       nil,
-			"score":       nil,
-			"leaderboard": nil,
-		}
-		delete(migrators, "score")
+			t.Run("missing module", func(t *testing.T) {
+				t.Parallel()
 
-		_, err := orderedModuleNames(migrators, false)
-		if err == nil {
-			t.Fatal("expected error for missing module")
-		}
-	})
+				migrators := map[string]*migrate.Migrator{
+					"guild":       nil,
+					"user":        nil,
+					"club":        nil,
+					"round":       nil,
+					"score":       nil,
+					"leaderboard": nil,
+				}
+				delete(migrators, "score")
 
-	t.Run("unknown module", func(t *testing.T) {
-		t.Parallel()
+				_, err := orderedModuleNames(migrators, false)
+				if err == nil {
+					t.Fatal("expected error for missing module")
+				}
+			})
 
-		migrators := map[string]*migrate.Migrator{
-			"guild":       nil,
-			"user":        nil,
-			"club":        nil,
-			"round":       nil,
-			"score":       nil,
-			"leaderboard": nil,
-			"weird":       nil,
-		}
+			t.Run("unknown module", func(t *testing.T) {
+				t.Parallel()
 
-		_, err := orderedModuleNames(migrators, false)
-		if err == nil {
-			t.Fatal("expected error for unknown module")
-		}
-	})
+				migrators := map[string]*migrate.Migrator{
+					"guild":       nil,
+					"user":        nil,
+					"club":        nil,
+					"round":       nil,
+					"score":       nil,
+					"leaderboard": nil,
+					"weird":       nil,
+				}
+
+				_, err := orderedModuleNames(migrators, false)
+				if err == nil {
+					t.Fatal("expected error for unknown module")
+				}
+			})
+		})
+	}
 }
