@@ -328,23 +328,6 @@ func TestBuildBunMigrators_UsesModuleTables(t *testing.T) {
 	}
 }
 
-func TestBuildLegacyBunMigrators_UsesLegacyTable(t *testing.T) {
-	t.Parallel()
-
-	var db *bun.DB
-	migrators := BuildLegacyBunMigrators(db)
-
-	for _, module := range OrderedModuleConfigs() {
-		migrator, ok := migrators[module.Name]
-		if !ok {
-			t.Fatalf("missing migrator for module %q", module.Name)
-		}
-		if got := migratorTableName(t, migrator); got != "bun_migrations" {
-			t.Fatalf("module %s legacy table mismatch: got=%s want=bun_migrations", module.Name, got)
-		}
-	}
-}
-
 func TestAsModuleMigrators(t *testing.T) {
 	tests := []struct {
 		name string

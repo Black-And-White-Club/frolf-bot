@@ -3,6 +3,7 @@ package roundhandlers
 import (
 	"context"
 	"errors"
+	"strings"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
@@ -69,6 +70,7 @@ func (h *RoundHandlers) HandleCreateRoundRequest(
 				DiscordChannelID: res.ChannelID,
 				DiscordGuildID:   string(payload.GuildID),
 				Config:           sharedevents.NewGuildConfigFragment(res.GuildConfig),
+				RequestSource:    payload.RequestSource,
 			}
 		},
 		func(err error) any {
@@ -181,11 +183,10 @@ func (h *RoundHandlers) HandleRoundEntityCreated(
 	// Add both legacy GuildID and internal ClubUUID scoped versions for PWA/NATS transition
 	handlerResults = h.addParallelIdentityResults(ctx, handlerResults, roundevents.RoundCreatedV2, payload.GuildID)
 
-	// Trigger scheduling immediately after persistence so PWA/manual flows don't
-	// depend on a later Discord message-id update to create the round-start job.
-	// Discord-originated rounds will reschedule once the message ID is available,
-	// and native-event linkage can later cancel the queue-based start job.
-	if mappedResult.Success != nil {
+	// PWA-originated creation does not emit a later RoundEventMessageIDUpdate.
+	// Trigger scheduling directly so queue-based start works without depending on
+	// Discord channel/message metadata.
+	if usesDirectRoundScheduling(payload.RequestSource) && mappedResult.Success != nil {
 		if createdPayload, ok := (*mappedResult.Success).(*roundevents.RoundCreatedPayloadV1); ok {
 			handlerResults = append(handlerResults, handlerwrapper.Result{
 				Topic: roundevents.RoundEventMessageIDUpdatedV1,
@@ -199,9 +200,10 @@ func (h *RoundHandlers) HandleRoundEntityCreated(
 						StartTime:   createdPayload.StartTime,
 						UserID:      createdPayload.UserID,
 					},
-					EventMessageID: payload.Round.EventMessageID,
-					Config:         createdPayload.Config,
-					ChannelID:      createdPayload.ChannelID,
+					EventMessageID:     payload.Round.EventMessageID,
+					Config:             createdPayload.Config,
+					ChannelID:          createdPayload.ChannelID,
+					NativeEventPlanned: boolPtr(false),
 				},
 			})
 		}
@@ -303,4 +305,16 @@ func (h *RoundHandlers) HandleRoundEventMessageIDUpdate(
 			},
 		},
 	}, nil
+}
+
+func boolPtr(v bool) *bool {
+	return &v
+}
+
+func usesDirectRoundScheduling(requestSource *string) bool {
+	if requestSource == nil {
+		return false
+	}
+
+	return strings.EqualFold(strings.TrimSpace(*requestSource), "pwa")
 }

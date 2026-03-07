@@ -259,7 +259,7 @@ func runMigrations() {
 	db := bun.NewDB(pgdb, pgdialect.New())
 	defer db.Close()
 
-	bunMigrators := migrationrunner.BuildLegacyBunMigrators(db)
+	bunMigrators := migrationrunner.BuildBunMigrators(db)
 	moduleMigrators := migrationrunner.AsModuleMigrators(bunMigrators)
 
 	if err := migrationrunner.InitModules(context.Background(), moduleMigrators); err != nil {
