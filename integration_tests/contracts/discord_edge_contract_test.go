@@ -100,7 +100,7 @@ func loadContractCatalog(t *testing.T) eventContractCatalog {
 			t.Fatalf("failed to determine current file path")
 		}
 		contractPath = filepath.Clean(
-			filepath.Join(filepath.Dir(filename), "../../../frolf-bot-shared/artifacts/contracts/events.v1.json"),
+			filepath.Join(filepath.Dir(filename), "../../../frolf-bot-shared/artifacts/contracts/events.contracts.json"),
 		)
 	}
 

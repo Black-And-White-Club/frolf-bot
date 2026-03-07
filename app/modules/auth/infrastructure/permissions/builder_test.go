@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	authdomain "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/domain"
 	"github.com/google/uuid"
 )
@@ -81,7 +82,7 @@ func TestBuilder_ForRole(t *testing.T) {
 			},
 		},
 		{
-			name: "admin permissions include scorecard upload",
+			name: "admin permissions include unscoped admin publish subjects",
 			claims: &authdomain.Claims{
 				UserUUID:       userUUID,
 				ActiveClubUUID: clubUUID,
@@ -91,10 +92,21 @@ func TestBuilder_ForRole(t *testing.T) {
 				},
 			},
 			verify: func(t *testing.T, p *Permissions) {
-				// Admin publish actions are unscoped
-				expectedPub := "round.scorecard.admin.upload.requested.v2"
-				if !contains(p.Publish.Allow, expectedPub) {
-					t.Errorf("expected admin publish allow for %s, got %v", expectedPub, p.Publish.Allow)
+				expectedPublishSubjects := []string{
+					leaderboardevents.LeaderboardPointHistoryRequestedV1,
+					leaderboardevents.LeaderboardManualPointAdjustmentV2,
+					leaderboardevents.LeaderboardRecalculateRoundV1,
+					leaderboardevents.LeaderboardStartNewSeasonV1,
+					leaderboardevents.LeaderboardEndSeasonV1,
+					leaderboardevents.LeaderboardGetSeasonStandingsV1,
+					"leaderboard.batch.tag.assignment.requested.v2",
+					"round.scorecard.admin.upload.requested.v2",
+				}
+
+				for _, expectedPub := range expectedPublishSubjects {
+					if !contains(p.Publish.Allow, expectedPub) {
+						t.Errorf("expected admin publish allow for %s, got %v", expectedPub, p.Publish.Allow)
+					}
 				}
 			},
 		},
@@ -110,16 +122,20 @@ func TestBuilder_ForRole(t *testing.T) {
 				},
 			},
 			verify: func(t *testing.T, p *Permissions) {
-				// Admin actions are unscoped (guild scoping done via payload)
-				expected := "leaderboard.manual.point.adjustment.v2"
-				if !contains(p.Publish.Allow, expected) {
-					t.Errorf("expected unscoped admin publish allow for %s, got %v", expected, p.Publish.Allow)
-				}
-				// Regression guard: the scoped variant must NOT be present.
-				// If someone accidentally re-adds a club/guild suffix, this catches it.
-				scoped := fmt.Sprintf("leaderboard.manual.point.adjustment.v2.%s", clubUUID)
-				if contains(p.Publish.Allow, scoped) {
-					t.Errorf("scoped admin publish subject %s must not be present (write subjects are intentionally unscoped)", scoped)
+				// Admin actions are unscoped (guild scoping done via payload).
+				// Regression guard: these write subjects must not regain a club/guild suffix.
+				for _, subject := range []string{
+					leaderboardevents.LeaderboardPointHistoryRequestedV1,
+					leaderboardevents.LeaderboardManualPointAdjustmentV2,
+					leaderboardevents.LeaderboardRecalculateRoundV1,
+					leaderboardevents.LeaderboardStartNewSeasonV1,
+					leaderboardevents.LeaderboardEndSeasonV1,
+					leaderboardevents.LeaderboardGetSeasonStandingsV1,
+				} {
+					scoped := fmt.Sprintf("%s.%s", subject, clubUUID)
+					if contains(p.Publish.Allow, scoped) {
+						t.Errorf("scoped admin publish subject %s must not be present (write subjects are intentionally unscoped)", scoped)
+					}
 				}
 			},
 		},
