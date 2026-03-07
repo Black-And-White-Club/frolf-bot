@@ -44,12 +44,14 @@ func TestBuilder_ForRole(t *testing.T) {
 					"round.participant.join.requested.v2",
 					"round.participant.declined.v1",
 					"round.participant.removal.requested.v2",
-					"round.score.update.requested.v2",
 					"user.udisc.identity.update.requested.v1",
 				} {
 					if !contains(p.Publish.Allow, expectedPub) {
 						t.Errorf("expected publish allow for %s, got %v", expectedPub, p.Publish.Allow)
 					}
+				}
+				if contains(p.Publish.Allow, "round.score.update.requested.v2") {
+					t.Errorf("player permissions must not allow score update writes, got %v", p.Publish.Allow)
 				}
 			},
 		},

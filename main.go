@@ -259,7 +259,7 @@ func runMigrations() {
 	db := bun.NewDB(pgdb, pgdialect.New())
 	defer db.Close()
 
-	bunMigrators := migrationrunner.BuildBunMigrators(db)
+	bunMigrators := migrationrunner.BuildSharedTableMigrators(db)
 	moduleMigrators := migrationrunner.AsModuleMigrators(bunMigrators)
 
 	if err := migrationrunner.InitModules(context.Background(), moduleMigrators); err != nil {

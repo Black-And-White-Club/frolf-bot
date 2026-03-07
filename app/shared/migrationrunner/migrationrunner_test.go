@@ -328,6 +328,23 @@ func TestBuildBunMigrators_UsesModuleTables(t *testing.T) {
 	}
 }
 
+func TestBuildSharedTableMigrators_UsesSharedTable(t *testing.T) {
+	t.Parallel()
+
+	var db *bun.DB
+	migrators := BuildSharedTableMigrators(db)
+
+	for _, module := range OrderedModuleConfigs() {
+		migrator, ok := migrators[module.Name]
+		if !ok {
+			t.Fatalf("missing migrator for module %q", module.Name)
+		}
+		if got := migratorTableName(t, migrator); got != sharedMigrationTableName {
+			t.Fatalf("module %s table mismatch: got=%s want=%s", module.Name, got, sharedMigrationTableName)
+		}
+	}
+}
+
 func TestAsModuleMigrators(t *testing.T) {
 	tests := []struct {
 		name string

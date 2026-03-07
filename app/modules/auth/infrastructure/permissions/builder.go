@@ -3,6 +3,7 @@ package permissions
 import (
 	"fmt"
 
+	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	authdomain "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/domain"
 )
 
@@ -201,7 +202,6 @@ func publishPatterns(clubUUID, guildID string, includeParticipant bool) []string
 			"round.participant.join.requested.v2",
 			"round.participant.declined.v1",
 			"round.participant.removal.requested.v2",
-			"round.score.update.requested.v2",
 		)
 	}
 
@@ -237,8 +237,9 @@ func (b *Builder) editorPermissions(clubUUID, userUUID, guildID, userID string) 
 		"round.creation.requested.v2",
 		"round.update.requested.v2",
 		"round.delete.requested.v2",
-		"leaderboard.point.history.requested.v1",
-		"leaderboard.get.season.standings.v1",
+		"round.score.update.requested.v2",
+		leaderboardevents.LeaderboardPointHistoryRequestedV1,
+		leaderboardevents.LeaderboardGetSeasonStandingsV1,
 	)
 
 	return &Permissions{
@@ -259,10 +260,10 @@ func (b *Builder) adminPermissions(clubUUID, userUUID, guildID, userID string) *
 
 	// Admin-only publish subjects (unscoped global topics)
 	editor.Publish.Allow = append(editor.Publish.Allow,
-		"leaderboard.manual.point.adjustment.v2",
-		"leaderboard.recalculate.round.v1",
-		"leaderboard.start.new.season.v1",
-		"leaderboard.end.season.v1",
+		leaderboardevents.LeaderboardManualPointAdjustmentV2,
+		leaderboardevents.LeaderboardRecalculateRoundV1,
+		leaderboardevents.LeaderboardStartNewSeasonV1,
+		leaderboardevents.LeaderboardEndSeasonV1,
 		"leaderboard.batch.tag.assignment.requested.v2",
 		"round.scorecard.admin.upload.requested.v2",
 	)
@@ -271,8 +272,8 @@ func (b *Builder) adminPermissions(clubUUID, userUUID, guildID, userID string) *
 	editor.Subscribe.Allow = append(editor.Subscribe.Allow,
 		"leaderboard.batch.tag.assigned.v2",
 		"leaderboard.batch.tag.assignment.failed.v2",
-		"leaderboard.manual.point.adjustment.success.v2",
-		"leaderboard.manual.point.adjustment.failed.v2",
+		leaderboardevents.LeaderboardManualPointAdjustmentSuccessV2,
+		leaderboardevents.LeaderboardManualPointAdjustmentFailedV2,
 	)
 
 	return editor

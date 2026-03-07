@@ -36,6 +36,8 @@ var dependencyOrderedModules = []ModuleConfig{
 	{Name: "leaderboard", TableName: "bun_migrations_leaderboard", Migrations: leaderboardmigrations.Migrations},
 }
 
+const sharedMigrationTableName = "bun_migrations"
+
 // OrderedModuleConfigs returns migration modules in dependency order.
 func OrderedModuleConfigs() []ModuleConfig {
 	copied := make([]ModuleConfig, len(dependencyOrderedModules))
@@ -102,6 +104,20 @@ func BuildBunMigrators(db *bun.DB) map[string]*migrate.Migrator {
 			db,
 			module.Migrations,
 			migrate.WithTableName(module.TableName),
+		)
+	}
+	return migrators
+}
+
+// BuildSharedTableMigrators keeps startup migrations on the historical shared table
+// so existing databases do not replay already-applied migrations.
+func BuildSharedTableMigrators(db *bun.DB) map[string]*migrate.Migrator {
+	migrators := make(map[string]*migrate.Migrator, len(dependencyOrderedModules))
+	for _, module := range dependencyOrderedModules {
+		migrators[module.Name] = migrate.NewMigrator(
+			db,
+			module.Migrations,
+			migrate.WithTableName(sharedMigrationTableName),
 		)
 	}
 	return migrators
