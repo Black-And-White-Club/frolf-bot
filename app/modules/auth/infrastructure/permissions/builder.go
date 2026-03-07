@@ -112,8 +112,8 @@ func (b *Builder) viewerPermissions(clubUUID, guildID string) *Permissions {
 }
 
 // subscribePatterns generates subscribe patterns for round/leaderboard/guild events.
-// Subjects follow pattern: {domain}.{action}[.{sub}...].v1.{id}
-// Examples: round.created.v2.{id}, round.participant.joined.v2.{id}, round.participant.score.updated.v2.{id}
+// Scoped subjects follow pattern: {domain}.{action}[.{sub}...].v{n}.{id}
+// Round and leaderboard subjects are allowed on both v1 and v2 during the migration.
 func subscribePatterns(clubUUID, guildID, userUUID, userID string) []string {
 	patterns := []string{}
 
@@ -121,16 +121,23 @@ func subscribePatterns(clubUUID, guildID, userUUID, userID string) []string {
 		if id == "" {
 			continue
 		}
-		// round.*.v1.{id} - matches round.created.v2.{id}, round.updated.v2.{id}, etc. (4 tokens)
-		// round.*.*.v1.{id} - matches round.participant.joined.v2.{id}, round.list.request.v2.{id} (5 tokens)
-		// round.*.*.*.v1.{id} - matches round.participant.score.updated.v2.{id} (6 tokens)
+		// round.*.v{1,2}.{id} - matches round.created.v2.{id}, round.updated.v2.{id}, etc. (4 tokens)
+		// round.*.*.v{1,2}.{id} - matches round.participant.joined.v2.{id}, round.list.request.v2.{id} (5 tokens)
+		// round.*.*.*.v{1,2}.{id} - matches round.participant.score.updated.v2.{id} (6 tokens)
+		// leaderboard.*... follows the same migration pattern. Guild subjects remain v1 today.
 		patterns = append(patterns,
 			fmt.Sprintf("round.*.v1.%s", id),
+			fmt.Sprintf("round.*.v2.%s", id),
 			fmt.Sprintf("round.*.*.v1.%s", id),
+			fmt.Sprintf("round.*.*.v2.%s", id),
 			fmt.Sprintf("round.*.*.*.v1.%s", id),
+			fmt.Sprintf("round.*.*.*.v2.%s", id),
 			fmt.Sprintf("leaderboard.*.v1.%s", id),
+			fmt.Sprintf("leaderboard.*.v2.%s", id),
 			fmt.Sprintf("leaderboard.*.*.v1.%s", id),
+			fmt.Sprintf("leaderboard.*.*.v2.%s", id),
 			fmt.Sprintf("leaderboard.*.*.*.v1.%s", id),
+			fmt.Sprintf("leaderboard.*.*.*.v2.%s", id),
 			fmt.Sprintf("guild.*.v1.%s", id),
 			fmt.Sprintf("guild.*.*.v1.%s", id),
 		)

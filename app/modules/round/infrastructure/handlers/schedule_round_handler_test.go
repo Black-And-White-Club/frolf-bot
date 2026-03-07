@@ -33,6 +33,7 @@ func TestRoundHandlers_HandleDiscordMessageIDUpdated(t *testing.T) {
 		},
 		EventMessageID: testEventMessageID,
 	}
+	truePtr := func(v bool) *bool { return &v }
 
 	logger := loggerfrolfbot.NoOpLogger
 
@@ -85,6 +86,30 @@ func TestRoundHandlers_HandleDiscordMessageIDUpdated(t *testing.T) {
 				}
 			},
 			payload:       testPayload,
+			wantErr:       false,
+			wantResultLen: 0,
+		},
+		{
+			name: "Propagates native event ownership flag to scheduling service",
+			fakeSetup: func(fake *FakeService) {
+				fake.ScheduleRoundEventsFunc = func(ctx context.Context, req *roundtypes.ScheduleRoundEventsRequest) (roundservice.ScheduleRoundEventsResult, error) {
+					if req.NativeEventPlanned == nil || !*req.NativeEventPlanned {
+						t.Fatalf("expected native event planned flag to be forwarded, got %+v", req.NativeEventPlanned)
+					}
+					return results.SuccessResult[*roundtypes.ScheduleRoundEventsResult, error](&roundtypes.ScheduleRoundEventsResult{}), nil
+				}
+			},
+			payload: &roundevents.RoundScheduledPayloadV1{
+				GuildID: testGuildID,
+				BaseRoundPayload: roundtypes.BaseRoundPayload{
+					RoundID:   testRoundID,
+					Title:     testTitle,
+					StartTime: &testStartTime,
+					UserID:    testUserID,
+				},
+				EventMessageID:     testEventMessageID,
+				NativeEventPlanned: truePtr(true),
+			},
 			wantErr:       false,
 			wantResultLen: 0,
 		},

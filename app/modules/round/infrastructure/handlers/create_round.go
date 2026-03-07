@@ -279,7 +279,8 @@ func (h *RoundHandlers) HandleRoundEventMessageIDUpdate(
 			StartTime:   updatedRound.StartTime,
 			UserID:      updatedRound.CreatedBy,
 		},
-		EventMessageID: discordMessageID,
+		EventMessageID:     discordMessageID,
+		NativeEventPlanned: payload.NativeEventPlanned,
 	}
 
 	if h.logger != nil {

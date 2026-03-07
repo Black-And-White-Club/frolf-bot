@@ -311,6 +311,8 @@ func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, req *roun
 			finalLocation = *req.Location
 		}
 
+		hasNativeDiscordEvent := currentRound.DiscordEventID != ""
+
 		// Step 5: Schedule new events
 		now := time.Now().UTC()
 
@@ -401,8 +403,8 @@ func (s *RoundService) UpdateScheduledRoundEvents(ctx context.Context, req *roun
 			)
 		}
 
-		if eventMessageID == "" {
-			// PWA-only rounds rely on queue-based start scheduling.
+		if !hasNativeDiscordEvent {
+			// Rounds without a linked Discord native event rely on queue-based start scheduling.
 			s.logger.InfoContext(ctx, "Rescheduling queue-based round start event",
 				attr.RoundID("round_id", req.RoundID),
 				attr.Time("start_time", startTimeUTC),

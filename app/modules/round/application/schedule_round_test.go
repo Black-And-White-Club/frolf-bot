@@ -40,13 +40,14 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 	testMessageID := "12345"
 
 	tests := []struct {
-		name            string
-		startTimeOffset time.Duration
-		eventMessageID  string
-		setup           func(*FakeQueueService)
-		setupRepo       func(*FakeRepo)
-		want            results.OperationResult[*roundtypes.ScheduleRoundEventsResult, error]
-		wantErr         bool
+		name               string
+		startTimeOffset    time.Duration
+		eventMessageID     string
+		nativeEventPlanned *bool
+		setup              func(*FakeQueueService)
+		setupRepo          func(*FakeRepo)
+		want               results.OperationResult[*roundtypes.ScheduleRoundEventsResult, error]
+		wantErr            bool
 	}{
 		{
 			name:            "successful scheduling",
@@ -116,6 +117,33 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name:               "planned native discord event skips queue-based start scheduling before linkage is stored",
+			startTimeOffset:    2 * time.Hour,
+			eventMessageID:     testMessageID,
+			nativeEventPlanned: ptr(true),
+			setup: func(q *FakeQueueService) {
+				q.CancelRoundJobsFunc = func(ctx context.Context, rID sharedtypes.RoundID) error { return nil }
+				q.ScheduleRoundReminderFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, t time.Time, p roundevents.DiscordReminderPayloadV1) error {
+					return nil
+				}
+				q.ScheduleRoundStartFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, t time.Time, p roundevents.RoundStartedPayloadV1) error {
+					return errors.New("start should be skipped while native discord event owns lifecycle start")
+				}
+			},
+			want: results.OperationResult[*roundtypes.ScheduleRoundEventsResult, error]{
+				Success: ptr(&roundtypes.ScheduleRoundEventsResult{
+					RoundID:        testRoundID,
+					GuildID:        testGuildID,
+					Title:          testRoundTitle,
+					Description:    testDescription,
+					Location:       testLocation,
+					StartTime:      *startTimePtr(now.Add(2 * time.Hour)),
+					EventMessageID: testMessageID,
+				}),
+			},
+			wantErr: false,
+		},
+		{
 			name:            "linked discord event skips queue-based start scheduling",
 			startTimeOffset: 2 * time.Hour,
 			eventMessageID:  testMessageID,
@@ -149,6 +177,23 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 				}),
 			},
 			wantErr: false,
+		},
+		{
+			name:               "native event creation failure keeps queue-based start fallback enabled",
+			startTimeOffset:    2 * time.Hour,
+			eventMessageID:     testMessageID,
+			nativeEventPlanned: ptr(false),
+			setup: func(q *FakeQueueService) {
+				q.CancelRoundJobsFunc = func(ctx context.Context, rID sharedtypes.RoundID) error { return nil }
+				q.ScheduleRoundReminderFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, t time.Time, p roundevents.DiscordReminderPayloadV1) error {
+					return nil
+				}
+				q.ScheduleRoundStartFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, t time.Time, p roundevents.RoundStartedPayloadV1) error {
+					return errors.New("round start scheduling error")
+				}
+			},
+			want:    results.OperationResult[*roundtypes.ScheduleRoundEventsResult, error]{},
+			wantErr: true,
 		},
 		{
 			name:            "native event lookup error falls back to queue-based start scheduling",
@@ -210,13 +255,14 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 			s := NewRoundService(repo, queue, nil, nil, mockMetrics, nil, logger, tracer, nil, nil)
 
 			req := &roundtypes.ScheduleRoundEventsRequest{
-				RoundID:        testRoundID,
-				GuildID:        testGuildID,
-				Title:          testRoundTitle,
-				Description:    testDescription,
-				Location:       testLocation,
-				StartTime:      *startTimePtr(now.Add(tt.startTimeOffset)),
-				EventMessageID: tt.eventMessageID,
+				RoundID:            testRoundID,
+				GuildID:            testGuildID,
+				Title:              testRoundTitle,
+				Description:        testDescription,
+				Location:           testLocation,
+				StartTime:          *startTimePtr(now.Add(tt.startTimeOffset)),
+				EventMessageID:     tt.eventMessageID,
+				NativeEventPlanned: tt.nativeEventPlanned,
 			}
 
 			got, err := s.ScheduleRoundEvents(ctx, req)

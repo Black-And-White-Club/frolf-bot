@@ -96,13 +96,28 @@ func OrderedModuleNames[T any](migrators map[string]T, reverse bool) ([]string, 
 
 // BuildBunMigrators builds Bun migrators for each module using canonical table names.
 func BuildBunMigrators(db *bun.DB) map[string]*migrate.Migrator {
+	return buildBunMigrators(db, true)
+}
+
+// BuildLegacyBunMigrators preserves the historical bun_migrations tracking table
+// used by the main binary startup path.
+func BuildLegacyBunMigrators(db *bun.DB) map[string]*migrate.Migrator {
+	return buildBunMigrators(db, false)
+}
+
+func buildBunMigrators(db *bun.DB, useModuleTables bool) map[string]*migrate.Migrator {
 	migrators := make(map[string]*migrate.Migrator, len(dependencyOrderedModules))
 	for _, module := range dependencyOrderedModules {
-		migrators[module.Name] = migrate.NewMigrator(
-			db,
-			module.Migrations,
-			migrate.WithTableName(module.TableName),
-		)
+		if useModuleTables {
+			migrators[module.Name] = migrate.NewMigrator(
+				db,
+				module.Migrations,
+				migrate.WithTableName(module.TableName),
+			)
+			continue
+		}
+
+		migrators[module.Name] = migrate.NewMigrator(db, module.Migrations)
 	}
 	return migrators
 }

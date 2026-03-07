@@ -29,9 +29,15 @@ func TestBuilder_ForRole(t *testing.T) {
 				},
 			},
 			verify: func(t *testing.T, p *Permissions) {
-				expectedSub := fmt.Sprintf("round.*.v1.%s", clubUUID)
-				if !contains(p.Subscribe.Allow, expectedSub) {
-					t.Errorf("expected subscription allow for %s, got %v", expectedSub, p.Subscribe.Allow)
+				for _, expectedSub := range []string{
+					fmt.Sprintf("round.*.v1.%s", clubUUID),
+					fmt.Sprintf("round.*.v2.%s", clubUUID),
+					fmt.Sprintf("leaderboard.*.v1.%s", clubUUID),
+					fmt.Sprintf("leaderboard.*.v2.%s", clubUUID),
+				} {
+					if !contains(p.Subscribe.Allow, expectedSub) {
+						t.Errorf("expected subscription allow for %s, got %v", expectedSub, p.Subscribe.Allow)
+					}
 				}
 				// Participant publish actions are unscoped
 				for _, expectedPub := range []string{

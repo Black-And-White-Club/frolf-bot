@@ -481,6 +481,29 @@ func TestRoundHandlers_HandleRoundEventMessageIDUpdate(t *testing.T) {
 			},
 		},
 		{
+			name: "Propagates native event ownership to the scheduled payload",
+			fakeSetup: func(fake *FakeService) {
+				fake.UpdateRoundMessageIDFunc = func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, discordMessageID string) (*roundtypes.Round, error) {
+					return testRound, nil
+				}
+			},
+			payload: &roundevents.RoundMessageIDUpdatePayloadV1{
+				GuildID:            guildID,
+				RoundID:            testRoundID,
+				NativeEventPlanned: func() *bool { v := true; return &v }(),
+			},
+			ctx:             context.WithValue(context.Background(), "discord_message_id", "msg-123"),
+			wantErr:         false,
+			wantResultLen:   1,
+			wantResultTopic: roundevents.RoundEventMessageIDUpdatedV1,
+			assertPayload: func(t *testing.T, payload roundevents.RoundScheduledPayloadV1) {
+				t.Helper()
+				if payload.NativeEventPlanned == nil || !*payload.NativeEventPlanned {
+					t.Fatalf("expected NativeEventPlanned=true, got %+v", payload.NativeEventPlanned)
+				}
+			},
+		},
+		{
 			name: "Missing discord_message_id in context",
 			fakeSetup: func(fake *FakeService) {
 				// No setup needed

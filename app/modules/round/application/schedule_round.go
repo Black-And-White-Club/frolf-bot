@@ -39,7 +39,10 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, req *roundtypes.
 
 		hasNativeDiscordEvent := false
 		nativeEventLookupFailed := false
-		if s.repo != nil {
+		nativeEventPlanned := req.NativeEventPlanned
+		if nativeEventPlanned != nil {
+			hasNativeDiscordEvent = *nativeEventPlanned
+		} else if s.repo != nil {
 			storedRound, lookupErr := s.repo.GetRound(ctx, s.db, req.GuildID, req.RoundID)
 			if lookupErr != nil {
 				nativeEventLookupFailed = true
@@ -58,6 +61,7 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, req *roundtypes.
 
 		s.logger.DebugContext(ctx, "Round start scheduling decision",
 			attr.RoundID("round_id", req.RoundID),
+			attr.Bool("native_event_planned", nativeEventPlanned != nil && *nativeEventPlanned),
 			attr.Bool("has_native_discord_event", hasNativeDiscordEvent),
 			attr.Bool("event_message_id_present", req.EventMessageID != ""),
 			attr.Bool("native_event_lookup_failed", nativeEventLookupFailed),
@@ -119,8 +123,9 @@ func (s *RoundService) ScheduleRoundEvents(ctx context.Context, req *roundtypes.
 		}
 
 		// Schedule round start if in the future (at least 5 seconds buffer) and no
-		// Discord native scheduled event is linked yet. Linked Discord events remain
-		// authoritative for lifecycle start transitions.
+		// Discord native event is expected to own the lifecycle transition. When the
+		// Discord module tells us native event start is authoritative, we skip the
+		// queue fallback even if the database linkage arrives slightly later.
 		if startTimeUTC.After(now.Add(5*time.Second)) && !hasNativeDiscordEvent {
 			s.logger.InfoContext(ctx, "Scheduling round start",
 				attr.RoundID("round_id", req.RoundID),

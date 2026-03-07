@@ -25,16 +25,17 @@ func (h *RoundHandlers) HandleDiscordMessageIDUpdated(
 	}
 
 	result, err := h.service.ScheduleRoundEvents(ctx, &roundtypes.ScheduleRoundEventsRequest{
-		GuildID:        payload.GuildID,
-		RoundID:        payload.RoundID,
-		Title:          payload.Title.String(),
-		Description:    payload.Description.String(),
-		Location:       payload.Location.String(),
-		StartTime:      *payload.StartTime,
-		UserID:         payload.UserID,
-		EventMessageID: payload.EventMessageID,
-		ChannelID:      payload.ChannelID,
-		Config:         config,
+		GuildID:            payload.GuildID,
+		RoundID:            payload.RoundID,
+		Title:              payload.Title.String(),
+		Description:        payload.Description.String(),
+		Location:           payload.Location.String(),
+		StartTime:          *payload.StartTime,
+		UserID:             payload.UserID,
+		EventMessageID:     payload.EventMessageID,
+		ChannelID:          payload.ChannelID,
+		Config:             config,
+		NativeEventPlanned: payload.NativeEventPlanned,
 	})
 	if err != nil {
 		return nil, err

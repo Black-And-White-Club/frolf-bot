@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/migrate"
 )
 
@@ -291,6 +292,56 @@ func TestOrderedModuleConfigs_TableNames(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func migratorTableName(t *testing.T, migrator *migrate.Migrator) string {
+	t.Helper()
+
+	value := reflect.ValueOf(migrator)
+	if value.Kind() != reflect.Pointer || value.IsNil() {
+		t.Fatal("migrator must be a non-nil pointer")
+	}
+
+	field := value.Elem().FieldByName("table")
+	if !field.IsValid() || field.Kind() != reflect.String {
+		t.Fatal("migrator table field missing")
+	}
+
+	return field.String()
+}
+
+func TestBuildBunMigrators_UsesModuleTables(t *testing.T) {
+	t.Parallel()
+
+	var db *bun.DB
+	migrators := BuildBunMigrators(db)
+
+	for _, module := range OrderedModuleConfigs() {
+		migrator, ok := migrators[module.Name]
+		if !ok {
+			t.Fatalf("missing migrator for module %q", module.Name)
+		}
+		if got := migratorTableName(t, migrator); got != module.TableName {
+			t.Fatalf("module %s table mismatch: got=%s want=%s", module.Name, got, module.TableName)
+		}
+	}
+}
+
+func TestBuildLegacyBunMigrators_UsesLegacyTable(t *testing.T) {
+	t.Parallel()
+
+	var db *bun.DB
+	migrators := BuildLegacyBunMigrators(db)
+
+	for _, module := range OrderedModuleConfigs() {
+		migrator, ok := migrators[module.Name]
+		if !ok {
+			t.Fatalf("missing migrator for module %q", module.Name)
+		}
+		if got := migratorTableName(t, migrator); got != "bun_migrations" {
+			t.Fatalf("module %s legacy table mismatch: got=%s want=bun_migrations", module.Name, got)
+		}
 	}
 }
 
