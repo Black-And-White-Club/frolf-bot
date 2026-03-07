@@ -83,6 +83,22 @@ func isLoopbackAddr(addr string) bool {
 // followed by letters, digits, or underscores only.
 var validDBName = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
+// Version is set at build time via ldflags in CI.
+var Version = "dev"
+
+func runtimeServiceVersion(configured string) string {
+	if value := strings.TrimSpace(os.Getenv("SERVICE_VERSION")); value != "" {
+		return value
+	}
+	if value := strings.TrimSpace(configured); value != "" {
+		return value
+	}
+	if value := strings.TrimSpace(Version); value != "" {
+		return value
+	}
+	return "dev"
+}
+
 func main() {
 	// Optionally start pprof for profiling
 	startPprofIfEnabled()
@@ -111,7 +127,7 @@ func main() {
 
 	// --- Observability Initialization ---
 	obsConfig := config.ToObsConfig(cfg)
-	obsConfig.Version = "1.0.0"
+	obsConfig.Version = runtimeServiceVersion(obsConfig.Version)
 
 	obs, err := observability.Init(ctx, obsConfig)
 	if err != nil {
