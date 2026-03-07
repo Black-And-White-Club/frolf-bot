@@ -243,6 +243,12 @@ func (h *RoundHandlers) HandleParseScorecardRequest(ctx context.Context, payload
 	if req.FileURL == "" {
 		req.FileURL = payload.UDiscURL
 	}
+	// UDisc URL imports don't carry a FileName, but the parser factory needs
+	// a file extension to select the CSV parser. UDisc /leaderboard/export
+	// always returns CSV, so default to that when unset.
+	if req.FileName == "" && payload.UDiscURL != "" {
+		req.FileName = "scorecard.csv"
+	}
 
 	result, err := h.service.ParseScorecard(ctx, &req)
 	if err != nil {

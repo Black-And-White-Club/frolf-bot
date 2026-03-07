@@ -59,6 +59,7 @@ type Service interface {
 
 	// Schedule Round Events
 	ScheduleRoundEvents(ctx context.Context, req *roundtypes.ScheduleRoundEventsRequest) (ScheduleRoundEventsResult, error)
+	CancelScheduledRoundStart(ctx context.Context, roundID sharedtypes.RoundID) error
 
 	// Update Participant Tags
 	UpdateScheduledRoundsWithNewTags(ctx context.Context, req *roundtypes.UpdateScheduledRoundsWithNewTagsRequest) (UpdateScheduledRoundsWithNewTagsResult, error)

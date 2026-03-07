@@ -118,14 +118,14 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 		{
 			name:            "linked discord event skips queue-based start scheduling",
 			startTimeOffset: 2 * time.Hour,
-			eventMessageID:  "",
+			eventMessageID:  testMessageID,
 			setup: func(q *FakeQueueService) {
 				q.CancelRoundJobsFunc = func(ctx context.Context, rID sharedtypes.RoundID) error { return nil }
 				q.ScheduleRoundReminderFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, t time.Time, p roundevents.DiscordReminderPayloadV1) error {
 					return nil
 				}
 				q.ScheduleRoundStartFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, t time.Time, p roundevents.RoundStartedPayloadV1) error {
-					return errors.New("start should be skipped for linked discord native events")
+					return errors.New("start should be skipped for linked native discord events")
 				}
 			},
 			setupRepo: func(r *FakeRepo) {
@@ -145,7 +145,7 @@ func TestRoundService_ScheduleRoundEvents(t *testing.T) {
 					Description:    testDescription,
 					Location:       testLocation,
 					StartTime:      *startTimePtr(now.Add(2 * time.Hour)),
-					EventMessageID: "",
+					EventMessageID: testMessageID,
 				}),
 			},
 			wantErr: false,

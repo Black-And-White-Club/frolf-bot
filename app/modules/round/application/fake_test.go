@@ -330,6 +330,7 @@ type FakeQueueService struct {
 
 	ScheduleRoundStartFunc    func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, startTime time.Time, payload roundevents.RoundStartedPayloadV1) error
 	ScheduleRoundReminderFunc func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, reminderTime time.Time, payload roundevents.DiscordReminderPayloadV1) error
+	CancelRoundStartJobsFunc  func(ctx context.Context, roundID sharedtypes.RoundID) error
 	CancelRoundJobsFunc       func(ctx context.Context, roundID sharedtypes.RoundID) error
 	GetScheduledJobsFunc      func(ctx context.Context, roundID sharedtypes.RoundID) ([]roundqueue.JobInfo, error)
 	HealthCheckFunc           func(ctx context.Context) error
@@ -373,6 +374,14 @@ func (f *FakeQueueService) CancelRoundJobs(ctx context.Context, roundID sharedty
 	f.record("CancelRoundJobs")
 	if f.CancelRoundJobsFunc != nil {
 		return f.CancelRoundJobsFunc(ctx, roundID)
+	}
+	return nil
+}
+
+func (f *FakeQueueService) CancelRoundStartJobs(ctx context.Context, roundID sharedtypes.RoundID) error {
+	f.record("CancelRoundStartJobs")
+	if f.CancelRoundStartJobsFunc != nil {
+		return f.CancelRoundStartJobsFunc(ctx, roundID)
 	}
 	return nil
 }
