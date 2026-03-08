@@ -3,6 +3,7 @@ package leaderboardhandlers
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -93,19 +94,20 @@ func (h *LeaderboardHandlers) handleLeaderboardUpdateWithServiceCommand(
 	}
 
 	// Publish per-user tag update events for PWA live updates.
-	guildIDStr := string(payload.GuildID)
-	for memberID, tag := range changedTags {
-		newTag := tag
-		scopedTopic := fmt.Sprintf("%s.%s", leaderboardevents.LeaderboardTagUpdatedV2, guildIDStr)
-		results = append(results, handlerwrapper.Result{
-			Topic: scopedTopic,
-			Payload: &leaderboardevents.LeaderboardTagUpdatedPayloadV1{
-				GuildID: payload.GuildID,
-				UserID:  memberID,
-				NewTag:  &newTag,
-				Reason:  "round_finalization",
-			},
-		})
+	memberIDs := make([]string, 0, len(changedTags))
+	for memberID := range changedTags {
+		memberIDs = append(memberIDs, string(memberID))
+	}
+	sort.Strings(memberIDs)
+
+	for _, memberID := range memberIDs {
+		results = append(results, h.buildTagUpdatedResults(
+			ctx,
+			payload.GuildID,
+			sharedtypes.DiscordID(memberID),
+			changedTags[sharedtypes.DiscordID(memberID)],
+			sharedtypes.ServiceUpdateSourceProcessScores,
+		)...)
 	}
 
 	if !output.PointsSkipped && len(output.PointAwards) > 0 {

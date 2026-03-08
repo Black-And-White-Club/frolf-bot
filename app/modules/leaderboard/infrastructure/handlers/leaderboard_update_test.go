@@ -58,12 +58,18 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 			},
 			payload:       testPayload,
 			wantErr:       false,
-			wantResultLen: 4,
+			wantResultLen: 10,
 			wantTopics: []string{
-				leaderboardevents.LeaderboardUpdatedV2,                                              // 0: Global
-				sharedevents.SyncRoundsTagRequestV1,                                                 // 1: Sync
-				fmt.Sprintf("%s.%s", leaderboardevents.LeaderboardUpdatedV2, "test-guild"),          // 2: Scoped
-				fmt.Sprintf("%s.%s", leaderboardevents.LeaderboardUpdatedV2, testClubUUID.String()), // 3: Scoped Club
+				leaderboardevents.LeaderboardUpdatedV2,
+				sharedevents.SyncRoundsTagRequestV1,
+				leaderboardevents.LeaderboardTagUpdatedV2,
+				fmt.Sprintf("%s.%s", leaderboardevents.LeaderboardTagUpdatedV2, "test-guild"),
+				fmt.Sprintf("%s.%s", leaderboardevents.LeaderboardTagUpdatedV2, testClubUUID.String()),
+				leaderboardevents.LeaderboardTagUpdatedV2,
+				fmt.Sprintf("%s.%s", leaderboardevents.LeaderboardTagUpdatedV2, "test-guild"),
+				fmt.Sprintf("%s.%s", leaderboardevents.LeaderboardTagUpdatedV2, testClubUUID.String()),
+				fmt.Sprintf("%s.%s", leaderboardevents.LeaderboardUpdatedV2, "test-guild"),
+				fmt.Sprintf("%s.%s", leaderboardevents.LeaderboardUpdatedV2, testClubUUID.String()),
 			},
 		},
 		{
@@ -109,7 +115,16 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 				SortedParticipantTags: []string{"invalid_format", "1:12345"},
 			},
 			wantErr:       false,
-			wantResultLen: 4,
+			wantResultLen: 7,
+			wantTopics: []string{
+				leaderboardevents.LeaderboardUpdatedV2,
+				sharedevents.SyncRoundsTagRequestV1,
+				leaderboardevents.LeaderboardTagUpdatedV2,
+				fmt.Sprintf("%s.%s", leaderboardevents.LeaderboardTagUpdatedV2, "test-guild"),
+				fmt.Sprintf("%s.%s", leaderboardevents.LeaderboardTagUpdatedV2, testClubUUID.String()),
+				fmt.Sprintf("%s.%s", leaderboardevents.LeaderboardUpdatedV2, "test-guild"),
+				fmt.Sprintf("%s.%s", leaderboardevents.LeaderboardUpdatedV2, testClubUUID.String()),
+			},
 		},
 		{
 			name: "Uses explicit participants when present",
@@ -142,7 +157,19 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 				},
 			},
 			wantErr:       false,
-			wantResultLen: 4,
+			wantResultLen: 10,
+			wantTopics: []string{
+				leaderboardevents.LeaderboardUpdatedV2,
+				sharedevents.SyncRoundsTagRequestV1,
+				leaderboardevents.LeaderboardTagUpdatedV2,
+				fmt.Sprintf("%s.%s", leaderboardevents.LeaderboardTagUpdatedV2, "test-guild"),
+				fmt.Sprintf("%s.%s", leaderboardevents.LeaderboardTagUpdatedV2, testClubUUID.String()),
+				leaderboardevents.LeaderboardTagUpdatedV2,
+				fmt.Sprintf("%s.%s", leaderboardevents.LeaderboardTagUpdatedV2, "test-guild"),
+				fmt.Sprintf("%s.%s", leaderboardevents.LeaderboardTagUpdatedV2, testClubUUID.String()),
+				fmt.Sprintf("%s.%s", leaderboardevents.LeaderboardUpdatedV2, "test-guild"),
+				fmt.Sprintf("%s.%s", leaderboardevents.LeaderboardUpdatedV2, testClubUUID.String()),
+			},
 		},
 	}
 
@@ -151,6 +178,9 @@ func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
 			fakeSvc := NewFakeService()
 			fakeSaga := NewFakeSagaCoordinator()
 			fakeUserService := NewFakeUserService()
+			fakeUserService.GetClubUUIDByDiscordGuildIDFunc = func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) {
+				return testClubUUID, nil
+			}
 			if tt.setupFake != nil {
 				tt.setupFake(fakeSvc, fakeSaga, fakeUserService)
 			}

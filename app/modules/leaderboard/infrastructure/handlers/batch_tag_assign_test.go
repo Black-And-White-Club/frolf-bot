@@ -23,6 +23,7 @@ import (
 func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 	testGuildID := sharedtypes.GuildID("test-guild-123")
 	testBatchID := uuid.New().String()
+	testClubUUID := uuid.MustParse("77cc76fe-8947-4c7e-bbb2-2cd33ad366c1")
 
 	tests := []struct {
 		name          string
@@ -40,9 +41,8 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 					}), nil
 				}
 			},
-			wantErr: false,
-			// mapSuccessResults likely produces 1 'batch_assigned' event + 1 'tag_updated' event per assignment
-			wantResultLen: 2,
+			wantErr:       false,
+			wantResultLen: 5,
 		},
 		{
 			name: "Service Infrastructure Error",
@@ -79,7 +79,7 @@ func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
 
 			h := &LeaderboardHandlers{
 				service:         fakeSvc,
-				userService:     NewFakeUserService(),
+				userService:     &FakeUserService{GetClubUUIDByDiscordGuildIDFunc: func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) { return testClubUUID, nil }},
 				sagaCoordinator: fakeSaga,
 				logger:          slog.New(slog.NewTextHandler(io.Discard, nil)),
 			}
@@ -114,6 +114,7 @@ func TestLeaderboardHandlers_HandleRoundBasedAssignment(t *testing.T) {
 	testGuildID := sharedtypes.GuildID("test-guild-123")
 	testRoundID := sharedtypes.RoundID(uuid.New())
 	testBatchID := uuid.New().String()
+	testClubUUID := uuid.MustParse("77cc76fe-8947-4c7e-bbb2-2cd33ad366c1")
 
 	tests := []struct {
 		name             string
@@ -154,19 +155,23 @@ func TestLeaderboardHandlers_HandleRoundBasedAssignment(t *testing.T) {
 			},
 			wantErr: false,
 			validate: func(t *testing.T, res []handlerwrapper.Result) {
-				// Expect 3 events: 2 from mapSuccessResults (batch assigned + sync request) + 1 PointsAwarded
-				assert.Len(t, res, 3)
+				assert.Len(t, res, 6)
 
 				// Find PointsAwarded event
 				var pointsEvent *sharedevents.PointsAwardedPayloadV1
+				tagUpdatedCount := 0
 				for _, r := range res {
 					if r.Topic == sharedevents.PointsAwardedV1 {
 						pointsEvent = r.Payload.(*sharedevents.PointsAwardedPayloadV1)
 						// Check metadata
 						assert.Equal(t, "msg-123", r.Metadata["discord_message_id"])
 					}
+					if r.Topic == leaderboardevents.LeaderboardTagUpdatedV2 {
+						tagUpdatedCount++
+					}
 				}
 				assert.NotNil(t, pointsEvent)
+				assert.Equal(t, 1, tagUpdatedCount)
 				assert.Equal(t, "msg-123", pointsEvent.EventMessageID)
 				assert.Equal(t, roundtypes.Title("Enriched Round"), pointsEvent.Title)
 				assert.Len(t, pointsEvent.Teams, 1)
@@ -302,7 +307,7 @@ func TestLeaderboardHandlers_HandleRoundBasedAssignment(t *testing.T) {
 
 			h := &LeaderboardHandlers{
 				service:         fakeSvc,
-				userService:     NewFakeUserService(),
+				userService:     &FakeUserService{GetClubUUIDByDiscordGuildIDFunc: func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) { return testClubUUID, nil }},
 				sagaCoordinator: fakeSaga,
 				roundLookup:     roundLookup, // True nil interface if not set
 				logger:          slog.New(slog.NewTextHandler(io.Discard, nil)),
@@ -331,6 +336,7 @@ func TestHandleRoundBasedAssignment_LegacyFallbackUsesZeroNotSequential(t *testi
 	}{
 		{name: "default"},
 	}
+	testClubUUID := uuid.MustParse("77cc76fe-8947-4c7e-bbb2-2cd33ad366c1")
 
 	for _, __codexTDCase := range __codexTDCases {
 		t.Run(__codexTDCase.name, func(t *testing.T) {
@@ -351,7 +357,7 @@ func TestHandleRoundBasedAssignment_LegacyFallbackUsesZeroNotSequential(t *testi
 
 			h := &LeaderboardHandlers{
 				service:     fakeSvc,
-				userService: NewFakeUserService(),
+				userService: &FakeUserService{GetClubUUIDByDiscordGuildIDFunc: func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) { return testClubUUID, nil }},
 				logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),
 			}
 
@@ -433,6 +439,7 @@ func TestMapSuccessResults_TagRemovalBehavior(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			h := &LeaderboardHandlers{}
 			res := h.mapSuccessResults(
+				context.Background(),
 				testGuildID,
 				"",
 				testBatchID,
@@ -441,7 +448,11 @@ func TestMapSuccessResults_TagRemovalBehavior(t *testing.T) {
 				"",
 			)
 
-			assert.Len(t, res, 2)
+			wantLen := 2
+			for range tt.requests {
+				wantLen += 2
+			}
+			assert.Len(t, res, wantLen)
 
 			batchPayload, ok := res[0].Payload.(*leaderboardevents.LeaderboardBatchTagAssignedPayloadV1)
 			assert.True(t, ok, "first result should be LeaderboardBatchTagAssignedPayloadV1")
@@ -456,6 +467,25 @@ func TestMapSuccessResults_TagRemovalBehavior(t *testing.T) {
 			assert.True(t, ok, "second result should be SyncRoundsTagRequestPayloadV1")
 			assert.Equal(t, sharedevents.SyncRoundsTagRequestV1, res[1].Topic)
 			assert.Equal(t, tt.wantChangedTags, syncPayload.ChangedTags)
+
+			for i, req := range tt.requests {
+				baseIdx := 2 + (i * 2)
+				tagUpdatedPayload, ok := res[baseIdx].Payload.(*leaderboardevents.LeaderboardTagUpdatedPayloadV1)
+				assert.True(t, ok, "tag update result should use LeaderboardTagUpdatedPayloadV1")
+				assert.Equal(t, leaderboardevents.LeaderboardTagUpdatedV2, res[baseIdx].Topic)
+				assert.Equal(t, req.UserID, tagUpdatedPayload.UserID)
+
+				if req.TagNumber > 0 {
+					assert.NotNil(t, tagUpdatedPayload.NewTag)
+					assert.Equal(t, req.TagNumber, *tagUpdatedPayload.NewTag)
+					assert.Equal(t, "swap", tagUpdatedPayload.Reason)
+				} else {
+					assert.Nil(t, tagUpdatedPayload.NewTag)
+					assert.Equal(t, "revoke", tagUpdatedPayload.Reason)
+				}
+
+				assert.Equal(t, fmt.Sprintf("%s.%s", leaderboardevents.LeaderboardTagUpdatedV2, testGuildID), res[baseIdx+1].Topic)
+			}
 		})
 	}
 }

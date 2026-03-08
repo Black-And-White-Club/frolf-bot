@@ -91,5 +91,5 @@ func (h *LeaderboardHandlers) HandleTagSwapRequested(
 		{UserID: payload.RequestorID, TagNumber: targetTag},
 	}
 
-	return h.mapSuccessResults(payload.GuildID, payload.RequestorID, "manual-swap", requests, "tag_swap", replyTo), nil
+	return h.mapSuccessResults(ctx, payload.GuildID, payload.RequestorID, "manual-swap", requests, sharedtypes.ServiceUpdateSourceTagSwap, replyTo), nil
 }
