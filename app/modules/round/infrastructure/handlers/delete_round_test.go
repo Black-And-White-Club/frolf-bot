@@ -225,7 +225,7 @@ func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 			ctx:             context.Background(),
 			wantErr:         false,
 			wantResultLen:   3, // Original + Guild Scoped + Club Scoped
-			wantResultTopic: roundevents.RoundDeletedV1,
+			wantResultTopic: roundevents.RoundDeletedV2,
 		},
 		{
 			name: "Successfully delete round with discord message ID in metadata",
@@ -241,7 +241,7 @@ func TestRoundHandlers_HandleRoundDeleteAuthorized(t *testing.T) {
 			ctx:             context.WithValue(context.Background(), "discord_message_id", "msg-123"),
 			wantErr:         false,
 			wantResultLen:   3, // Original + Guild Scoped + Club Scoped
-			wantResultTopic: roundevents.RoundDeletedV1,
+			wantResultTopic: roundevents.RoundDeletedV2,
 			checkMetadata:   true,
 			expectedMetadata: map[string]string{
 				"discord_message_id": "msg-123",

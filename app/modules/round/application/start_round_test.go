@@ -35,6 +35,7 @@ func TestRoundService_StartRound(t *testing.T) {
 		setup         func(*FakeRepo)
 		req           *roundtypes.StartRoundRequest
 		expectedState roundtypes.RoundState
+		expectNoOp    bool
 		expectError   bool
 		expectFailure bool
 	}{
@@ -70,7 +71,7 @@ func TestRoundService_StartRound(t *testing.T) {
 			expectError:   false,
 		},
 		{
-			name: "failure - missing event message id",
+			name: "successful start without event message id (pwa-only)",
 			setup: func(r *FakeRepo) {
 				r.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, id sharedtypes.RoundID) (*roundtypes.Round, error) {
 					return &roundtypes.Round{
@@ -78,6 +79,61 @@ func TestRoundService_StartRound(t *testing.T) {
 						GuildID:        testGuildID,
 						State:          roundtypes.RoundStateUpcoming,
 						EventMessageID: "", // Missing
+						Title:          testRoundTitle,
+						Location:       testLocation,
+						StartTime:      &testStartTime,
+					}, nil
+				}
+				r.UpdateRoundStateFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, id sharedtypes.RoundID, state roundtypes.RoundState) error {
+					if state != roundtypes.RoundStateInProgress {
+						return errors.New("wrong state")
+					}
+					return nil
+				}
+			},
+			req: &roundtypes.StartRoundRequest{
+				GuildID: testGuildID,
+				RoundID: testRoundID,
+			},
+			expectedState: roundtypes.RoundStateInProgress,
+			expectError:   false,
+		},
+		{
+			name: "already started returns no-op success",
+			setup: func(r *FakeRepo) {
+				r.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, id sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{
+						ID:             testRoundID,
+						GuildID:        testGuildID,
+						State:          roundtypes.RoundStateInProgress,
+						EventMessageID: testEventMsgID,
+						Title:          testRoundTitle,
+						Location:       testLocation,
+						StartTime:      &testStartTime,
+					}, nil
+				}
+				r.UpdateRoundStateFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, id sharedtypes.RoundID, state roundtypes.RoundState) error {
+					t.Fatal("UpdateRoundState should not be called for an already started round")
+					return nil
+				}
+			},
+			req: &roundtypes.StartRoundRequest{
+				GuildID: testGuildID,
+				RoundID: testRoundID,
+			},
+			expectedState: roundtypes.RoundStateInProgress,
+			expectNoOp:    true,
+			expectError:   false,
+		},
+		{
+			name: "failure - finalized round cannot be started",
+			setup: func(r *FakeRepo) {
+				r.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, id sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{
+						ID:             testRoundID,
+						GuildID:        testGuildID,
+						State:          roundtypes.RoundStateFinalized,
+						EventMessageID: testEventMsgID,
 					}, nil
 				}
 			},
@@ -154,6 +210,9 @@ func TestRoundService_StartRound(t *testing.T) {
 					if round.State != tt.expectedState {
 						t.Errorf("StartRound() expected state %v, got %v", tt.expectedState, round.State)
 					}
+				}
+				if result.AlreadyStarted != tt.expectNoOp {
+					t.Errorf("StartRound() AlreadyStarted = %v, want %v", result.AlreadyStarted, tt.expectNoOp)
 				}
 			}
 		})

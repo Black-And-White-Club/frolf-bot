@@ -1,27 +1,22 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strings"
 
+	"github.com/Black-And-White-Club/frolf-bot/app/shared/migrationrunner"
 	"github.com/Black-And-White-Club/frolf-bot/config"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/pgdialect"
 	"github.com/uptrace/bun/driver/pgdriver"
 	"github.com/uptrace/bun/migrate"
 	"github.com/urfave/cli/v2"
-
-	// Import for migrator creation
-	clubmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/club/infrastructure/repositories/migrations"
-	guildmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories/migrations"
-	leaderboardmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories/migrations"
-	roundmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/migrations"
-	scoremigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories/migrations"
-	usermigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories/migrations"
 )
 
 func main() {
@@ -40,15 +35,7 @@ func main() {
 	db := bun.NewDB(pgdb, pgdialect.New())
 	defer db.Close()
 
-	// Create migrators
-	migrators := map[string]*migrate.Migrator{
-		"user":        migrate.NewMigrator(db, usermigrations.Migrations, migrate.WithTableName("bun_migrations_user")),
-		"leaderboard": migrate.NewMigrator(db, leaderboardmigrations.Migrations, migrate.WithTableName("bun_migrations_leaderboard")),
-		"score":       migrate.NewMigrator(db, scoremigrations.Migrations, migrate.WithTableName("bun_migrations_score")),
-		"round":       migrate.NewMigrator(db, roundmigrations.Migrations, migrate.WithTableName("bun_migrations_round")),
-		"guild":       migrate.NewMigrator(db, guildmigrations.Migrations, migrate.WithTableName("bun_migrations_guild")),
-		"club":        migrate.NewMigrator(db, clubmigrations.Migrations, migrate.WithTableName("bun_migrations_club")),
-	}
+	migrators := migrationrunner.BuildBunMigrators(db)
 
 	cliApp := &cli.App{
 		Name: "bun",
@@ -71,30 +58,22 @@ func newMultiModuleDBCommand(migrators map[string]*migrate.Migrator) *cli.Comman
 				Name:  "init",
 				Usage: "create migration tables",
 				Action: func(c *cli.Context) error {
-					for moduleName, migrator := range migrators {
-						fmt.Printf("Initializing migrations for module: %s\n", moduleName)
-						if err := migrator.Init(c.Context); err != nil {
-							fmt.Printf("Error initializing migrations for module %s: %v\n", moduleName, err)
-							return err
-						}
-					}
-					return nil
+					return initModules(c.Context, os.Stdout, migrationrunner.AsModuleMigrators(migrators))
 				},
 			},
 			{
 				Name:  "migrate",
 				Usage: "migrate database",
 				Action: func(c *cli.Context) error {
-					for moduleName, migrator := range migrators {
-						fmt.Printf("Running migrations for module: %s\n", moduleName)
-						group, err := migrator.Migrate(c.Context)
-						if err != nil {
-							return err
-						}
-						if group.IsZero() {
-							fmt.Printf("No new migrations to run for module: %s\n", moduleName)
+					results, err := migrationrunner.MigrateModules(c.Context, migrationrunner.AsModuleMigrators(migrators))
+					if err != nil {
+						return err
+					}
+					for _, result := range results {
+						if result.Group == nil || result.Group.IsZero() {
+							fmt.Printf("No new migrations to run for module: %s\n", result.Module)
 						} else {
-							fmt.Printf("Migrated module: %s to %s\n", moduleName, group)
+							fmt.Printf("Migrated module: %s to %s\n", result.Module, result.Group)
 						}
 					}
 					return nil
@@ -104,16 +83,15 @@ func newMultiModuleDBCommand(migrators map[string]*migrate.Migrator) *cli.Comman
 				Name:  "rollback",
 				Usage: "rollback the last migration group",
 				Action: func(c *cli.Context) error {
-					for moduleName, migrator := range migrators {
-						fmt.Printf("Rolling back migrations for module: %s\n", moduleName)
-						group, err := migrator.Rollback(c.Context)
-						if err != nil {
-							return err
-						}
-						if group.IsZero() {
-							fmt.Printf("No groups to roll back for module: %s\n", moduleName)
+					results, err := migrationrunner.RollbackModules(c.Context, migrationrunner.AsModuleMigrators(migrators))
+					if err != nil {
+						return err
+					}
+					for _, result := range results {
+						if result.Group == nil || result.Group.IsZero() {
+							fmt.Printf("No groups to roll back for module: %s\n", result.Module)
 						} else {
-							fmt.Printf("Rolled back module: %s to %s\n", moduleName, group)
+							fmt.Printf("Rolled back module: %s to %s\n", result.Module, result.Group)
 						}
 					}
 					return nil
@@ -165,7 +143,12 @@ func newMultiModuleDBCommand(migrators map[string]*migrate.Migrator) *cli.Comman
 				Name:  "status",
 				Usage: "print migrations status",
 				Action: func(c *cli.Context) error {
-					for moduleName, migrator := range migrators {
+					moduleNames, err := orderedModuleNames(migrators, false)
+					if err != nil {
+						return err
+					}
+					for _, moduleName := range moduleNames {
+						migrator := migrators[moduleName]
 						ms, err := migrator.MigrationsWithStatus(c.Context)
 						if err != nil {
 							return err
@@ -180,4 +163,26 @@ func newMultiModuleDBCommand(migrators map[string]*migrate.Migrator) *cli.Comman
 			},
 		},
 	}
+}
+
+func orderedModuleNames(migrators map[string]*migrate.Migrator, reverse bool) ([]string, error) {
+	return migrationrunner.OrderedModuleNames(migrators, reverse)
+}
+
+func initModules(ctx context.Context, out io.Writer, migrators map[string]migrationrunner.ModuleMigrator) error {
+	moduleNames, err := migrationrunner.OrderedModuleNames(migrators, false)
+	if err != nil {
+		return err
+	}
+
+	for _, moduleName := range moduleNames {
+		if _, err := fmt.Fprintf(out, "Initializing migrations for module: %s\n", moduleName); err != nil {
+			return err
+		}
+		if err := migrators[moduleName].Init(ctx); err != nil {
+			return fmt.Errorf("init %s migrations: %w", moduleName, err)
+		}
+	}
+
+	return nil
 }

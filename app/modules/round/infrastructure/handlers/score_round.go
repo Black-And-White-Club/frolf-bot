@@ -100,12 +100,12 @@ func (h *RoundHandlers) HandleScoreUpdateValidated(
 			}
 		},
 	),
-		roundevents.RoundParticipantScoreUpdatedV1,
+		roundevents.RoundParticipantScoreUpdatedV2,
 		roundevents.RoundScoreUpdateErrorV1,
 	)
 
 	// Add both legacy GuildID and internal ClubUUID scoped versions for PWA/NATS transition
-	results = h.addParallelIdentityResults(ctx, results, roundevents.RoundParticipantScoreUpdatedV1, payload.GuildID)
+	results = h.addParallelIdentityResults(ctx, results, roundevents.RoundParticipantScoreUpdatedV2, payload.GuildID)
 
 	return results, nil
 }

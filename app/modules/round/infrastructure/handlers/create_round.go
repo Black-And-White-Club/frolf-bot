@@ -3,6 +3,7 @@ package roundhandlers
 import (
 	"context"
 	"errors"
+	"strings"
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
@@ -69,6 +70,7 @@ func (h *RoundHandlers) HandleCreateRoundRequest(
 				DiscordChannelID: res.ChannelID,
 				DiscordGuildID:   string(payload.GuildID),
 				Config:           sharedevents.NewGuildConfigFragment(res.GuildConfig),
+				RequestSource:    payload.RequestSource,
 			}
 		},
 		func(err error) any {
@@ -174,12 +176,78 @@ func (h *RoundHandlers) HandleRoundEntityCreated(
 	)
 
 	handlerResults := mapOperationResult(mappedResult,
-		roundevents.RoundCreatedV1,
+		roundevents.RoundCreatedV2,
 		roundevents.RoundCreationFailedV1,
 	)
 
 	// Add both legacy GuildID and internal ClubUUID scoped versions for PWA/NATS transition
-	handlerResults = h.addParallelIdentityResults(ctx, handlerResults, roundevents.RoundCreatedV1, payload.GuildID)
+	handlerResults = h.addParallelIdentityResults(ctx, handlerResults, roundevents.RoundCreatedV2, payload.GuildID)
+
+	// PWA-originated creation does not emit a later RoundEventMessageIDUpdate.
+	// Trigger scheduling directly so queue-based start works without depending on
+	// Discord channel/message metadata.
+	if usesDirectRoundScheduling(payload.RequestSource) && mappedResult.Success != nil {
+		if createdPayload, ok := (*mappedResult.Success).(*roundevents.RoundCreatedPayloadV1); ok {
+			scheduleTitle := createdPayload.Title
+			if scheduleTitle == "" {
+				scheduleTitle = payload.Round.Title
+			}
+
+			scheduleDescription := createdPayload.Description
+			if scheduleDescription == "" {
+				scheduleDescription = payload.Round.Description
+			}
+
+			scheduleLocation := createdPayload.Location
+			if scheduleLocation == "" {
+				scheduleLocation = payload.Round.Location
+			}
+
+			scheduleStartTime := createdPayload.StartTime
+			if scheduleStartTime == nil {
+				scheduleStartTime = payload.Round.StartTime
+			}
+			if scheduleStartTime == nil {
+				return nil, errors.New("round start time missing from created payload")
+			}
+
+			scheduleUserID := createdPayload.UserID
+			if scheduleUserID == "" {
+				scheduleUserID = payload.Round.CreatedBy
+			}
+
+			scheduleConfig := createdPayload.Config
+			if scheduleConfig == nil {
+				scheduleConfig = payload.Config
+			}
+
+			nativeEventPlanned := false
+			scheduleResult, scheduleErr := h.service.ScheduleRoundEvents(ctx, &roundtypes.ScheduleRoundEventsRequest{
+				GuildID:            createdPayload.GuildID,
+				RoundID:            createdPayload.RoundID,
+				Title:              scheduleTitle.String(),
+				Description:        scheduleDescription.String(),
+				Location:           scheduleLocation.String(),
+				StartTime:          *scheduleStartTime,
+				UserID:             scheduleUserID,
+				EventMessageID:     payload.Round.EventMessageID,
+				ChannelID:          createdPayload.ChannelID,
+				Config:             guildConfigFromFragment(scheduleConfig),
+				NativeEventPlanned: &nativeEventPlanned,
+			})
+			if scheduleErr != nil {
+				return nil, scheduleErr
+			}
+			if scheduleResult.Failure != nil && h.logger != nil {
+				h.logger.WarnContext(ctx, "direct round scheduling failed in service",
+					attr.ExtractCorrelationID(ctx),
+					attr.String("guild_id", string(createdPayload.GuildID)),
+					attr.RoundID("round_id", createdPayload.RoundID),
+					attr.Any("failure", *scheduleResult.Failure),
+				)
+			}
+		}
+	}
 
 	if h.logger != nil {
 		if mappedResult.Failure != nil {
@@ -253,7 +321,8 @@ func (h *RoundHandlers) HandleRoundEventMessageIDUpdate(
 			StartTime:   updatedRound.StartTime,
 			UserID:      updatedRound.CreatedBy,
 		},
-		EventMessageID: discordMessageID,
+		EventMessageID:     discordMessageID,
+		NativeEventPlanned: payload.NativeEventPlanned,
 	}
 
 	if h.logger != nil {
@@ -276,4 +345,12 @@ func (h *RoundHandlers) HandleRoundEventMessageIDUpdate(
 			},
 		},
 	}, nil
+}
+
+func usesDirectRoundScheduling(requestSource *string) bool {
+	if requestSource == nil {
+		return false
+	}
+
+	return strings.EqualFold(strings.TrimSpace(*requestSource), requestSourcePWA)
 }

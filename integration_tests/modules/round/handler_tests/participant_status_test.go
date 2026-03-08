@@ -68,7 +68,7 @@ func TestHandleParticipantJoinRequest(t *testing.T) {
 				}
 				msg := message.NewMessage(uuid.New().String(), payloadBytes)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundParticipantJoinRequestedV1, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundParticipantJoinRequestedV2, msg); err != nil {
 					t.Fatalf("Publish failed: %v", err)
 				}
 				return msg
@@ -131,7 +131,7 @@ func validateJoinRequestMessages(t *testing.T, deps HandlerTestDeps, receivedMsg
 	}
 
 	if expectRemoval {
-		msgs := receivedMsgs[roundevents.RoundParticipantRemovalRequestedV1]
+		msgs := receivedMsgs[roundevents.RoundParticipantRemovalRequestedV2]
 		found := false
 		for _, msg := range msgs {
 			var payload roundevents.ParticipantRemovalRequestPayloadV1

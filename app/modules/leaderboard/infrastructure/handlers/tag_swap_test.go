@@ -12,12 +12,14 @@ import (
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
+	"github.com/google/uuid"
 )
 
 func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 	testRequestorID := sharedtypes.DiscordID("2468")
 	testTargetID := sharedtypes.DiscordID("13579")
 	testGuildID := sharedtypes.GuildID("9999")
+	testClubUUID := uuid.MustParse("77cc76fe-8947-4c7e-bbb2-2cd33ad366c1")
 
 	testPayload := &leaderboardevents.TagSwapRequestedPayloadV1{
 		GuildID:     testGuildID,
@@ -50,8 +52,8 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 				}
 			},
 			wantErr:       false,
-			wantResultLen: 2, // mapSuccessResults likely produces batch_assigned + tag_updated + guild_scoped
-			wantTopic:     leaderboardevents.LeaderboardBatchTagAssignedV1,
+			wantResultLen: 8,
+			wantTopic:     leaderboardevents.LeaderboardBatchTagAssignedV2,
 		},
 		{
 			name: "Tag Swap Needed - Triggers Saga",
@@ -70,7 +72,7 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 			},
 			wantErr:       false,
 			wantResultLen: 1,
-			wantTopic:     leaderboardevents.TagSwapProcessedV1,
+			wantTopic:     leaderboardevents.TagSwapProcessedV2,
 		},
 		{
 			name: "Target User Has No Tag",
@@ -108,7 +110,7 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 
 			h := &LeaderboardHandlers{
 				service:         fakeSvc,
-				userService:     NewFakeUserService(),
+				userService:     &FakeUserService{GetClubUUIDByDiscordGuildIDFunc: func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) { return testClubUUID, nil }},
 				sagaCoordinator: fakeSaga,
 				logger:          slog.New(slog.NewTextHandler(io.Discard, nil)),
 			}
@@ -128,7 +130,7 @@ func TestLeaderboardHandlers_HandleTagSwapRequested(t *testing.T) {
 			}
 
 			// Specific verification for the Saga flow
-			if tt.wantTopic == leaderboardevents.TagSwapProcessedV1 {
+			if tt.wantTopic == leaderboardevents.TagSwapProcessedV2 {
 				if len(fakeSaga.CapturedIntents) == 0 {
 					t.Error("Expected saga coordinator to capture intent, but it was empty")
 				}

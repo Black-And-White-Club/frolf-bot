@@ -93,7 +93,7 @@ func TestLeaderboardHandlers_HandleManualPointAdjustment(t *testing.T) {
 					return results.SuccessResult[bool, error](true), nil
 				}
 			},
-			wantTopic: leaderboardevents.LeaderboardManualPointAdjustmentSuccessV1,
+			wantTopic: leaderboardevents.LeaderboardManualPointAdjustmentSuccessV2,
 		},
 		{
 			name: "service error",
@@ -105,7 +105,7 @@ func TestLeaderboardHandlers_HandleManualPointAdjustment(t *testing.T) {
 					return results.OperationResult[bool, error]{}, errors.New("db error")
 				}
 			},
-			wantTopic: leaderboardevents.LeaderboardManualPointAdjustmentFailedV1,
+			wantTopic: leaderboardevents.LeaderboardManualPointAdjustmentFailedV2,
 		},
 	}
 

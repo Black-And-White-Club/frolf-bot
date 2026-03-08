@@ -388,36 +388,46 @@ func TestService_LoginUser(t *testing.T) {
 }
 
 func TestService_LoginUser_DoesNotFallbackToRawToken(t *testing.T) {
-	ctx := context.Background()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	tracer := noop.NewTracerProvider().Tracer("test")
-	config := Config{}
-	jwtProvider := &FakeJWTProvider{}
-	repo := &userdb.FakeRepository{}
-
-	const oneTimeToken = "otp"
-	expectedHash := hashToken(oneTimeToken)
-	consumeCalls := 0
-
-	repo.ConsumeMagicLinkFn = func(ctx context.Context, db bun.IDB, tokenHash string, now time.Time) (*userdb.MagicLink, error) {
-		consumeCalls++
-		if tokenHash != expectedHash {
-			t.Fatalf("expected hashed token %q, got %q", expectedHash, tokenHash)
-		}
-		return nil, userdb.ErrNoRowsAffected
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
 	}
 
-	s := NewService(jwtProvider, &FakeUserJWTBuilder{}, repo, config, logger, tracer, nil, nil)
-	resp, err := s.LoginUser(ctx, oneTimeToken)
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			ctx := context.Background()
+			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+			tracer := noop.NewTracerProvider().Tracer("test")
+			config := Config{}
+			jwtProvider := &FakeJWTProvider{}
+			repo := &userdb.FakeRepository{}
 
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-	if resp != nil {
-		t.Fatalf("expected nil response, got %+v", resp)
-	}
-	if consumeCalls != 1 {
-		t.Fatalf("expected exactly one consume attempt, got %d", consumeCalls)
+			const oneTimeToken = "otp"
+			expectedHash := hashToken(oneTimeToken)
+			consumeCalls := 0
+
+			repo.ConsumeMagicLinkFn = func(ctx context.Context, db bun.IDB, tokenHash string, now time.Time) (*userdb.MagicLink, error) {
+				consumeCalls++
+				if tokenHash != expectedHash {
+					t.Fatalf("expected hashed token %q, got %q", expectedHash, tokenHash)
+				}
+				return nil, userdb.ErrNoRowsAffected
+			}
+
+			s := NewService(jwtProvider, &FakeUserJWTBuilder{}, repo, config, logger, tracer, nil, nil)
+			resp, err := s.LoginUser(ctx, oneTimeToken)
+
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if resp != nil {
+				t.Fatalf("expected nil response, got %+v", resp)
+			}
+			if consumeCalls != 1 {
+				t.Fatalf("expected exactly one consume attempt, got %d", consumeCalls)
+			}
+		})
 	}
 }
 
@@ -498,35 +508,45 @@ func TestService_GetTicket(t *testing.T) {
 }
 
 func TestService_GetTicket_RevokedTokenReplayRevokesAllUserTokens(t *testing.T) {
-	ctx := context.Background()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	tracer := noop.NewTracerProvider().Tracer("test")
-	userUUID := uuid.New()
-	revokeAllCalls := 0
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
+	}
 
-	repo := &userdb.FakeRepository{
-		GetRefreshTokenFn: func(ctx context.Context, db bun.IDB, hash string) (*userdb.RefreshToken, error) {
-			return &userdb.RefreshToken{UserUUID: userUUID, Revoked: true}, nil
-		},
-		RevokeAllUserTokensFn: func(ctx context.Context, db bun.IDB, gotUserUUID uuid.UUID) error {
-			revokeAllCalls++
-			if gotUserUUID != userUUID {
-				t.Fatalf("expected user UUID %s, got %s", userUUID, gotUserUUID)
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			ctx := context.Background()
+			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+			tracer := noop.NewTracerProvider().Tracer("test")
+			userUUID := uuid.New()
+			revokeAllCalls := 0
+
+			repo := &userdb.FakeRepository{
+				GetRefreshTokenFn: func(ctx context.Context, db bun.IDB, hash string) (*userdb.RefreshToken, error) {
+					return &userdb.RefreshToken{UserUUID: userUUID, Revoked: true}, nil
+				},
+				RevokeAllUserTokensFn: func(ctx context.Context, db bun.IDB, gotUserUUID uuid.UUID) error {
+					revokeAllCalls++
+					if gotUserUUID != userUUID {
+						t.Fatalf("expected user UUID %s, got %s", userUUID, gotUserUUID)
+					}
+					return nil
+				},
 			}
-			return nil
-		},
-	}
 
-	s := NewService(&FakeJWTProvider{}, &FakeUserJWTBuilder{}, repo, Config{}, logger, tracer, nil, nil)
-	resp, err := s.GetTicket(ctx, "revoked-rt", "")
-	if resp != nil {
-		t.Fatalf("expected nil response, got %+v", resp)
-	}
-	if !errors.Is(err, ErrRevokedSession) {
-		t.Fatalf("expected ErrRevokedSession, got %v", err)
-	}
-	if revokeAllCalls != 1 {
-		t.Fatalf("expected RevokeAllUserTokens to be called once, got %d", revokeAllCalls)
+			s := NewService(&FakeJWTProvider{}, &FakeUserJWTBuilder{}, repo, Config{}, logger, tracer, nil, nil)
+			resp, err := s.GetTicket(ctx, "revoked-rt", "")
+			if resp != nil {
+				t.Fatalf("expected nil response, got %+v", resp)
+			}
+			if !errors.Is(err, ErrRevokedSession) {
+				t.Fatalf("expected ErrRevokedSession, got %v", err)
+			}
+			if revokeAllCalls != 1 {
+				t.Fatalf("expected RevokeAllUserTokens to be called once, got %d", revokeAllCalls)
+			}
+		})
 	}
 }
 

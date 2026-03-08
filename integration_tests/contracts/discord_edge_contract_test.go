@@ -13,8 +13,9 @@ type eventContractCatalog struct {
 }
 
 type eventContract struct {
-	Subject  string        `json:"subject"`
-	Producer contractActor `json:"producer"`
+	Subject   string          `json:"subject"`
+	Producer  contractActor   `json:"producer"`
+	Producers []contractActor `json:"producers"`
 }
 
 type contractActor struct {
@@ -23,39 +24,69 @@ type contractActor struct {
 }
 
 func TestDiscordEdgeContractsIncludeCoreSubjects(t *testing.T) {
-	catalog := loadContractCatalog(t)
-	index := make(map[string]eventContract, len(catalog.Events))
-	for _, event := range catalog.Events {
-		index[event.Subject] = event
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
 	}
 
-	expected := map[string]string{
-		"discord.round.created.v1":           "discord",
-		"discord.round.started.v1":           "discord",
-		"round.created.v1":                   "frolf-bot-backend",
-		"round.started.v1":                   "frolf-bot-backend",
-		"round.participant.joined.v1":        "frolf-bot-backend",
-		"round.participant.score.updated.v1": "frolf-bot-backend",
-		"leaderboard.updated.v1":             "frolf-bot-backend",
-		"leaderboard.tag.updated.v1":         "frolf-bot-backend",
-		"leaderboard.tag.swap.processed.v1":  "frolf-bot-backend",
-		"leaderboard.tag.list.requested.v1":  "pwa",
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			catalog := loadContractCatalog(t)
+			index := make(map[string]eventContract, len(catalog.Events))
+			for _, event := range catalog.Events {
+				index[event.Subject] = event
+			}
+
+			expected := map[string]string{
+				"round.started.discord.v1":                "frolf-bot-backend",
+				"round.created.v2":                        "frolf-bot-backend",
+				"round.started.v2":                        "frolf-bot-backend",
+				"round.participant.joined.v2":             "frolf-bot-backend",
+				"round.participant.score.updated.v2":      "frolf-bot-backend",
+				"leaderboard.updated.v2":                  "frolf-bot-backend",
+				"leaderboard.tag.updated.v2":              "frolf-bot-backend",
+				"leaderboard.tag.swap.processed.v2":       "frolf-bot-backend",
+				"leaderboard.tag.list.requested.v1":       "pwa",
+				"round.creation.requested.v2":             "pwa",
+				"round.participant.join.requested.v2":     "pwa",
+				"round.score.update.requested.v2":         "pwa",
+				"round.update.requested.v2":               "pwa",
+				"round.delete.requested.v2":               "pwa",
+				"user.udisc.identity.update.requested.v1": "pwa",
+			}
+
+			for subject, producerService := range expected {
+				contract, ok := index[subject]
+				if !ok {
+					t.Fatalf("missing contract for subject %q", subject)
+				}
+				if !matchesProducerService(contract, producerService) {
+					t.Fatalf(
+						"subject %q producer mismatch: expected %q in producer/producers, got primary=%q alternates=%v",
+						subject,
+						producerService,
+						contract.Producer.Service,
+						contract.Producers,
+					)
+				}
+			}
+		})
+	}
+}
+
+func matchesProducerService(contract eventContract, service string) bool {
+	if contract.Producer.Service == service {
+		return true
 	}
 
-	for subject, producerService := range expected {
-		contract, ok := index[subject]
-		if !ok {
-			t.Fatalf("missing contract for subject %q", subject)
-		}
-		if contract.Producer.Service != producerService {
-			t.Fatalf(
-				"subject %q producer mismatch: expected %q got %q",
-				subject,
-				producerService,
-				contract.Producer.Service,
-			)
+	for _, producer := range contract.Producers {
+		if producer.Service == service {
+			return true
 		}
 	}
+
+	return false
 }
 
 func loadContractCatalog(t *testing.T) eventContractCatalog {
@@ -68,7 +99,7 @@ func loadContractCatalog(t *testing.T) eventContractCatalog {
 			t.Fatalf("failed to determine current file path")
 		}
 		contractPath = filepath.Clean(
-			filepath.Join(filepath.Dir(filename), "../../../frolf-bot-shared/artifacts/contracts/events.v1.json"),
+			filepath.Join(filepath.Dir(filename), "../../../frolf-bot-shared/artifacts/contracts/events.contracts.json"),
 		)
 	}
 

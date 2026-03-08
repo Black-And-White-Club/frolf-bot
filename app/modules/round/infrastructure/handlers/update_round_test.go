@@ -182,7 +182,7 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 			payload:         testPayloadNoReschedule,
 			wantErr:         false,
 			wantResultLen:   3, // Original + Guild Scoped + Club Scoped
-			wantResultTopic: roundevents.RoundUpdatedV1,
+			wantResultTopic: roundevents.RoundUpdatedV2,
 		},
 		{
 			name: "Successfully handle with rescheduling",
@@ -204,7 +204,7 @@ func TestRoundHandlers_HandleRoundUpdateValidated(t *testing.T) {
 			payload:         testPayloadWithReschedule,
 			wantErr:         false,
 			wantResultLen:   4, // Original + Guild Scoped + Club Scoped + Reschedule
-			wantResultTopic: roundevents.RoundUpdatedV1,
+			wantResultTopic: roundevents.RoundUpdatedV2,
 		},
 		{
 			name: "Service failure returns update error",

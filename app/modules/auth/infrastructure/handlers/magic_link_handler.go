@@ -120,7 +120,7 @@ func (h *AuthHandlers) HandleMagicLinkRequest(msg *nats.Msg) {
 	}
 
 	// Publish response event
-	outMsg, err := h.helper.CreateNewMessage(respPayload, authevents.MagicLinkGeneratedV1)
+	outMsg, err := h.helper.CreateNewMessage(respPayload, authevents.MagicLinkGeneratedV2)
 	if err != nil {
 		h.logger.ErrorContext(ctx, "Failed to create magic link response message", attr.Error(err))
 		return
@@ -128,7 +128,7 @@ func (h *AuthHandlers) HandleMagicLinkRequest(msg *nats.Msg) {
 
 	// Ensure Nats-Msg-Id is unique (Watermill helper does this, but good to be sure)
 	// Publish to the event bus
-	if err := h.eventBus.Publish(authevents.MagicLinkGeneratedV1, outMsg); err != nil {
+	if err := h.eventBus.Publish(authevents.MagicLinkGeneratedV2, outMsg); err != nil {
 		h.logger.ErrorContext(ctx, "Failed to publish magic link response", attr.Error(err))
 		return
 	}

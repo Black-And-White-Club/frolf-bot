@@ -59,6 +59,7 @@ func NewLeaderboardHandlers(
 
 // mapSuccessResults is a private helper to build consistent batch completion events.
 func (h *LeaderboardHandlers) mapSuccessResults(
+	ctx context.Context,
 	guildID sharedtypes.GuildID,
 	requestorID sharedtypes.DiscordID,
 	batchID string,
@@ -86,12 +87,12 @@ func (h *LeaderboardHandlers) mapSuccessResults(
 		changedTags[req.UserID] = req.TagNumber
 	}
 
-	topic := leaderboardevents.LeaderboardBatchTagAssignedV1
+	topic := leaderboardevents.LeaderboardBatchTagAssignedV2
 	if replyTo != "" {
 		topic = replyTo
 	}
 
-	return []handlerwrapper.Result{
+	results := []handlerwrapper.Result{
 		{
 			Topic: topic,
 			Payload: &leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
@@ -113,10 +114,66 @@ func (h *LeaderboardHandlers) mapSuccessResults(
 			},
 		},
 	}
+
+	// Publish per-user tag update events for PWA live updates.
+	for _, req := range requests {
+		results = append(results, h.buildTagUpdatedResults(ctx, guildID, req.UserID, req.TagNumber, source)...)
+	}
+
+	return results
+}
+
+func (h *LeaderboardHandlers) buildTagUpdatedResults(
+	ctx context.Context,
+	guildID sharedtypes.GuildID,
+	userID sharedtypes.DiscordID,
+	tagNumber sharedtypes.TagNumber,
+	source sharedtypes.ServiceUpdateSource,
+) []handlerwrapper.Result {
+	if userID == "" {
+		return nil
+	}
+
+	var newTag *sharedtypes.TagNumber
+	if tagNumber > 0 {
+		tag := tagNumber
+		newTag = &tag
+	}
+
+	results := []handlerwrapper.Result{{
+		Topic: leaderboardevents.LeaderboardTagUpdatedV2,
+		Payload: &leaderboardevents.LeaderboardTagUpdatedPayloadV1{
+			GuildID: guildID,
+			UserID:  userID,
+			NewTag:  newTag,
+			Reason:  tagUpdateReasonForSource(source, newTag),
+		},
+	}}
+
+	return h.addParallelIdentityResults(ctx, results, leaderboardevents.LeaderboardTagUpdatedV2, guildID)
+}
+
+func tagUpdateReasonForSource(source sharedtypes.ServiceUpdateSource, newTag *sharedtypes.TagNumber) string {
+	if newTag == nil {
+		return "revoke"
+	}
+
+	switch source {
+	case sharedtypes.ServiceUpdateSourceTagSwap:
+		return "swap"
+	case sharedtypes.ServiceUpdateSourceCreateUser:
+		return "assign"
+	case sharedtypes.ServiceUpdateSourceAdminBatch:
+		return "admin"
+	case sharedtypes.ServiceUpdateSourceProcessScores:
+		return "update"
+	default:
+		return "system"
+	}
 }
 
 // addGuildScopedResult appends a guild-scoped version of the event for PWA permission scoping.
-// This enables PWA consumers to subscribe with patterns like "leaderboard.updated.v1.{guild_id}".
+// This enables PWA consumers to subscribe with patterns like "leaderboard.updated.v2.{guild_id}".
 // Maintains backward compatibility by keeping the original non-scoped event.
 func addGuildScopedResult(results []handlerwrapper.Result, baseTopic string, guildID any) []handlerwrapper.Result {
 	// Convert guildID to string
@@ -156,7 +213,7 @@ func (h *LeaderboardHandlers) addParallelIdentityResults(ctx context.Context, re
 	results = addGuildScopedResult(results, baseTopic, guildID)
 
 	// 2. Add internal ClubUUID scoped result
-	if guildID != "" {
+	if h.userService != nil && guildID != "" {
 		clubUUID, err := h.userService.GetClubUUIDByDiscordGuildID(ctx, guildID)
 		if err == nil && clubUUID != uuid.Nil {
 			results = addGuildScopedResult(results, baseTopic, clubUUID)

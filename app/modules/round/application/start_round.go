@@ -18,6 +18,7 @@ func (s *RoundService) StartRound(
 ) (StartRoundResult, error) {
 	guildID := req.GuildID
 	roundID := req.RoundID
+	alreadyStarted := false
 
 	startOp := func(ctx context.Context, db bun.IDB) (results.OperationResult[*roundtypes.Round, error], error) {
 		s.logger.InfoContext(ctx, "Processing round start",
@@ -37,9 +38,19 @@ func (s *RoundService) StartRound(
 			return results.FailureResult[*roundtypes.Round, error](err), nil
 		}
 
-		// Ensure we have an event message id to update/notify Discord
-		if round.EventMessageID == "" {
-			return results.FailureResult[*roundtypes.Round, error](fmt.Errorf("round missing event_message_id")), nil
+		// Idempotency/guardrails around lifecycle transitions.
+		switch round.State {
+		case roundtypes.RoundStateInProgress:
+			alreadyStarted = true
+			s.logger.InfoContext(ctx, "Round already started; returning current state",
+				attr.RoundID("round_id", roundID),
+				attr.String("guild_id", string(guildID)),
+			)
+			return results.SuccessResult[*roundtypes.Round, error](round), nil
+		case roundtypes.RoundStateFinalized, roundtypes.RoundStateDeleted:
+			return results.FailureResult[*roundtypes.Round, error](
+				fmt.Errorf("round state %s cannot transition to in progress", round.State),
+			), nil
 		}
 
 		// Update the round state to "in progress"
@@ -60,7 +71,11 @@ func (s *RoundService) StartRound(
 		return results.SuccessResult[*roundtypes.Round, error](round), nil
 	}
 
-	return withTelemetry[*roundtypes.Round, error](s, ctx, "StartRound", roundID, func(ctx context.Context) (results.OperationResult[*roundtypes.Round, error], error) {
+	result, err := withTelemetry[*roundtypes.Round, error](s, ctx, "StartRound", roundID, func(ctx context.Context) (results.OperationResult[*roundtypes.Round, error], error) {
 		return runInTx[*roundtypes.Round, error](s, ctx, startOp)
 	})
+	return StartRoundResult{
+		OperationResult: result,
+		AlreadyStarted:  alreadyStarted,
+	}, err
 }

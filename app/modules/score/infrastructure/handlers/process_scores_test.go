@@ -56,8 +56,8 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 				if len(res) != 1 {
 					t.Fatalf("expected 1 result, got %d", len(res))
 				}
-				if res[0].Topic != sharedevents.LeaderboardBatchTagAssignmentRequestedV1 {
-					t.Errorf("expected topic %s, got %s", sharedevents.LeaderboardBatchTagAssignmentRequestedV1, res[0].Topic)
+				if res[0].Topic != sharedevents.LeaderboardBatchTagAssignmentRequestedV2 {
+					t.Errorf("expected topic %s, got %s", sharedevents.LeaderboardBatchTagAssignmentRequestedV2, res[0].Topic)
 				}
 			},
 		},

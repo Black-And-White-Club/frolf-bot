@@ -46,7 +46,7 @@ func TestHandleParticipantScoreUpdated(t *testing.T) {
 				}
 				msg := message.NewMessage(uuid.New().String(), b)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundParticipantScoreUpdatedV1, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundParticipantScoreUpdatedV2, msg); err != nil {
 					t.Fatalf("Publish failed: %v", err)
 				}
 				return msg
@@ -100,7 +100,7 @@ func TestHandleParticipantScoreUpdated(t *testing.T) {
 				}
 				msg := message.NewMessage(uuid.New().String(), b)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundParticipantScoreUpdatedV1, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundParticipantScoreUpdatedV2, msg); err != nil {
 					t.Fatalf("Publish failed: %v", err)
 				}
 				return msg
@@ -153,7 +153,7 @@ func TestHandleParticipantScoreUpdated(t *testing.T) {
 				}
 				msg := message.NewMessage(uuid.New().String(), b)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundParticipantScoreUpdatedV1, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundParticipantScoreUpdatedV2, msg); err != nil {
 					t.Fatalf("Publish failed: %v", err)
 				}
 				return msg
@@ -204,7 +204,7 @@ func TestHandleParticipantScoreUpdated(t *testing.T) {
 				}
 				msg := message.NewMessage(uuid.New().String(), b)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundParticipantScoreUpdatedV1, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundParticipantScoreUpdatedV2, msg); err != nil {
 					t.Fatalf("Publish failed: %v", err)
 				}
 				return msg
@@ -254,7 +254,7 @@ func TestHandleParticipantScoreUpdated(t *testing.T) {
 				}
 				msg := message.NewMessage(uuid.New().String(), b)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundParticipantScoreUpdatedV1, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundParticipantScoreUpdatedV2, msg); err != nil {
 					t.Fatalf("Publish failed: %v", err)
 				}
 				return msg
@@ -292,7 +292,7 @@ func TestHandleParticipantScoreUpdated(t *testing.T) {
 				}
 				msg := message.NewMessage(uuid.New().String(), b)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundParticipantScoreUpdatedV1, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundParticipantScoreUpdatedV2, msg); err != nil {
 					t.Fatalf("Publish failed: %v", err)
 				}
 				return msg
@@ -319,7 +319,7 @@ func TestHandleParticipantScoreUpdated(t *testing.T) {
 			publishMsgFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment) *message.Message {
 				invalidMsg := message.NewMessage(uuid.New().String(), []byte("invalid json"))
 				invalidMsg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundParticipantScoreUpdatedV1, invalidMsg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundParticipantScoreUpdatedV2, invalidMsg); err != nil {
 					t.Fatalf("Publish failed: %v", err)
 				}
 				return invalidMsg

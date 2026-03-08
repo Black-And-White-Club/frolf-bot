@@ -47,9 +47,9 @@ func TestHandleParticipantDeclined(t *testing.T) {
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{roundevents.RoundParticipantJoinedV1},
+			expectedOutgoingTopics: []string{roundevents.RoundParticipantJoinedV2},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
-				msgs := receivedMsgs[roundevents.RoundParticipantJoinedV1]
+				msgs := receivedMsgs[roundevents.RoundParticipantJoinedV2]
 				if len(msgs) == 0 {
 					t.Fatalf("expected participant joined message, got none")
 				}

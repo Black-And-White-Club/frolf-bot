@@ -42,6 +42,7 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 		wantResultLen   int
 		wantResultTopic string
 		expectedErrMsg  string
+		assertPayload   func(t *testing.T, payload *roundevents.RoundEntityCreatedPayloadV1)
 	}{
 		{
 			name: "Successfully handle CreateRoundRequest",
@@ -64,6 +65,41 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 			wantErr:         false,
 			wantResultLen:   1,
 			wantResultTopic: roundevents.RoundEntityCreatedV1,
+		},
+		{
+			name: "Successfully handle CreateRoundRequest preserves request source",
+			fakeSetup: func(fake *FakeService) {
+				fake.ValidateRoundCreationWithClockFunc = func(ctx context.Context, req *roundtypes.CreateRoundInput, timeParser roundtime.TimeParserInterface, clock roundutil.Clock) (roundservice.CreateRoundResult, error) {
+					return results.SuccessResult[*roundtypes.CreateRoundResult, error](&roundtypes.CreateRoundResult{
+						Round: &roundtypes.Round{
+							ID:          testCreateRoundID,
+							Title:       testTitle,
+							Description: testDescription,
+							Location:    testLocation,
+							StartTime:   &testStartTime,
+							CreatedBy:   testUserID,
+						},
+						ChannelID: "test-channel-id",
+					}), nil
+				}
+			},
+			payload: &roundevents.CreateRoundRequestedPayloadV1{
+				Title:         testTitle,
+				Description:   &testDescription,
+				Location:      testLocation,
+				StartTime:     testStartTimeString,
+				UserID:        testUserID,
+				RequestSource: func() *string { v := "pwa"; return &v }(),
+			},
+			wantErr:         false,
+			wantResultLen:   1,
+			wantResultTopic: roundevents.RoundEntityCreatedV1,
+			assertPayload: func(t *testing.T, payload *roundevents.RoundEntityCreatedPayloadV1) {
+				t.Helper()
+				if payload.RequestSource == nil || *payload.RequestSource != "pwa" {
+					t.Fatalf("expected request source pwa, got %+v", payload.RequestSource)
+				}
+			},
 		},
 		{
 			name: "Service failure returns validation error",
@@ -127,6 +163,13 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 			}
 			if tt.wantResultLen > 0 && results[0].Topic != tt.wantResultTopic {
 				t.Errorf("HandleCreateRoundRequest() result topic = %v, want %v", results[0].Topic, tt.wantResultTopic)
+			}
+			if tt.assertPayload != nil && len(results) > 0 {
+				payload, ok := results[0].Payload.(*roundevents.RoundEntityCreatedPayloadV1)
+				if !ok {
+					t.Fatalf("expected *roundevents.RoundEntityCreatedPayloadV1, got %T", results[0].Payload)
+				}
+				tt.assertPayload(t, payload)
 			}
 		})
 	}
@@ -195,7 +238,7 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 			payload:         testPayload,
 			wantErr:         false,
 			wantResultLen:   3, // Original + Guild Scoped + Club Scoped
-			wantResultTopic: roundevents.RoundCreatedV1,
+			wantResultTopic: roundevents.RoundCreatedV2,
 			assertPayload: func(t *testing.T, resultPayload any) {
 				t.Helper()
 				createdPayload, ok := resultPayload.(*roundevents.RoundCreatedPayloadV1)
@@ -239,10 +282,11 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 				Round:            testRound,
 				DiscordChannelID: "",
 				DiscordGuildID:   "test-guild-id",
+				RequestSource:    func() *string { v := "discord"; return &v }(),
 			},
 			wantErr:         false,
 			wantResultLen:   3,
-			wantResultTopic: roundevents.RoundCreatedV1,
+			wantResultTopic: roundevents.RoundCreatedV2,
 			assertPayload: func(t *testing.T, resultPayload any) {
 				t.Helper()
 				createdPayload, ok := resultPayload.(*roundevents.RoundCreatedPayloadV1)
@@ -253,6 +297,63 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 					t.Fatalf(
 						"expected fallback channel_id %q, got %q",
 						"guild-fallback-channel-id",
+						createdPayload.ChannelID,
+					)
+				}
+			},
+		},
+		{
+			name: "PWA request source schedules directly even when discord channel id is already present",
+			fakeSetup: func(fake *FakeService, u *FakeUserService) {
+				fake.StoreRoundFunc = func(ctx context.Context, round *roundtypes.Round, guildID sharedtypes.GuildID) (roundservice.CreateRoundResult, error) {
+					return results.SuccessResult[*roundtypes.CreateRoundResult, error](&roundtypes.CreateRoundResult{
+						Round:     &roundtypes.Round{ID: testRoundID},
+						ChannelID: "service-channel-id-ignored",
+						GuildConfig: &guildtypes.GuildConfig{
+							GuildID:        guildID,
+							EventChannelID: "guild-fallback-channel-id",
+						},
+					}), nil
+				}
+				u.GetClubUUIDByDiscordGuildIDFunc = func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) {
+					return testClubUUID, nil
+				}
+				fake.ScheduleRoundEventsFunc = func(ctx context.Context, req *roundtypes.ScheduleRoundEventsRequest) (roundservice.ScheduleRoundEventsResult, error) {
+					if req.GuildID != guildID {
+						t.Fatalf("expected guild id %q, got %q", guildID, req.GuildID)
+					}
+					if req.RoundID != testRoundID {
+						t.Fatalf("expected round id %q, got %q", testRoundID, req.RoundID)
+					}
+					if req.ChannelID != "pwa-provided-channel-id" {
+						t.Fatalf("expected channel id %q, got %q", "pwa-provided-channel-id", req.ChannelID)
+					}
+					if req.NativeEventPlanned == nil || *req.NativeEventPlanned {
+						t.Fatalf("expected NativeEventPlanned=false, got %+v", req.NativeEventPlanned)
+					}
+					return results.SuccessResult[*roundtypes.ScheduleRoundEventsResult, error](&roundtypes.ScheduleRoundEventsResult{}), nil
+				}
+			},
+			payload: &roundevents.RoundEntityCreatedPayloadV1{
+				GuildID:          guildID,
+				Round:            testRound,
+				DiscordChannelID: "pwa-provided-channel-id",
+				DiscordGuildID:   "test-guild-id",
+				RequestSource:    func() *string { v := "pwa"; return &v }(),
+			},
+			wantErr:         false,
+			wantResultLen:   3,
+			wantResultTopic: roundevents.RoundCreatedV2,
+			assertPayload: func(t *testing.T, resultPayload any) {
+				t.Helper()
+				createdPayload, ok := resultPayload.(*roundevents.RoundCreatedPayloadV1)
+				if !ok {
+					t.Fatalf("expected *roundevents.RoundCreatedPayloadV1, got %T", resultPayload)
+				}
+				if createdPayload.ChannelID != "pwa-provided-channel-id" {
+					t.Fatalf(
+						"expected payload channel_id %q, got %q",
+						"pwa-provided-channel-id",
 						createdPayload.ChannelID,
 					)
 				}
@@ -361,6 +462,7 @@ func TestRoundHandlers_HandleRoundEventMessageIDUpdate(t *testing.T) {
 		wantResultLen   int
 		wantResultTopic string
 		expectedErrMsg  string
+		assertPayload   func(t *testing.T, payload roundevents.RoundScheduledPayloadV1)
 	}{
 		{
 			name: "Successfully update message ID",
@@ -374,6 +476,51 @@ func TestRoundHandlers_HandleRoundEventMessageIDUpdate(t *testing.T) {
 			wantErr:         false,
 			wantResultLen:   1,
 			wantResultTopic: roundevents.RoundEventMessageIDUpdatedV1,
+		},
+		{
+			name: "Includes the stored Discord message id in the scheduled payload",
+			fakeSetup: func(fake *FakeService) {
+				fake.UpdateRoundMessageIDFunc = func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, discordMessageID string) (*roundtypes.Round, error) {
+					return testRound, nil
+				}
+			},
+			payload: &roundevents.RoundMessageIDUpdatePayloadV1{
+				GuildID: guildID,
+				RoundID: testRoundID,
+			},
+			ctx:             context.WithValue(context.Background(), "discord_message_id", "msg-123"),
+			wantErr:         false,
+			wantResultLen:   1,
+			wantResultTopic: roundevents.RoundEventMessageIDUpdatedV1,
+			assertPayload: func(t *testing.T, payload roundevents.RoundScheduledPayloadV1) {
+				t.Helper()
+				if payload.EventMessageID != "msg-123" {
+					t.Fatalf("expected EventMessageID msg-123, got %s", payload.EventMessageID)
+				}
+			},
+		},
+		{
+			name: "Propagates native event ownership to the scheduled payload",
+			fakeSetup: func(fake *FakeService) {
+				fake.UpdateRoundMessageIDFunc = func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, discordMessageID string) (*roundtypes.Round, error) {
+					return testRound, nil
+				}
+			},
+			payload: &roundevents.RoundMessageIDUpdatePayloadV1{
+				GuildID:            guildID,
+				RoundID:            testRoundID,
+				NativeEventPlanned: func() *bool { v := true; return &v }(),
+			},
+			ctx:             context.WithValue(context.Background(), "discord_message_id", "msg-123"),
+			wantErr:         false,
+			wantResultLen:   1,
+			wantResultTopic: roundevents.RoundEventMessageIDUpdatedV1,
+			assertPayload: func(t *testing.T, payload roundevents.RoundScheduledPayloadV1) {
+				t.Helper()
+				if payload.NativeEventPlanned == nil || !*payload.NativeEventPlanned {
+					t.Fatalf("expected NativeEventPlanned=true, got %+v", payload.NativeEventPlanned)
+				}
+			},
 		},
 		{
 			name: "Missing discord_message_id in context",
@@ -436,6 +583,13 @@ func TestRoundHandlers_HandleRoundEventMessageIDUpdate(t *testing.T) {
 			}
 			if tt.wantResultLen > 0 && results[0].Topic != tt.wantResultTopic {
 				t.Errorf("HandleRoundEventMessageIDUpdate() result topic = %v, want %v", results[0].Topic, tt.wantResultTopic)
+			}
+			if tt.assertPayload != nil && len(results) > 0 {
+				payload, ok := results[0].Payload.(roundevents.RoundScheduledPayloadV1)
+				if !ok {
+					t.Fatalf("expected RoundScheduledPayloadV1, got %T", results[0].Payload)
+				}
+				tt.assertPayload(t, payload)
 			}
 		})
 	}

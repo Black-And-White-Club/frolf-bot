@@ -106,8 +106,17 @@ docker run -d \
 # Run all migrations (River + application)
 make migrate-all
 
-# Rollback migrations
+# Safe migration flow (backup first, then migrate)
+make migrate-safe
+
+# Rollback latest migration group per module
 make rollback-all
+
+# Create backup snapshot
+make db-backup
+
+# Restore snapshot (destructive)
+make db-restore RESTORE_FILE=backups/<file>.dump FORCE=1
 
 # Clean everything
 make clean-all

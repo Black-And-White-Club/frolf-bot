@@ -85,7 +85,7 @@ func (h *ScoreHandlers) HandleProcessRoundScoresRequest(
 
 		return []handlerwrapper.Result{
 			{
-				Topic:   sharedevents.LeaderboardBatchTagAssignmentRequestedV1,
+				Topic:   sharedevents.LeaderboardBatchTagAssignmentRequestedV2,
 				Payload: batchPayload,
 			},
 		}, nil

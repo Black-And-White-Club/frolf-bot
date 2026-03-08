@@ -31,7 +31,7 @@ func (h *RoundTestHelper) PublishParticipantJoinRequest(t *testing.T, ctx contex
 	msg := message.NewMessage(uuid.New().String(), payloadBytes)
 	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
-	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundParticipantJoinRequestedV1, msg); err != nil {
+	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundParticipantJoinRequestedV2, msg); err != nil {
 		t.Fatalf("Publish failed: %v", err)
 	}
 
@@ -40,7 +40,7 @@ func (h *RoundTestHelper) PublishParticipantJoinRequest(t *testing.T, ctx contex
 
 // GetParticipantRemovalRequestMessages returns captured participant removal request messages
 func (h *RoundTestHelper) GetParticipantRemovalRequestMessages() []*message.Message {
-	return h.capture.GetMessages(roundevents.RoundParticipantRemovalRequestedV1)
+	return h.capture.GetMessages(roundevents.RoundParticipantRemovalRequestedV2)
 }
 
 // GetParticipantJoinValidationRequestMessages returns captured participant join validation request messages
@@ -111,12 +111,12 @@ func (h *RoundTestHelper) ValidateParticipantStatusCheckError(t *testing.T, msg 
 
 // WaitForParticipantJoinRequest waits for participant join request messages
 func (h *RoundTestHelper) WaitForParticipantJoinRequest(expectedCount int, timeout time.Duration) bool {
-	return h.capture.WaitForMessages(roundevents.RoundParticipantJoinRequestedV1, expectedCount, timeout)
+	return h.capture.WaitForMessages(roundevents.RoundParticipantJoinRequestedV2, expectedCount, timeout)
 }
 
 // GetParticipantJoinRequestMessages returns captured participant join request messages
 func (h *RoundTestHelper) GetParticipantJoinRequestMessages() []*message.Message {
-	return h.capture.GetMessages(roundevents.RoundParticipantJoinRequestedV1)
+	return h.capture.GetMessages(roundevents.RoundParticipantJoinRequestedV2)
 }
 
 // ValidateParticipantJoinRequest parses and validates a participant join request message
@@ -141,7 +141,7 @@ func (h *RoundTestHelper) ValidateParticipantJoinRequest(t *testing.T, msg *mess
 
 // WaitForParticipantRemovalRequest waits for participant removal request messages
 func (h *RoundTestHelper) WaitForParticipantRemovalRequest(expectedCount int, timeout time.Duration) bool {
-	return h.capture.WaitForMessages(roundevents.RoundParticipantRemovalRequestedV1, expectedCount, timeout)
+	return h.capture.WaitForMessages(roundevents.RoundParticipantRemovalRequestedV2, expectedCount, timeout)
 }
 
 func (h *RoundTestHelper) WaitForParticipantStatusCheckError(expectedCount int, timeout time.Duration) bool {
@@ -326,7 +326,7 @@ func (h *RoundTestHelper) PublishParticipantRemovalRequest(t *testing.T, ctx con
 	msg := message.NewMessage(uuid.New().String(), payloadBytes)
 	msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
 
-	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundParticipantRemovalRequestedV1, msg); err != nil {
+	if err := PublishMessage(t, h.eventBus, ctx, roundevents.RoundParticipantRemovalRequestedV2, msg); err != nil {
 		t.Fatalf("Publish failed: %v", err)
 	}
 
@@ -414,12 +414,12 @@ func (h *RoundTestHelper) ValidateParticipantJoinValidationError(t *testing.T, m
 
 // WaitForParticipantJoined waits for participant joined messages
 func (h *RoundTestHelper) WaitForParticipantJoined(expectedCount int, timeout time.Duration) bool {
-	return h.capture.WaitForMessages(roundevents.RoundParticipantJoinedV1, expectedCount, timeout)
+	return h.capture.WaitForMessages(roundevents.RoundParticipantJoinedV2, expectedCount, timeout)
 }
 
 // GetParticipantJoinedMessages returns captured participant joined messages
 func (h *RoundTestHelper) GetParticipantJoinedMessages() []*message.Message {
-	return h.capture.GetMessages(roundevents.RoundParticipantJoinedV1)
+	return h.capture.GetMessages(roundevents.RoundParticipantJoinedV2)
 }
 
 // ValidateParticipantJoined parses and validates a participant joined message

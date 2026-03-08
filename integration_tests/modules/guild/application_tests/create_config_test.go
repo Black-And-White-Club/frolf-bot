@@ -226,51 +226,61 @@ func TestCreateGuildConfig(t *testing.T) {
 }
 
 func TestCreateGuildConfig_AlreadyExists(t *testing.T) {
-	deps := SetupTestGuildService(t)
-	defer deps.Cleanup()
-
-	// Create initial config
-	initialConfig := &guildtypes.GuildConfig{
-		GuildID:              "623456789012345678",
-		SignupChannelID:      "634567890123456789",
-		EventChannelID:       "645678901234567890",
-		LeaderboardChannelID: "656789012345678901",
-		UserRoleID:           "667890123456789012",
-		SignupEmoji:          "🔥",
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
 	}
 
-	_, err := deps.Service.CreateGuildConfig(deps.Ctx, initialConfig)
-	if err != nil {
-		t.Fatalf("Initial CreateGuildConfig failed: %v", err)
-	}
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			deps := SetupTestGuildService(t)
+			defer deps.Cleanup()
 
-	// Try to create with different settings
-	differentConfig := &guildtypes.GuildConfig{
-		GuildID:              "623456789012345678",
-		SignupChannelID:      "724567890123456789",
-		EventChannelID:       "735678901234567890",
-		LeaderboardChannelID: "746789012345678901",
-		UserRoleID:           "757890123456789012",
-		SignupEmoji:          "✨",
-	}
+			// Create initial config
+			initialConfig := &guildtypes.GuildConfig{
+				GuildID:              "623456789012345678",
+				SignupChannelID:      "634567890123456789",
+				EventChannelID:       "645678901234567890",
+				LeaderboardChannelID: "656789012345678901",
+				UserRoleID:           "667890123456789012",
+				SignupEmoji:          "🔥",
+			}
 
-	result, err := deps.Service.CreateGuildConfig(deps.Ctx, differentConfig)
-	if err != nil {
-		t.Fatalf("Expected business failure but got system error: %v", err)
-	}
+			_, err := deps.Service.CreateGuildConfig(deps.Ctx, initialConfig)
+			if err != nil {
+				t.Fatalf("Initial CreateGuildConfig failed: %v", err)
+			}
 
-	if result.Success != nil {
-		t.Fatalf("Expected failure when config already exists with different settings, but got success")
-	}
+			// Try to create with different settings
+			differentConfig := &guildtypes.GuildConfig{
+				GuildID:              "623456789012345678",
+				SignupChannelID:      "724567890123456789",
+				EventChannelID:       "735678901234567890",
+				LeaderboardChannelID: "746789012345678901",
+				UserRoleID:           "757890123456789012",
+				SignupEmoji:          "✨",
+			}
 
-	if result.Failure == nil {
-		t.Fatalf("Expected failure payload but got nil")
-	}
+			result, err := deps.Service.CreateGuildConfig(deps.Ctx, differentConfig)
+			if err != nil {
+				t.Fatalf("Expected business failure but got system error: %v", err)
+			}
 
-	domainErr := *result.Failure
-	if domainErr == nil {
-		t.Fatalf("Failure payload was nil error")
-	}
+			if result.Success != nil {
+				t.Fatalf("Expected failure when config already exists with different settings, but got success")
+			}
 
-	t.Logf("Got expected domain error for duplicate config: %v", domainErr)
+			if result.Failure == nil {
+				t.Fatalf("Expected failure payload but got nil")
+			}
+
+			domainErr := *result.Failure
+			if domainErr == nil {
+				t.Fatalf("Failure payload was nil error")
+			}
+
+			t.Logf("Got expected domain error for duplicate config: %v", domainErr)
+		})
+	}
 }

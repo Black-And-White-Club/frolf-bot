@@ -20,27 +20,37 @@ import (
 // -----------------------------------------------------------------------------
 
 func TestNewGuildService(t *testing.T) {
-	fakeRepo := NewFakeGuildRepository()
-	testHandler := loggerfrolfbot.NewTestHandler()
-	logger := slog.New(testHandler)
-	mockMetrics := &guildmetrics.NoOpMetrics{}
-	tracer := noop.NewTracerProvider().Tracer("test")
-	// For testing NewGuildService, bun.DB can be nil or a shell
-	var db *bun.DB
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
+	}
 
-	service := NewGuildService(fakeRepo, logger, mockMetrics, tracer, db)
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			fakeRepo := NewFakeGuildRepository()
+			testHandler := loggerfrolfbot.NewTestHandler()
+			logger := slog.New(testHandler)
+			mockMetrics := &guildmetrics.NoOpMetrics{}
+			tracer := noop.NewTracerProvider().Tracer("test")
+			// For testing NewGuildService, bun.DB can be nil or a shell
+			var db *bun.DB
 
-	if service == nil {
-		t.Fatal("NewGuildService returned nil")
-	}
-	if service.repo != fakeRepo {
-		t.Error("repo not set correctly")
-	}
-	if service.logger != logger {
-		t.Error("logger not set correctly")
-	}
-	if service.metrics != mockMetrics {
-		t.Error("metrics not set correctly")
+			service := NewGuildService(fakeRepo, logger, mockMetrics, tracer, db)
+
+			if service == nil {
+				t.Fatal("NewGuildService returned nil")
+			}
+			if service.repo != fakeRepo {
+				t.Error("repo not set correctly")
+			}
+			if service.logger != logger {
+				t.Error("logger not set correctly")
+			}
+			if service.metrics != mockMetrics {
+				t.Error("metrics not set correctly")
+			}
+		})
 	}
 }
 
@@ -129,21 +139,31 @@ func Test_withTelemetry(t *testing.T) {
 }
 
 func Test_runInTx(t *testing.T) {
-	t.Run("executes directly when db is nil", func(t *testing.T) {
-		s := &GuildService{db: nil}
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
+	}
 
-		res, err := runInTx(s, context.Background(), func(ctx context.Context, db bun.IDB) (results.OperationResult[string, string], error) {
-			if db != nil {
-				return results.OperationResult[string, string]{}, errors.New("expected nil db")
-			}
-			return results.SuccessResult[string, string]("no_tx"), nil
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			t.Run("executes directly when db is nil", func(t *testing.T) {
+				s := &GuildService{db: nil}
+
+				res, err := runInTx(s, context.Background(), func(ctx context.Context, db bun.IDB) (results.OperationResult[string, string], error) {
+					if db != nil {
+						return results.OperationResult[string, string]{}, errors.New("expected nil db")
+					}
+					return results.SuccessResult[string, string]("no_tx"), nil
+				})
+
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if !res.IsSuccess() || *res.Success != "no_tx" {
+					t.Errorf("expected success 'no_tx', got %v", res.Success)
+				}
+			})
 		})
-
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !res.IsSuccess() || *res.Success != "no_tx" {
-			t.Errorf("expected success 'no_tx', got %v", res.Success)
-		}
-	})
+	}
 }

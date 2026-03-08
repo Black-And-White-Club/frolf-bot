@@ -129,46 +129,56 @@ func TestDeleteGuildConfig(t *testing.T) {
 }
 
 func TestDeleteGuildConfig_VerifySoftDelete(t *testing.T) {
-	deps := SetupTestGuildService(t)
-	defer deps.Cleanup()
-
-	guildID := sharedtypes.GuildID("973456789012345678")
-	config := &guildtypes.GuildConfig{
-		GuildID:              guildID,
-		SignupChannelID:      "984567890123456789",
-		EventChannelID:       "995678901234567890",
-		LeaderboardChannelID: "996789012345678901",
-		UserRoleID:           "997890123456789012",
-		SignupEmoji:          "✅",
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
 	}
 
-	// Create the config
-	_, err := deps.Service.CreateGuildConfig(deps.Ctx, config)
-	if err != nil {
-		t.Fatalf("Failed to create guild config: %v", err)
-	}
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			deps := SetupTestGuildService(t)
+			defer deps.Cleanup()
 
-	// Delete the config
-	result, err := deps.Service.DeleteGuildConfig(deps.Ctx, guildID)
-	if err != nil {
-		t.Fatalf("DeleteGuildConfig returned unexpected error: %v", err)
-	}
+			guildID := sharedtypes.GuildID("973456789012345678")
+			config := &guildtypes.GuildConfig{
+				GuildID:              guildID,
+				SignupChannelID:      "984567890123456789",
+				EventChannelID:       "995678901234567890",
+				LeaderboardChannelID: "996789012345678901",
+				UserRoleID:           "997890123456789012",
+				SignupEmoji:          "✅",
+			}
 
-	if result.Success == nil {
-		t.Fatalf("Expected success but got failure: %+v", result.Failure)
-	}
+			// Create the config
+			_, err := deps.Service.CreateGuildConfig(deps.Ctx, config)
+			if err != nil {
+				t.Fatalf("Failed to create guild config: %v", err)
+			}
 
-	// Try to retrieve the deleted config - should return error/failure
-	getResult, err := deps.Service.GetGuildConfig(deps.Ctx, guildID)
-	if err != nil {
-		t.Fatalf("Expected business failure payload for deleted config retrieval but got system error: %v", err)
-	}
+			// Delete the config
+			result, err := deps.Service.DeleteGuildConfig(deps.Ctx, guildID)
+			if err != nil {
+				t.Fatalf("DeleteGuildConfig returned unexpected error: %v", err)
+			}
 
-	if getResult.Success != nil {
-		t.Fatalf("Expected not to retrieve deleted config, but got success: %+v", getResult.Success)
-	}
+			if result.Success == nil {
+				t.Fatalf("Expected success but got failure: %+v", result.Failure)
+			}
 
-	if getResult.Failure == nil {
-		t.Fatalf("Expected failure payload for deleted config but got nil (err: %v)", err)
+			// Try to retrieve the deleted config - should return error/failure
+			getResult, err := deps.Service.GetGuildConfig(deps.Ctx, guildID)
+			if err != nil {
+				t.Fatalf("Expected business failure payload for deleted config retrieval but got system error: %v", err)
+			}
+
+			if getResult.Success != nil {
+				t.Fatalf("Expected not to retrieve deleted config, but got success: %+v", getResult.Success)
+			}
+
+			if getResult.Failure == nil {
+				t.Fatalf("Expected failure payload for deleted config but got nil (err: %v)", err)
+			}
+		})
 	}
 }

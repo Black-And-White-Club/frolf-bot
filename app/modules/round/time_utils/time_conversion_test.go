@@ -1,7 +1,7 @@
 package roundtime
 
 import (
-	"reflect"
+	"maps"
 	"testing"
 	"time"
 
@@ -32,8 +32,9 @@ func TestNewTimeParser(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := NewTimeParser(); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("NewTimeParser() = %v, want %v", got, tt.want)
+			got := NewTimeParser()
+			if !maps.Equal(got.TimezoneMap, tt.want.TimezoneMap) {
+				t.Errorf("NewTimeParser().TimezoneMap = %v, want %v", got.TimezoneMap, tt.want.TimezoneMap)
 			}
 		})
 	}

@@ -19,22 +19,11 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	"github.com/Black-And-White-Club/frolf-bot/app"
+	"github.com/Black-And-White-Club/frolf-bot/app/shared/migrationrunner"
 	"github.com/Black-And-White-Club/frolf-bot/config"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/riverqueue/river/riverdriver/riverpgxv5"
-	"github.com/riverqueue/river/rivermigrate"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/pgdialect"
 	"github.com/uptrace/bun/driver/pgdriver"
-	"github.com/uptrace/bun/migrate"
-
-	// Import for migrator creation
-	clubmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/club/infrastructure/repositories/migrations"
-	guildmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories/migrations"
-	leaderboardmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories/migrations"
-	roundmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/migrations"
-	scoremigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories/migrations"
-	usermigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories/migrations"
 )
 
 // --- Optional pprof server for on-demand profiling ---
@@ -94,6 +83,22 @@ func isLoopbackAddr(addr string) bool {
 // followed by letters, digits, or underscores only.
 var validDBName = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
+// Version is set at build time via ldflags in CI.
+var Version = "dev"
+
+func runtimeServiceVersion(configured string) string {
+	if value := strings.TrimSpace(os.Getenv("SERVICE_VERSION")); value != "" {
+		return value
+	}
+	if value := strings.TrimSpace(configured); value != "" {
+		return value
+	}
+	if value := strings.TrimSpace(Version); value != "" {
+		return value
+	}
+	return "dev"
+}
+
 func main() {
 	// Optionally start pprof for profiling
 	startPprofIfEnabled()
@@ -122,7 +127,7 @@ func main() {
 
 	// --- Observability Initialization ---
 	obsConfig := config.ToObsConfig(cfg)
-	obsConfig.Version = "1.0.0"
+	obsConfig.Version = runtimeServiceVersion(obsConfig.Version)
 
 	obs, err := observability.Init(ctx, obsConfig)
 	if err != nil {
@@ -258,27 +263,9 @@ func runMigrations() {
 
 	// First, run River migrations
 	fmt.Println("Running River queue migrations...")
-	dbPool, err := pgxpool.New(context.Background(), cfg.Postgres.DSN)
-	if err != nil {
-		fmt.Printf("Failed to connect to database for River migrations: %v\n", err)
+	if err := migrationrunner.MigrateRiver(context.Background(), cfg.Postgres.DSN); err != nil {
+		fmt.Printf("Failed to run River migrations: %v\n", err)
 		os.Exit(1)
-	}
-	defer dbPool.Close()
-
-	migrator, err := rivermigrate.New(riverpgxv5.New(dbPool), nil)
-	if err != nil {
-		fmt.Printf("Failed to create River migrator: %v\n", err)
-		os.Exit(1)
-	}
-	_, err = migrator.Migrate(context.Background(), rivermigrate.DirectionUp, &rivermigrate.MigrateOpts{})
-	if err != nil {
-		// Check if this is just a "table already exists" error which is safe to ignore
-		if strings.Contains(err.Error(), "already exists") && strings.Contains(err.Error(), "river_migration") {
-			fmt.Println("River migration table already exists, skipping migration...")
-		} else {
-			fmt.Printf("Failed to run River migrations: %v\n", err)
-			os.Exit(1)
-		}
 	}
 	fmt.Println("River migrations completed successfully.")
 
@@ -288,56 +275,25 @@ func runMigrations() {
 	db := bun.NewDB(pgdb, pgdialect.New())
 	defer db.Close()
 
-	// Create migrators for all modules
-	migrators := map[string]*migrate.Migrator{
-		"guild":       migrate.NewMigrator(db, guildmigrations.Migrations),
-		"user":        migrate.NewMigrator(db, usermigrations.Migrations),
-		"leaderboard": migrate.NewMigrator(db, leaderboardmigrations.Migrations),
-		"score":       migrate.NewMigrator(db, scoremigrations.Migrations),
-		"round":       migrate.NewMigrator(db, roundmigrations.Migrations),
-		"club":        migrate.NewMigrator(db, clubmigrations.Migrations),
+	bunMigrators := migrationrunner.BuildSharedTableMigrators(db)
+	moduleMigrators := migrationrunner.AsModuleMigrators(bunMigrators)
+
+	if err := migrationrunner.InitModules(context.Background(), moduleMigrators); err != nil {
+		fmt.Printf("Failed to initialize application migrations: %v\n", err)
+		os.Exit(1)
 	}
 
-	// Define migration order to satisfy dependencies:
-	// 1. guild (adds UUIDs needed by user/club)
-	// 2. user (setup_club_memberships depends on guild_configs.uuid)
-	// 3. club (create_clubs_table depends on guild_configs.uuid)
-	// 4. others
-	migrationOrder := []string{"guild", "user", "club", "round", "score", "leaderboard"}
-
-	// Validate that all migrators are included in the order list
-	orderSet := make(map[string]struct{}, len(migrationOrder))
-	for _, name := range migrationOrder {
-		orderSet[name] = struct{}{}
+	results, err := migrationrunner.MigrateModules(context.Background(), moduleMigrators)
+	if err != nil {
+		fmt.Printf("Failed to run application migrations: %v\n", err)
+		os.Exit(1)
 	}
-	for name := range migrators {
-		if _, ok := orderSet[name]; !ok {
-			fmt.Printf("FATAL: migrator %q is not included in migrationOrder - add it to prevent silent skipping\n", name)
-			os.Exit(1)
+	for _, result := range results {
+		if result.Group == nil || result.Group.IsZero() {
+			fmt.Printf("No new migrations for %s module\n", result.Module)
+			continue
 		}
-	}
-
-	// Initialize and run migrations for each module
-	for _, moduleName := range migrationOrder {
-		migrator := migrators[moduleName]
-		fmt.Printf("Initializing migrations for %s module...\n", moduleName)
-		if err := migrator.Init(context.Background()); err != nil {
-			fmt.Printf("Failed to initialize %s migrations: %v\n", moduleName, err)
-			os.Exit(1)
-		}
-
-		fmt.Printf("Running migrations for %s module...\n", moduleName)
-		group, err := migrator.Migrate(context.Background())
-		if err != nil {
-			fmt.Printf("Failed to run %s migrations: %v\n", moduleName, err)
-			os.Exit(1)
-		}
-
-		if group.IsZero() {
-			fmt.Printf("No new migrations for %s module\n", moduleName)
-		} else {
-			fmt.Printf("Successfully migrated %s module to %s\n", moduleName, group)
-		}
+		fmt.Printf("Successfully migrated %s module to %s\n", result.Module, result.Group)
 	}
 
 	fmt.Println("All migrations completed successfully!")

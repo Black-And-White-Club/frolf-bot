@@ -345,6 +345,91 @@ func TestRoundService_UpdateScheduledRoundEvents(t *testing.T) {
 			want:    UpdateScheduledRoundEventsResult{},
 			wantErr: true,
 		},
+		{
+			name: "error scheduling round start",
+			payload: roundtypes.UpdateScheduledRoundEventsRequest{
+				GuildID:   testGuildID,
+				RoundID:   testRoundID,
+				StartTime: &testStartTime,
+			},
+			setup: func(r *FakeRepo, q *FakeQueueService) {
+				r.GetEventMessageIDFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, id sharedtypes.RoundID) (string, error) {
+					return "", nil
+				}
+				r.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, id sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{
+						ID:    id,
+						Title: roundtypes.Title("Old Title"),
+					}, nil
+				}
+				q.CancelRoundJobsFunc = func(ctx context.Context, rID sharedtypes.RoundID) error { return nil }
+				q.ScheduleRoundReminderFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, t time.Time, p roundevents.DiscordReminderPayloadV1) error {
+					return nil
+				}
+				q.ScheduleRoundStartFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, t time.Time, p roundevents.RoundStartedPayloadV1) error {
+					return errors.New("start schedule error")
+				}
+			},
+			want:    UpdateScheduledRoundEventsResult{},
+			wantErr: true,
+		},
+		{
+			name: "pwa-only reschedule skips reminder when no event message id",
+			payload: roundtypes.UpdateScheduledRoundEventsRequest{
+				GuildID:   testGuildID,
+				RoundID:   testRoundID,
+				StartTime: &testStartTime,
+			},
+			setup: func(r *FakeRepo, q *FakeQueueService) {
+				r.GetEventMessageIDFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, id sharedtypes.RoundID) (string, error) {
+					return "", nil
+				}
+				r.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, id sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{
+						ID:    id,
+						Title: roundtypes.Title("Old Title"),
+					}, nil
+				}
+				q.CancelRoundJobsFunc = func(ctx context.Context, rID sharedtypes.RoundID) error { return nil }
+				q.ScheduleRoundReminderFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, t time.Time, p roundevents.DiscordReminderPayloadV1) error {
+					return errors.New("reminder should not be scheduled without event message id")
+				}
+				q.ScheduleRoundStartFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, t time.Time, p roundevents.RoundStartedPayloadV1) error {
+					return nil
+				}
+			},
+			want:    results.SuccessResult[bool, error](true),
+			wantErr: false,
+		},
+		{
+			name: "reschedules queue-based start when event message exists but native event is absent",
+			payload: roundtypes.UpdateScheduledRoundEventsRequest{
+				GuildID:   testGuildID,
+				RoundID:   testRoundID,
+				StartTime: &testStartTime,
+			},
+			setup: func(r *FakeRepo, q *FakeQueueService) {
+				r.GetEventMessageIDFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, id sharedtypes.RoundID) (string, error) {
+					return "msg-123", nil
+				}
+				r.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, id sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{
+						ID:             id,
+						Title:          roundtypes.Title("Old Title"),
+						DiscordEventID: "",
+					}, nil
+				}
+				q.CancelRoundJobsFunc = func(ctx context.Context, rID sharedtypes.RoundID) error { return nil }
+				q.ScheduleRoundReminderFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, t time.Time, p roundevents.DiscordReminderPayloadV1) error {
+					return nil
+				}
+				q.ScheduleRoundStartFunc = func(ctx context.Context, g sharedtypes.GuildID, rID sharedtypes.RoundID, t time.Time, p roundevents.RoundStartedPayloadV1) error {
+					return nil
+				}
+			},
+			want:    results.SuccessResult[bool, error](true),
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -375,6 +460,24 @@ func TestRoundService_UpdateScheduledRoundEvents(t *testing.T) {
 					}
 				}
 			}
+
+			if tt.name == "reschedules queue-based start when event message exists but native event is absent" {
+				if !containsString(queue.Trace(), "ScheduleRoundReminder") {
+					t.Errorf("expected ScheduleRoundReminder to be called, got trace %v", queue.Trace())
+				}
+				if !containsString(queue.Trace(), "ScheduleRoundStart") {
+					t.Errorf("expected ScheduleRoundStart to be called, got trace %v", queue.Trace())
+				}
+			}
 		})
 	}
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
