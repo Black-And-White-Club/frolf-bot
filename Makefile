@@ -26,6 +26,8 @@ clean-all: river-clean rollback-all
 migrate-all: river-migrate-up migrate-init migrate
 
 # Safe migration path: snapshot first, then migrate.
+# If queue-based round start is being re-enabled on an older environment, inspect
+# existing River jobs before rollout so stale round_start jobs do not race the new path.
 migrate-safe: db-backup migrate-all
 
 rollback-all: 

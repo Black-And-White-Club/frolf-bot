@@ -275,6 +275,11 @@ func runMigrations() {
 	db := bun.NewDB(pgdb, pgdialect.New())
 	defer db.Close()
 
+	// Startup keeps using the historical shared bun_migrations table so existing
+	// databases do not replay already-applied app migrations. The standalone
+	// cmd/bun tool uses per-module tables for operator workflows. Do not mix the
+	// two entrypoints on the same database unless you explicitly account for the
+	// different tracking tables and resulting status output.
 	bunMigrators := migrationrunner.BuildSharedTableMigrators(db)
 	moduleMigrators := migrationrunner.AsModuleMigrators(bunMigrators)
 

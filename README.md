@@ -124,6 +124,9 @@ make clean-all
 
 ## Notes
 
+- `main.go --migrate` intentionally uses the historical shared `bun_migrations` table for backward compatibility with existing databases, while `cmd/bun/main.go` uses per-module migration tables for operator workflows. Avoid mixing those entrypoints on the same database unless you expect the status output to differ.
+- When rolling out queue-based round scheduling to an older environment, inspect existing River jobs before deployment so stale `round_start` jobs do not race the re-enabled scheduling path. `make migrate-safe` gives you a backup-first flow; `make river-clean` is only appropriate for disposable/dev databases because it drops River artifacts outright.
+
 - This is a **pure event-driven service** - no HTTP endpoints
 - All observability is exported via OpenTelemetry
 - Database setup and infrastructure dependencies are handled separately
