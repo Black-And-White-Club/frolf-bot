@@ -31,7 +31,6 @@ jobs:
         run: |
           shortSha=$(git rev-parse --short ${{ github.sha }})
           echo "COMMIT_SHORT_SHA=$shortSha" >> $GITHUB_ENV
-          echo "SEMVER_TAG=v1.0.${{ github.run_number }}" >> $GITHUB_ENV
 
       - name: Log in to OCIR
         uses: docker/login-action@v3
@@ -46,5 +45,5 @@ jobs:
       - name: Build and publish with ko
         run: |
           set -euo pipefail
-          export GOFLAGS="-ldflags=-X=main.Version=${SEMVER_TAG}"
-          ko publish --bare --tags "${SEMVER_TAG},${COMMIT_SHORT_SHA},latest" --platform=linux/amd64,linux/arm64 .
+          export GOFLAGS="-ldflags=-X=main.Version=${COMMIT_SHORT_SHA}"
+          ko publish --bare --tags "${COMMIT_SHORT_SHA},latest" --platform=linux/amd64,linux/arm64 .
