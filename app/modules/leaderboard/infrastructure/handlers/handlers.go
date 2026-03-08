@@ -91,7 +91,7 @@ func (h *LeaderboardHandlers) mapSuccessResults(
 		topic = replyTo
 	}
 
-	return []handlerwrapper.Result{
+	results := []handlerwrapper.Result{
 		{
 			Topic: topic,
 			Payload: &leaderboardevents.LeaderboardBatchTagAssignedPayloadV1{
@@ -113,6 +113,24 @@ func (h *LeaderboardHandlers) mapSuccessResults(
 			},
 		},
 	}
+
+	// Publish per-user tag update events for PWA live updates.
+	guildIDStr := string(guildID)
+	for _, req := range requests {
+		newTag := req.TagNumber
+		scopedTopic := fmt.Sprintf("%s.%s", leaderboardevents.LeaderboardTagUpdatedV2, guildIDStr)
+		results = append(results, handlerwrapper.Result{
+			Topic: scopedTopic,
+			Payload: &leaderboardevents.LeaderboardTagUpdatedPayloadV1{
+				GuildID: guildID,
+				UserID:  req.UserID,
+				NewTag:  &newTag,
+				Reason:  string(source),
+			},
+		})
+	}
+
+	return results
 }
 
 // addGuildScopedResult appends a guild-scoped version of the event for PWA permission scoping.

@@ -39,8 +39,7 @@ func TestDiscordEdgeContractsIncludeCoreSubjects(t *testing.T) {
 			}
 
 			expected := map[string]string{
-				"discord.round.created.v2":                "discord",
-				"discord.round.started.v2":                "discord",
+				"round.started.discord.v1":                "frolf-bot-backend",
 				"round.created.v2":                        "frolf-bot-backend",
 				"round.started.v2":                        "frolf-bot-backend",
 				"round.participant.joined.v2":             "frolf-bot-backend",
