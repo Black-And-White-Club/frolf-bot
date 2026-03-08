@@ -45,11 +45,11 @@ func TestHandleScoreUpdateValidated(t *testing.T) {
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{roundevents.RoundParticipantScoreUpdatedV1},
+			expectedOutgoingTopics: []string{roundevents.RoundParticipantScoreUpdatedV2},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
-				msgs := receivedMsgs[roundevents.RoundParticipantScoreUpdatedV1]
+				msgs := receivedMsgs[roundevents.RoundParticipantScoreUpdatedV2]
 				if len(msgs) == 0 {
-					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundParticipantScoreUpdatedV1)
+					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundParticipantScoreUpdatedV2)
 				}
 				var result roundevents.ParticipantScoreUpdatedPayloadV1
 				if err := deps.TestHelpers.UnmarshalPayload(msgs[0], &result); err != nil {
@@ -99,11 +99,11 @@ func TestHandleScoreUpdateValidated(t *testing.T) {
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{roundevents.RoundParticipantScoreUpdatedV1},
+			expectedOutgoingTopics: []string{roundevents.RoundParticipantScoreUpdatedV2},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
-				msgs := receivedMsgs[roundevents.RoundParticipantScoreUpdatedV1]
+				msgs := receivedMsgs[roundevents.RoundParticipantScoreUpdatedV2]
 				if len(msgs) == 0 {
-					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundParticipantScoreUpdatedV1)
+					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundParticipantScoreUpdatedV2)
 				}
 				var result roundevents.ParticipantScoreUpdatedPayloadV1
 				if err := deps.TestHelpers.UnmarshalPayload(msgs[0], &result); err != nil {
@@ -148,11 +148,11 @@ func TestHandleScoreUpdateValidated(t *testing.T) {
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{roundevents.RoundParticipantScoreUpdatedV1},
+			expectedOutgoingTopics: []string{roundevents.RoundParticipantScoreUpdatedV2},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
-				msgs := receivedMsgs[roundevents.RoundParticipantScoreUpdatedV1]
+				msgs := receivedMsgs[roundevents.RoundParticipantScoreUpdatedV2]
 				if len(msgs) == 0 {
-					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundParticipantScoreUpdatedV1)
+					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundParticipantScoreUpdatedV2)
 				}
 				var result roundevents.ParticipantScoreUpdatedPayloadV1
 				if err := deps.TestHelpers.UnmarshalPayload(msgs[0], &result); err != nil {
@@ -229,11 +229,11 @@ func TestHandleScoreUpdateValidated(t *testing.T) {
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{roundevents.RoundParticipantScoreUpdatedV1},
+			expectedOutgoingTopics: []string{roundevents.RoundParticipantScoreUpdatedV2},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
-				msgs := receivedMsgs[roundevents.RoundParticipantScoreUpdatedV1]
+				msgs := receivedMsgs[roundevents.RoundParticipantScoreUpdatedV2]
 				if len(msgs) == 0 {
-					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundParticipantScoreUpdatedV1)
+					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundParticipantScoreUpdatedV2)
 				}
 				var result roundevents.ParticipantScoreUpdatedPayloadV1
 				if err := deps.TestHelpers.UnmarshalPayload(msgs[0], &result); err != nil {

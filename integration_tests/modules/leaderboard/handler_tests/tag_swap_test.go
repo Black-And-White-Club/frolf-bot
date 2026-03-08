@@ -61,10 +61,10 @@ func TestHandleTagSwapRequested(t *testing.T) {
 				return msg
 			},
 			validateFn: func(t *testing.T, deps LeaderboardHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initial leaderboardtypes.LeaderboardData) {
-				// We expect TagSwapProcessedV1 as returned by Step 4 or 5 of the handler
-				msgs := receivedMsgs[leaderboardevents.TagSwapProcessedV1]
+				// We expect TagSwapProcessedV2 as returned by Step 4 or 5 of the handler
+				msgs := receivedMsgs[leaderboardevents.TagSwapProcessedV2]
 				if len(msgs) == 0 {
-					t.Fatalf("Expected message on topic %s", leaderboardevents.TagSwapProcessedV1)
+					t.Fatalf("Expected message on topic %s", leaderboardevents.TagSwapProcessedV2)
 				}
 
 				var res leaderboardevents.TagSwapProcessedPayloadV1
@@ -74,7 +74,7 @@ func TestHandleTagSwapRequested(t *testing.T) {
 					t.Errorf("Response payload missing IDs: %+v", res)
 				}
 			},
-			expectedOutgoingTopics: []string{leaderboardevents.TagSwapProcessedV1},
+			expectedOutgoingTopics: []string{leaderboardevents.TagSwapProcessedV2},
 		},
 		{
 			name:  "Failure - Target user has no tag",

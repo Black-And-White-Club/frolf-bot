@@ -14,55 +14,85 @@ import (
 // This is a foundational test ensuring the user resolution in imports
 // can find users that signed up through the normal flow.
 func TestSignupCreatesUserAndGuildMembership(t *testing.T) {
-	t.Skip("Integration test - run locally with test infrastructure")
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
+	}
 
-	// This test validates that when a user signs up:
-	// 1. A global user record is created in the users table
-	// 2. A guild_membership record is created linking user to guild
-	// 3. The user can be found via the user lookup methods used by import resolution
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			t.Skip("Integration test - run locally with test infrastructure")
 
-	// Test setup would require:
-	// - Database connection
-	// - User repository
-	// - User service with signup handler
+			// This test validates that when a user signs up:
+			// 1. A global user record is created in the users table
+			// 2. A guild_membership record is created linking user to guild
+			// 3. The user can be found via the user lookup methods used by import resolution
 
-	// Expected flow:
-	// 1. Publish UserSignupRequested event
-	// 2. Handler creates global user
-	// 3. Handler creates guild_membership
-	// 4. Verify both records exist
-	// 5. Verify user can be found by normalized UDisc name lookup
+			// Test setup would require:
+			// - Database connection
+			// - User repository
+			// - User service with signup handler
+
+			// Expected flow:
+			// 1. Publish UserSignupRequested event
+			// 2. Handler creates global user
+			// 3. Handler creates guild_membership
+			// 4. Verify both records exist
+			// 5. Verify user can be found by normalized UDisc name lookup
+		})
+	}
 }
 
 // TestSignupWithUDiscIdentityCreatesGuildMembership validates that when a user
 // signs up and links their UDisc identity, they can be resolved in imports.
 func TestSignupWithUDiscIdentityCreatesGuildMembership(t *testing.T) {
-	t.Skip("Integration test - run locally with test infrastructure")
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
+	}
 
-	// This test validates the complete flow:
-	// 1. User signs up -> global user + guild_membership created
-	// 2. User links UDisc identity -> udisc_username/udisc_name set on global user
-	// 3. Import can resolve user by normalized UDisc name
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			t.Skip("Integration test - run locally with test infrastructure")
 
-	// This ensures the import flow's resolveUserID function
-	// can find users who have:
-	// - Signed up to the guild (guild_membership exists)
-	// - Linked their UDisc identity (udisc_username/udisc_name set)
+			// This test validates the complete flow:
+			// 1. User signs up -> global user + guild_membership created
+			// 2. User links UDisc identity -> udisc_username/udisc_name set on global user
+			// 3. Import can resolve user by normalized UDisc name
+
+			// This ensures the import flow's resolveUserID function
+			// can find users who have:
+			// - Signed up to the guild (guild_membership exists)
+			// - Linked their UDisc identity (udisc_username/udisc_name set)
+		})
+	}
 }
 
 // TestUserWithoutGuildMembershipNotResolvedInImport validates that users
 // without a guild_membership for the target guild are NOT resolved during imports.
 func TestUserWithoutGuildMembershipNotResolvedInImport(t *testing.T) {
-	t.Skip("Integration test - run locally with test infrastructure")
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
+	}
 
-	// This test validates the security constraint:
-	// - Global user exists with UDisc identity
-	// - User does NOT have guild_membership for target guild
-	// - Import should NOT resolve this user
-	// - No participant should be created for this user
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			t.Skip("Integration test - run locally with test infrastructure")
 
-	// This ensures that only guild members can be added as participants
-	// during singles imports.
+			// This test validates the security constraint:
+			// - Global user exists with UDisc identity
+			// - User does NOT have guild_membership for target guild
+			// - Import should NOT resolve this user
+			// - No participant should be created for this user
+
+			// This ensures that only guild members can be added as participants
+			// during singles imports.
+		})
+	}
 }
 
 // verifyUserAndMembershipExist is a helper to check both user and membership records.

@@ -190,7 +190,7 @@ func TestHandleRoundFinalized(t *testing.T) {
 				}
 				msg := message.NewMessage(uuid.New().String(), payloadBytes)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundFinalizedV1, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundFinalizedV2, msg); err != nil {
 					t.Fatalf("Publish failed: %v", err)
 				}
 				return msg

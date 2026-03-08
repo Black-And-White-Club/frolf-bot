@@ -71,20 +71,20 @@ func (h *LeaderboardHandlers) HandleManualPointAdjustment(
 	result, err := h.service.AdjustPoints(ctx, payload.GuildID, payload.MemberID, payload.PointsDelta, reason)
 	if err != nil {
 		return []handlerwrapper.Result{{
-			Topic:   leaderboardevents.LeaderboardManualPointAdjustmentFailedV1,
+			Topic:   leaderboardevents.LeaderboardManualPointAdjustmentFailedV2,
 			Payload: &leaderboardevents.AdminFailedPayloadV1{GuildID: payload.GuildID, Reason: err.Error()},
 		}}, nil
 	}
 
 	if result.IsFailure() {
 		return []handlerwrapper.Result{{
-			Topic:   leaderboardevents.LeaderboardManualPointAdjustmentFailedV1,
+			Topic:   leaderboardevents.LeaderboardManualPointAdjustmentFailedV2,
 			Payload: &leaderboardevents.AdminFailedPayloadV1{GuildID: payload.GuildID, Reason: fmt.Sprintf("%v", *result.Failure)},
 		}}, nil
 	}
 
 	return []handlerwrapper.Result{{
-		Topic: leaderboardevents.LeaderboardManualPointAdjustmentSuccessV1,
+		Topic: leaderboardevents.LeaderboardManualPointAdjustmentSuccessV2,
 		Payload: &leaderboardevents.ManualPointAdjustmentSuccessPayloadV1{
 			GuildID:     payload.GuildID,
 			MemberID:    payload.MemberID,

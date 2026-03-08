@@ -29,79 +29,89 @@ func (s *StubRoundService) GetRound(ctx context.Context, guildID sharedtypes.Gui
 }
 
 func TestRoundLookupAdapter_GetRound(t *testing.T) {
-	ctx := context.Background()
-	guildID := sharedtypes.GuildID("guild-123")
-	roundID := sharedtypes.RoundID(uuid.New())
-	testRound := &roundtypes.Round{ID: roundID}
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
+	}
 
-	t.Run("Success", func(t *testing.T) {
-		stubService := &StubRoundService{
-			GetRoundFunc: func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (results.OperationResult[*roundtypes.Round, error], error) {
-				return results.OperationResult[*roundtypes.Round, error]{
-					Success: &testRound,
-				}, nil
-			},
-		}
-		adapter := NewRoundLookupAdapter(stubService)
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			ctx := context.Background()
+			guildID := sharedtypes.GuildID("guild-123")
+			roundID := sharedtypes.RoundID(uuid.New())
+			testRound := &roundtypes.Round{ID: roundID}
 
-		result, err := adapter.GetRound(ctx, guildID, roundID)
-		assert.NoError(t, err)
-		assert.Equal(t, testRound, result)
-	})
+			t.Run("Success", func(t *testing.T) {
+				stubService := &StubRoundService{
+					GetRoundFunc: func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (results.OperationResult[*roundtypes.Round, error], error) {
+						return results.OperationResult[*roundtypes.Round, error]{
+							Success: &testRound,
+						}, nil
+					},
+				}
+				adapter := NewRoundLookupAdapter(stubService)
 
-	t.Run("ServiceError", func(t *testing.T) {
-		expectedErr := errors.New("service error")
-		stubService := &StubRoundService{
-			GetRoundFunc: func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (results.OperationResult[*roundtypes.Round, error], error) {
-				return results.OperationResult[*roundtypes.Round, error]{}, expectedErr
-			},
-		}
-		adapter := NewRoundLookupAdapter(stubService)
+				result, err := adapter.GetRound(ctx, guildID, roundID)
+				assert.NoError(t, err)
+				assert.Equal(t, testRound, result)
+			})
 
-		result, err := adapter.GetRound(ctx, guildID, roundID)
-		assert.Error(t, err)
-		assert.Nil(t, result)
-		assert.Equal(t, expectedErr, err)
-	})
+			t.Run("ServiceError", func(t *testing.T) {
+				expectedErr := errors.New("service error")
+				stubService := &StubRoundService{
+					GetRoundFunc: func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (results.OperationResult[*roundtypes.Round, error], error) {
+						return results.OperationResult[*roundtypes.Round, error]{}, expectedErr
+					},
+				}
+				adapter := NewRoundLookupAdapter(stubService)
 
-	t.Run("FailureResult", func(t *testing.T) {
-		failureErr := errors.New("not found")
-		stubService := &StubRoundService{
-			GetRoundFunc: func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (results.OperationResult[*roundtypes.Round, error], error) {
-				return results.OperationResult[*roundtypes.Round, error]{
-					Failure: &failureErr,
-				}, nil
-			},
-		}
-		adapter := NewRoundLookupAdapter(stubService)
+				result, err := adapter.GetRound(ctx, guildID, roundID)
+				assert.Error(t, err)
+				assert.Nil(t, result)
+				assert.Equal(t, expectedErr, err)
+			})
 
-		result, err := adapter.GetRound(ctx, guildID, roundID)
-		assert.Error(t, err)
-		assert.Nil(t, result)
-		assert.Contains(t, err.Error(), "round lookup failed: not found")
-	})
+			t.Run("FailureResult", func(t *testing.T) {
+				failureErr := errors.New("not found")
+				stubService := &StubRoundService{
+					GetRoundFunc: func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (results.OperationResult[*roundtypes.Round, error], error) {
+						return results.OperationResult[*roundtypes.Round, error]{
+							Failure: &failureErr,
+						}, nil
+					},
+				}
+				adapter := NewRoundLookupAdapter(stubService)
 
-	t.Run("NilFailureResult", func(t *testing.T) {
-		// Case: Success is nil, Failure is nil (unlikely but possible return)
-		// Simulates "IsFailure() is true but failure is nil" OR "IsFailure() is false but Success is nil"
-		// The adapter logic we added:
-		// 1. Checks IsFailure()
-		// 2. Checks Success == nil
+				result, err := adapter.GetRound(ctx, guildID, roundID)
+				assert.Error(t, err)
+				assert.Nil(t, result)
+				assert.Contains(t, err.Error(), "round lookup failed: not found")
+			})
 
-		// To test the "Failure is nil when IsFailure() returns true" branch, we need a Result that returns true for IsFailure() but has nil Failure.
-		// Usually results.OperationResult IsFailure() checks `Failure != nil`.
-		// If so, that branch is unreachable unless we mock OperationResult behavior (which we can't easily do for a struct).
-		// So we focus on the "Success is nil" branch.
+			t.Run("NilFailureResult", func(t *testing.T) {
+				// Case: Success is nil, Failure is nil (unlikely but possible return)
+				// Simulates "IsFailure() is true but failure is nil" OR "IsFailure() is false but Success is nil"
+				// The adapter logic we added:
+				// 1. Checks IsFailure()
+				// 2. Checks Success == nil
 
-		stubService := &StubRoundService{
-			GetRoundFunc: func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (results.OperationResult[*roundtypes.Round, error], error) {
-				return results.OperationResult[*roundtypes.Round, error]{}, nil
-			},
-		}
-		adapter := NewRoundLookupAdapter(stubService)
+				// To test the "Failure is nil when IsFailure() returns true" branch, we need a Result that returns true for IsFailure() but has nil Failure.
+				// Usually results.OperationResult IsFailure() checks `Failure != nil`.
+				// If so, that branch is unreachable unless we mock OperationResult behavior (which we can't easily do for a struct).
+				// So we focus on the "Success is nil" branch.
 
-		result, err := adapter.GetRound(ctx, guildID, roundID)
-		assert.NoError(t, err)
-		assert.Nil(t, result)
-	})
+				stubService := &StubRoundService{
+					GetRoundFunc: func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (results.OperationResult[*roundtypes.Round, error], error) {
+						return results.OperationResult[*roundtypes.Round, error]{}, nil
+					},
+				}
+				adapter := NewRoundLookupAdapter(stubService)
+
+				result, err := adapter.GetRound(ctx, guildID, roundID)
+				assert.NoError(t, err)
+				assert.Nil(t, result)
+			})
+		})
+	}
 }

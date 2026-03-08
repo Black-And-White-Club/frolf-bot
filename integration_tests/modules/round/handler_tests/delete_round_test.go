@@ -59,7 +59,7 @@ func TestHandleRoundDeleteRequest(t *testing.T) {
 				}
 				msg := message.NewMessage(uuid.New().String(), payloadBytes)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundDeleteRequestedV1, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundDeleteRequestedV2, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
@@ -94,7 +94,7 @@ func TestHandleRoundDeleteRequest(t *testing.T) {
 				}
 				msg := message.NewMessage(uuid.New().String(), payloadBytes)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundDeleteRequestedV1, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundDeleteRequestedV2, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
@@ -128,7 +128,7 @@ func TestHandleRoundDeleteRequest(t *testing.T) {
 				}
 				msg := message.NewMessage(uuid.New().String(), payloadBytes)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundDeleteRequestedV1, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundDeleteRequestedV2, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
@@ -167,7 +167,7 @@ func TestHandleRoundDeleteRequest(t *testing.T) {
 				}
 				msg := message.NewMessage(uuid.New().String(), payloadBytes)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundDeleteRequestedV1, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundDeleteRequestedV2, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg
@@ -197,7 +197,7 @@ func TestHandleRoundDeleteRequest(t *testing.T) {
 				invalidJSON := []byte(`invalid json`)
 				msg := message.NewMessage(uuid.New().String(), invalidJSON)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundDeleteRequestedV1, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundDeleteRequestedV2, msg); err != nil {
 					t.Fatalf("Failed to publish message: %v", err)
 				}
 				return msg

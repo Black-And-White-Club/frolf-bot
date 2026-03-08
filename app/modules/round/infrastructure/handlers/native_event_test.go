@@ -40,6 +40,12 @@ func TestRoundHandlers_HandleNativeEventCreated(t *testing.T) {
 						DiscordEventID: testDiscordEventID,
 					}, nil
 				}
+				fake.CancelScheduledRoundStartFunc = func(ctx context.Context, roundID sharedtypes.RoundID) error {
+					if roundID != testRoundID {
+						t.Fatalf("expected cancel for round %s, got %s", testRoundID, roundID)
+					}
+					return nil
+				}
 			},
 			payload:       testPayload,
 			wantErr:       false,
@@ -55,6 +61,23 @@ func TestRoundHandlers_HandleNativeEventCreated(t *testing.T) {
 			payload:        testPayload,
 			wantErr:        true,
 			expectedErrMsg: "db error",
+		},
+		{
+			name: "Cancel scheduled round start error returns error",
+			fakeSetup: func(fake *FakeService) {
+				fake.UpdateDiscordEventIDFunc = func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, discordEventID string) (*roundtypes.Round, error) {
+					return &roundtypes.Round{
+						ID:             testRoundID,
+						DiscordEventID: testDiscordEventID,
+					}, nil
+				}
+				fake.CancelScheduledRoundStartFunc = func(ctx context.Context, roundID sharedtypes.RoundID) error {
+					return errors.New("cancel start failed")
+				}
+			},
+			payload:        testPayload,
+			wantErr:        true,
+			expectedErrMsg: "cancel start failed",
 		},
 		{
 			name: "Service returns nil round",

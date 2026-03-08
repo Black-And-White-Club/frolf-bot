@@ -58,7 +58,7 @@ func TestHandleRoundScheduleUpdate(t *testing.T) {
 				// Publish invalid JSON
 				msg := message.NewMessage(uuid.New().String(), []byte("invalid json"))
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundUpdatedV1, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundUpdatedV2, msg); err != nil {
 					t.Fatalf("Publish failed: %v", err)
 				}
 				return msg

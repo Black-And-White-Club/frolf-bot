@@ -103,7 +103,7 @@ func TestHandleClubInfoRequest(t *testing.T) {
 			assert.Len(t, results, tt.wantResults)
 
 			if tt.wantResults > 0 {
-				assert.Equal(t, clubevents.ClubInfoResponseV1, results[0].Topic)
+				assert.Equal(t, clubevents.ClubInfoResponseV2, results[0].Topic)
 
 				// For "club not found" case, verify the response contains "Club Not Found"
 				if tt.name == "club not found" {

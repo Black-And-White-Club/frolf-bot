@@ -11,7 +11,7 @@
 .PHONY: build-coverage coverage-all coverage-html coverage-unit coverage-integration clean-coverage
 .PHONY: mocks-user mocks-leaderboard mocks-round mocks-score mocks-eventbus mocks-all build-version
 .PHONY: river-migrate-up river-migrate-down river-clean clean-all
-.PHONY: db-config db-test ci-setup help
+.PHONY: db-config db-test db-backup db-restore migrate-safe ci-setup help
 
 # --- Database Migration and Run Targets ---
 migrate-init:
@@ -24,6 +24,11 @@ clean-all: river-clean rollback-all
 
 # Run River migrations first, then our app migrations
 migrate-all: river-migrate-up migrate-init migrate
+
+# Safe migration path: snapshot first, then migrate.
+# If queue-based round start is being re-enabled on an older environment, inspect
+# existing River jobs before rollout so stale round_start jobs do not race the new path.
+migrate-safe: db-backup migrate-all
 
 rollback-all: 
 	@echo "Rolling back application migrations..."
@@ -43,6 +48,9 @@ DB_PASS := $(word 2, $(DB_PARAMS))
 DB_HOST := $(word 3, $(DB_PARAMS))
 DB_PORT := $(word 4, $(DB_PARAMS))
 DB_NAME := $(word 5, $(DB_PARAMS))
+BACKUP_DIR ?= backups
+BACKUP_FILE ?= $(BACKUP_DIR)/$(DB_NAME)_$(shell date +%Y%m%d_%H%M%S).dump
+RESTORE_FILE ?=
 
 # River migration targets
 river-migrate-up:
@@ -475,6 +483,33 @@ db-test:
 	@PGPASSWORD="$(DB_PASS)" psql -h "$(DB_HOST)" -p "$(DB_PORT)" -U "$(DB_USER)" -d "$(DB_NAME)" -c "SELECT version();" || (echo "Database connection failed!" && exit 1)
 	@echo "Database connection successful!"
 
+# Create a full logical backup in PostgreSQL custom format.
+db-backup:
+	@echo "Creating database backup..."
+	@mkdir -p "$(BACKUP_DIR)"
+	@PGPASSWORD="$(DB_PASS)" pg_dump -h "$(DB_HOST)" -p "$(DB_PORT)" -U "$(DB_USER)" -d "$(DB_NAME)" --format=custom --no-owner --no-privileges --file="$(BACKUP_FILE)"
+	@echo "Backup written to $(BACKUP_FILE)"
+
+# Restore a backup into the configured database.
+# Usage: make db-restore RESTORE_FILE=backups/<file>.dump FORCE=1
+db-restore:
+	@if [ -z "$(RESTORE_FILE)" ]; then \
+		echo "RESTORE_FILE is required. Example: make db-restore RESTORE_FILE=backups/$(DB_NAME)_20260305_120000.dump FORCE=1"; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(RESTORE_FILE)" ]; then \
+		echo "Restore file not found: $(RESTORE_FILE)"; \
+		exit 1; \
+	fi
+	@if [ "$(FORCE)" != "1" ]; then \
+		echo "Refusing to restore without FORCE=1 (this is destructive)."; \
+		echo "Re-run: make db-restore RESTORE_FILE=$(RESTORE_FILE) FORCE=1"; \
+		exit 1; \
+	fi
+	@echo "Restoring database from $(RESTORE_FILE)..."
+	@PGPASSWORD="$(DB_PASS)" pg_restore -h "$(DB_HOST)" -p "$(DB_PORT)" -U "$(DB_USER)" -d "$(DB_NAME)" --clean --if-exists --no-owner --no-privileges "$(RESTORE_FILE)"
+	@echo "Database restore completed."
+
 # Set up environment for CI/CD (validates required variables)
 ci-setup:
 	@echo "Validating CI/CD environment..."
@@ -492,6 +527,7 @@ help:
 	@echo "  migrate-init          - Initialize database migrations"
 	@echo "  migrate              - Run application migrations"
 	@echo "  migrate-all          - Run River + application migrations"
+	@echo "  migrate-safe         - Backup DB, then run River + application migrations"
 	@echo "  rollback-all         - Rollback all migrations"
 	@echo "  river-migrate-up     - Run River queue migrations"
 	@echo "  river-migrate-down   - Rollback River migrations"
@@ -501,6 +537,8 @@ help:
 	@echo "Database Configuration:"
 	@echo "  db-config            - Show current database configuration"
 	@echo "  db-test              - Test database connection"
+	@echo "  db-backup            - Create a PostgreSQL custom-format backup"
+	@echo "  db-restore           - Restore backup (RESTORE_FILE=... FORCE=1)"
 	@echo "  ci-setup             - Validate environment for CI/CD"
 	@echo ""
 	@echo "Testing:"

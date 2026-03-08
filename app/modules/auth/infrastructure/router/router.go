@@ -7,7 +7,7 @@ import (
 
 const (
 	// MagicLinkRequestSubject is the NATS subject for magic link requests.
-	MagicLinkRequestSubject = "auth.magic-link.requested.v1"
+	MagicLinkRequestSubject = "auth.magic-link.requested.v2"
 
 	// AuthCalloutSubject is the default NATS subject for auth callout requests.
 	AuthCalloutSubject = "$SYS.REQ.USER.AUTH"

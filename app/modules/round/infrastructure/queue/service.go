@@ -30,6 +30,7 @@ type Metrics interface {
 type QueueService interface {
 	ScheduleRoundStart(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, startTime time.Time, payload roundevents.RoundStartedPayloadV1) error
 	ScheduleRoundReminder(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, reminderTime time.Time, payload roundevents.DiscordReminderPayloadV1) error
+	CancelRoundStartJobs(ctx context.Context, roundID sharedtypes.RoundID) error
 	CancelRoundJobs(ctx context.Context, roundID sharedtypes.RoundID) error
 	GetScheduledJobs(ctx context.Context, roundID sharedtypes.RoundID) ([]JobInfo, error)
 	HealthCheck(ctx context.Context) error
@@ -210,16 +211,28 @@ func (s *Service) ScheduleRoundReminder(ctx context.Context, guildID sharedtypes
 }
 
 func (s *Service) CancelRoundJobs(ctx context.Context, roundID sharedtypes.RoundID) error {
+	return s.cancelRoundJobsByKind(ctx, roundID, "")
+}
+
+func (s *Service) CancelRoundStartJobs(ctx context.Context, roundID sharedtypes.RoundID) error {
+	return s.cancelRoundJobsByKind(ctx, roundID, "round_start")
+}
+
+func (s *Service) cancelRoundJobsByKind(ctx context.Context, roundID sharedtypes.RoundID, kind string) error {
 	type RiverJobRow struct {
 		ID int64 `bun:"id"`
 	}
 	var jobs []RiverJobRow
-	err := s.db.NewSelect().
+	query := s.db.NewSelect().
 		Table("river_job").
 		Column("id").
 		Where("args->>'round_id' = ?", roundID.String()).
-		Where("state IN ('available', 'scheduled')").
-		Scan(ctx, &jobs)
+		Where("state IN ('available', 'scheduled')")
+	if kind != "" {
+		query = query.Where("kind = ?", kind)
+	}
+
+	err := query.Scan(ctx, &jobs)
 
 	if err != nil {
 		return err

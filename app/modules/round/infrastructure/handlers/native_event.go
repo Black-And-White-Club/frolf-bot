@@ -26,6 +26,10 @@ func (h *RoundHandlers) HandleNativeEventCreated(
 		return nil, errors.New("updated round object is nil")
 	}
 
+	if err := h.service.CancelScheduledRoundStart(ctx, payload.RoundID); err != nil {
+		return nil, err
+	}
+
 	// This is a terminal sink handler - no outgoing events
 	return []handlerwrapper.Result{}, nil
 }

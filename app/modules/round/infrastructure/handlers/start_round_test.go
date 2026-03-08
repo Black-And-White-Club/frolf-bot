@@ -17,6 +17,7 @@ import (
 func TestRoundHandlers_HandleRoundStartRequested_Basic(t *testing.T) {
 	testRoundID := sharedtypes.RoundID(uuid.New())
 	testGuildID := sharedtypes.GuildID("guild-123")
+	testClubUUID := uuid.New()
 
 	testPayload := &roundevents.RoundStartRequestedPayloadV1{
 		GuildID: testGuildID,
@@ -26,36 +27,95 @@ func TestRoundHandlers_HandleRoundStartRequested_Basic(t *testing.T) {
 	logger := loggerfrolfbot.NoOpLogger
 
 	tests := []struct {
-		name            string
-		fakeSetup       func(*FakeService)
-		payload         *roundevents.RoundStartRequestedPayloadV1
-		wantErr         bool
-		wantResultLen   int
-		wantResultTopic string
-		expectedErrMsg  string
+		name           string
+		fakeSetup      func(*FakeService, *FakeUserService)
+		payload        *roundevents.RoundStartRequestedPayloadV1
+		wantErr        bool
+		wantResultLen  int
+		expectedTopics []string
+		expectedErrMsg string
 	}{
 		{
 			name: "Successfully handle RoundStarted",
-			fakeSetup: func(fake *FakeService) {
+			fakeSetup: func(fake *FakeService, u *FakeUserService) {
 				fake.StartRoundFunc = func(ctx context.Context, req *roundtypes.StartRoundRequest) (roundservice.StartRoundResult, error) {
-					return results.SuccessResult[*roundtypes.Round, error](&roundtypes.Round{
-						ID:    testRoundID,
-						Title: "Test Round",
-						Participants: []roundtypes.Participant{
-							{UserID: sharedtypes.DiscordID("user1")},
-							{UserID: sharedtypes.DiscordID("user2")},
-						},
-					}), nil
+					return roundservice.StartRoundResult{
+						OperationResult: results.SuccessResult[*roundtypes.Round, error](&roundtypes.Round{
+							ID:             testRoundID,
+							GuildID:        testGuildID,
+							Title:          "Test Round",
+							Location:       "Test Location",
+							EventMessageID: "msg-123",
+							Participants: []roundtypes.Participant{
+								{UserID: sharedtypes.DiscordID("user1")},
+								{UserID: sharedtypes.DiscordID("user2")},
+							},
+						}),
+					}, nil
+				}
+				u.GetClubUUIDByDiscordGuildIDFunc = func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) {
+					return testClubUUID, nil
 				}
 			},
-			payload:         testPayload,
-			wantErr:         false,
-			wantResultLen:   1,
-			wantResultTopic: roundevents.RoundStartedDiscordV1,
+			payload:       testPayload,
+			wantErr:       false,
+			wantResultLen: 4,
+			expectedTopics: []string{
+				roundevents.RoundStartedV2,
+				roundevents.RoundStartedV2 + "." + string(testGuildID),
+				roundevents.RoundStartedV2 + "." + testClubUUID.String(),
+				roundevents.RoundStartedDiscordV2,
+			},
+		},
+		{
+			name: "Successfully handle PWA-only start without discord message",
+			fakeSetup: func(fake *FakeService, u *FakeUserService) {
+				fake.StartRoundFunc = func(ctx context.Context, req *roundtypes.StartRoundRequest) (roundservice.StartRoundResult, error) {
+					return roundservice.StartRoundResult{
+						OperationResult: results.SuccessResult[*roundtypes.Round, error](&roundtypes.Round{
+							ID:       testRoundID,
+							GuildID:  testGuildID,
+							Title:    "Test Round",
+							Location: "Test Location",
+						}),
+					}, nil
+				}
+				u.GetClubUUIDByDiscordGuildIDFunc = func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) {
+					return testClubUUID, nil
+				}
+			},
+			payload:       testPayload,
+			wantErr:       false,
+			wantResultLen: 3,
+			expectedTopics: []string{
+				roundevents.RoundStartedV2,
+				roundevents.RoundStartedV2 + "." + string(testGuildID),
+				roundevents.RoundStartedV2 + "." + testClubUUID.String(),
+			},
+		},
+		{
+			name: "Already started round emits no duplicate events",
+			fakeSetup: func(fake *FakeService, u *FakeUserService) {
+				fake.StartRoundFunc = func(ctx context.Context, req *roundtypes.StartRoundRequest) (roundservice.StartRoundResult, error) {
+					return roundservice.StartRoundResult{
+						OperationResult: results.SuccessResult[*roundtypes.Round, error](&roundtypes.Round{
+							ID:             testRoundID,
+							GuildID:        testGuildID,
+							Title:          "Test Round",
+							Location:       "Test Location",
+							EventMessageID: "msg-123",
+						}),
+						AlreadyStarted: true,
+					}, nil
+				}
+			},
+			payload:       testPayload,
+			wantErr:       false,
+			wantResultLen: 0,
 		},
 		{
 			name: "Service returns error",
-			fakeSetup: func(fake *FakeService) {
+			fakeSetup: func(fake *FakeService, u *FakeUserService) {
 				fake.StartRoundFunc = func(ctx context.Context, req *roundtypes.StartRoundRequest) (roundservice.StartRoundResult, error) {
 					return roundservice.StartRoundResult{}, errors.New("database connection failed")
 				}
@@ -66,19 +126,23 @@ func TestRoundHandlers_HandleRoundStartRequested_Basic(t *testing.T) {
 		},
 		{
 			name: "Service returns failure result",
-			fakeSetup: func(fake *FakeService) {
+			fakeSetup: func(fake *FakeService, u *FakeUserService) {
 				fake.StartRoundFunc = func(ctx context.Context, req *roundtypes.StartRoundRequest) (roundservice.StartRoundResult, error) {
-					return results.FailureResult[*roundtypes.Round, error](errors.New("start failed")), nil
+					return roundservice.StartRoundResult{
+						OperationResult: results.FailureResult[*roundtypes.Round, error](errors.New("start failed")),
+					}, nil
 				}
 			},
-			payload:         testPayload,
-			wantErr:         false,
-			wantResultLen:   1,
-			wantResultTopic: roundevents.RoundStartFailedV1,
+			payload:       testPayload,
+			wantErr:       false,
+			wantResultLen: 1,
+			expectedTopics: []string{
+				roundevents.RoundStartFailedV1,
+			},
 		},
 		{
 			name: "Service returns empty result (unknown)",
-			fakeSetup: func(fake *FakeService) {
+			fakeSetup: func(fake *FakeService, u *FakeUserService) {
 				fake.StartRoundFunc = func(ctx context.Context, req *roundtypes.StartRoundRequest) (roundservice.StartRoundResult, error) {
 					return roundservice.StartRoundResult{}, nil
 				}
@@ -92,13 +156,14 @@ func TestRoundHandlers_HandleRoundStartRequested_Basic(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fakeService := NewFakeService()
+			fakeUserService := NewFakeUserService()
 			if tt.fakeSetup != nil {
-				tt.fakeSetup(fakeService)
+				tt.fakeSetup(fakeService, fakeUserService)
 			}
 
 			h := &RoundHandlers{
 				service:     fakeService,
-				userService: NewFakeUserService(),
+				userService: fakeUserService,
 				logger:      logger,
 			}
 
@@ -115,8 +180,13 @@ func TestRoundHandlers_HandleRoundStartRequested_Basic(t *testing.T) {
 			if len(results) != tt.wantResultLen {
 				t.Errorf("HandleRoundStartRequested() result length = %d, want %d", len(results), tt.wantResultLen)
 			}
-			if tt.wantResultLen > 0 && results[0].Topic != tt.wantResultTopic {
-				t.Errorf("HandleRoundStartRequested() result topic = %v, want %v", results[0].Topic, tt.wantResultTopic)
+			for i, topic := range tt.expectedTopics {
+				if i >= len(results) {
+					t.Fatalf("expected topic at index %d = %q but got only %d results", i, topic, len(results))
+				}
+				if results[i].Topic != topic {
+					t.Fatalf("result topic at index %d = %q, want %q", i, results[i].Topic, topic)
+				}
 			}
 		})
 	}

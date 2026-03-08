@@ -3,6 +3,7 @@ package leaderboardhandlers
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -74,7 +75,7 @@ func (h *LeaderboardHandlers) handleLeaderboardUpdateWithServiceCommand(
 	}
 
 	results := []handlerwrapper.Result{{
-		Topic: leaderboardevents.LeaderboardUpdatedV1,
+		Topic: leaderboardevents.LeaderboardUpdatedV2,
 		Payload: &leaderboardevents.LeaderboardUpdatedPayloadV1{
 			GuildID:         payload.GuildID,
 			RoundID:         payload.RoundID,
@@ -90,6 +91,23 @@ func (h *LeaderboardHandlers) handleLeaderboardUpdateWithServiceCommand(
 				ChangedTags: changedTags,
 			},
 		},
+	}
+
+	// Publish per-user tag update events for PWA live updates.
+	memberIDs := make([]string, 0, len(changedTags))
+	for memberID := range changedTags {
+		memberIDs = append(memberIDs, string(memberID))
+	}
+	sort.Strings(memberIDs)
+
+	for _, memberID := range memberIDs {
+		results = append(results, h.buildTagUpdatedResults(
+			ctx,
+			payload.GuildID,
+			sharedtypes.DiscordID(memberID),
+			changedTags[sharedtypes.DiscordID(memberID)],
+			sharedtypes.ServiceUpdateSourceProcessScores,
+		)...)
 	}
 
 	if !output.PointsSkipped && len(output.PointAwards) > 0 {
@@ -152,7 +170,7 @@ func (h *LeaderboardHandlers) handleLeaderboardUpdateWithServiceCommand(
 		results = append(results, pointsResult)
 	}
 
-	results = h.addParallelIdentityResults(ctx, results, leaderboardevents.LeaderboardUpdatedV1, payload.GuildID)
+	results = h.addParallelIdentityResults(ctx, results, leaderboardevents.LeaderboardUpdatedV2, payload.GuildID)
 	propagateCorrelationID(ctx, results)
 
 	return results, nil

@@ -46,4 +46,5 @@ jobs:
       - name: Build and publish with ko
         run: |
           set -euo pipefail
+          export GOFLAGS="-ldflags=-X=main.Version=${SEMVER_TAG}"
           ko publish --bare --tags "${SEMVER_TAG},${COMMIT_SHORT_SHA},latest" --platform=linux/amd64,linux/arm64 .

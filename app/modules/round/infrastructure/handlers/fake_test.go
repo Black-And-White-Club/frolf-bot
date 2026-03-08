@@ -28,6 +28,7 @@ type FakeService struct {
 	StoreRoundFunc                     func(ctx context.Context, round *roundtypes.Round, guildID sharedtypes.GuildID) (roundservice.CreateRoundResult, error)
 	UpdateRoundMessageIDFunc           func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, discordMessageID string) (*roundtypes.Round, error)
 	UpdateDiscordEventIDFunc           func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, discordEventID string) (*roundtypes.Round, error)
+	CancelScheduledRoundStartFunc      func(ctx context.Context, roundID sharedtypes.RoundID) error
 
 	// Update Round
 	ValidateRoundUpdateWithClockFunc func(ctx context.Context, req *roundtypes.UpdateRoundRequest, timeParser roundtime.TimeParserInterface, clock roundutil.Clock) (roundservice.UpdateRoundResult, error)
@@ -131,6 +132,14 @@ func (f *FakeService) UpdateDiscordEventID(ctx context.Context, guildID sharedty
 		return f.UpdateDiscordEventIDFunc(ctx, guildID, roundID, discordEventID)
 	}
 	return nil, nil
+}
+
+func (f *FakeService) CancelScheduledRoundStart(ctx context.Context, roundID sharedtypes.RoundID) error {
+	f.record("CancelScheduledRoundStart")
+	if f.CancelScheduledRoundStartFunc != nil {
+		return f.CancelScheduledRoundStartFunc(ctx, roundID)
+	}
+	return nil
 }
 
 // Update Round

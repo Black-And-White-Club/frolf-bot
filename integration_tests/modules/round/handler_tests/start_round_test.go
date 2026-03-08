@@ -41,6 +41,9 @@ func TestHandleRoundStarted(t *testing.T) {
 				if _, err := (realDB).UpdateRound(env.Ctx, env.DB, sharedtypes.GuildID("test-guild"), roundID, &roundtypes.Round{Title: roundtypes.Title("Test Round")}); err != nil {
 					t.Fatalf("Failed to set round title in DB: %v", err)
 				}
+				if err := realDB.UpdateRoundState(env.Ctx, env.DB, sharedtypes.GuildID("test-guild"), roundID, roundtypes.RoundStateUpcoming); err != nil {
+					t.Fatalf("Failed to set round state to upcoming in DB: %v", err)
+				}
 
 				payload := roundevents.RoundStartRequestedPayloadV1{
 					GuildID: sharedtypes.GuildID("test-guild"),
@@ -58,9 +61,9 @@ func TestHandleRoundStarted(t *testing.T) {
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{roundevents.RoundStartedDiscordV1},
+			expectedOutgoingTopics: []string{roundevents.RoundStartedDiscordV2},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
-				expectedTopic := roundevents.RoundStartedDiscordV1
+				expectedTopic := roundevents.RoundStartedDiscordV2
 				msgs := receivedMsgs[expectedTopic]
 				if len(msgs) == 0 {
 					t.Fatalf("Expected at least one message on topic %q, but received none", expectedTopic)

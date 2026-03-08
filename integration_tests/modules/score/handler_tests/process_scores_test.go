@@ -43,7 +43,7 @@ func validateProcessRoundScoresSuccess(t *testing.T, deps ScoreHandlerTestDeps, 
 		t.Fatalf("Failed to unmarshal request payload: %v", err)
 	}
 
-	expectedTopic := sharedevents.LeaderboardBatchTagAssignmentRequestedV1
+	expectedTopic := sharedevents.LeaderboardBatchTagAssignmentRequestedV2
 	msgs := receivedMsgs[expectedTopic]
 	if len(msgs) != 1 {
 		t.Fatalf("Expected 1 message on topic %q, got %d", expectedTopic, len(msgs))
@@ -148,7 +148,7 @@ func validateProcessRoundScoresFailure(t *testing.T, deps ScoreHandlerTestDeps, 
 			receivedMsg.Metadata.Get(middleware.CorrelationIDMetadataKey))
 	}
 
-	unexpectedTopic := sharedevents.LeaderboardBatchTagAssignmentRequestedV1
+	unexpectedTopic := sharedevents.LeaderboardBatchTagAssignmentRequestedV2
 	if len(receivedMsgs[unexpectedTopic]) > 0 {
 		t.Errorf("Expected no messages on topic %q, but received %d", unexpectedTopic, len(receivedMsgs[unexpectedTopic]))
 	}
@@ -197,7 +197,7 @@ func TestHandleProcessRoundScoresRequest(t *testing.T) {
 			validateFn: func(t *testing.T, deps ScoreHandlerTestDeps, incomingMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
 				validateProcessRoundScoresSuccess(t, deps, incomingMsg, receivedMsgs)
 			},
-			expectedOutgoingTopics: []string{sharedevents.LeaderboardBatchTagAssignmentRequestedV1},
+			expectedOutgoingTopics: []string{sharedevents.LeaderboardBatchTagAssignmentRequestedV2},
 			expectHandlerError:     false,
 			timeout:                10 * time.Second,
 		},

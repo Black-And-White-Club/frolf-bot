@@ -255,50 +255,60 @@ func TestRoundService_ImportProcessing(t *testing.T) {
 }
 
 func TestRoundService_IngestNormalizedScorecard_UsesBatchLookup(t *testing.T) {
-	ctx := context.Background()
-	guildID := sharedtypes.GuildID("guild-123")
-	roundID := sharedtypes.RoundID(uuid.New())
-
-	lookup := &batchLookupStub{
-		resolved: map[string]sharedtypes.DiscordID{
-			"alice": "alice-id",
-		},
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
 	}
 
-	service := &RoundService{
-		repo:            NewFakeRepo(),
-		userLookup:      lookup,
-		logger:          loggerfrolfbot.NoOpLogger,
-		tracer:          noop.NewTracerProvider().Tracer("test"),
-		metrics:         &roundmetrics.NoOpMetrics{},
-		importerMetrics: importermetrics.NewNoOpMetrics(),
-	}
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			ctx := context.Background()
+			guildID := sharedtypes.GuildID("guild-123")
+			roundID := sharedtypes.RoundID(uuid.New())
 
-	req := roundtypes.ImportIngestScorecardInput{
-		GuildID:  guildID,
-		RoundID:  roundID,
-		ImportID: "import-123",
-		NormalizedData: roundtypes.NormalizedScorecard{
-			Mode: sharedtypes.RoundModeSingles,
-			Players: []roundtypes.NormalizedPlayer{
-				{DisplayName: "Alice", Total: 54},
-				{DisplayName: "Bob", Total: 60},
-			},
-		},
-	}
+			lookup := &batchLookupStub{
+				resolved: map[string]sharedtypes.DiscordID{
+					"alice": "alice-id",
+				},
+			}
 
-	res, err := service.IngestNormalizedScorecard(ctx, req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if res.Failure != nil {
-		t.Fatalf("unexpected failure: %v", *res.Failure)
-	}
-	if lookup.batchCalls != 1 {
-		t.Fatalf("expected one batch lookup call, got %d", lookup.batchCalls)
-	}
-	if lookup.singleLookupCalls != 0 {
-		t.Fatalf("expected no single-name lookup calls, got %d", lookup.singleLookupCalls)
+			service := &RoundService{
+				repo:            NewFakeRepo(),
+				userLookup:      lookup,
+				logger:          loggerfrolfbot.NoOpLogger,
+				tracer:          noop.NewTracerProvider().Tracer("test"),
+				metrics:         &roundmetrics.NoOpMetrics{},
+				importerMetrics: importermetrics.NewNoOpMetrics(),
+			}
+
+			req := roundtypes.ImportIngestScorecardInput{
+				GuildID:  guildID,
+				RoundID:  roundID,
+				ImportID: "import-123",
+				NormalizedData: roundtypes.NormalizedScorecard{
+					Mode: sharedtypes.RoundModeSingles,
+					Players: []roundtypes.NormalizedPlayer{
+						{DisplayName: "Alice", Total: 54},
+						{DisplayName: "Bob", Total: 60},
+					},
+				},
+			}
+
+			res, err := service.IngestNormalizedScorecard(ctx, req)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if res.Failure != nil {
+				t.Fatalf("unexpected failure: %v", *res.Failure)
+			}
+			if lookup.batchCalls != 1 {
+				t.Fatalf("expected one batch lookup call, got %d", lookup.batchCalls)
+			}
+			if lookup.singleLookupCalls != 0 {
+				t.Fatalf("expected no single-name lookup calls, got %d", lookup.singleLookupCalls)
+			}
+		})
 	}
 }
 
@@ -337,282 +347,292 @@ func (b *batchLookupStub) FindByPartialUDiscName(ctx context.Context, db bun.IDB
 }
 
 func TestRoundService_HoleScorePassthrough(t *testing.T) {
-	ctx := context.Background()
-	guildID := sharedtypes.GuildID("guild-holes")
-	roundID := sharedtypes.RoundID(uuid.New())
-	importID := "import-holes"
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
+	}
 
-	holes9 := []int{3, 3, 4, 3, 5, 5, 2, 4, 4}
-	par9 := []int{3, 4, 3, 3, 4, 5, 3, 4, 3}
-	partial := []int{3, 4, 3}
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			ctx := context.Background()
+			guildID := sharedtypes.GuildID("guild-holes")
+			roundID := sharedtypes.RoundID(uuid.New())
+			importID := "import-holes"
 
-	t.Run("Normalize/Singles - HoleScores cloned into NormalizedPlayer", func(t *testing.T) {
-		svc := &RoundService{
-			logger:          loggerfrolfbot.NoOpLogger,
-			tracer:          noop.NewTracerProvider().Tracer("test"),
-			metrics:         &roundmetrics.NoOpMetrics{},
-			importerMetrics: importermetrics.NewNoOpMetrics(),
-		}
-		meta := roundtypes.Metadata{GuildID: guildID, RoundID: roundID, ImportID: importID}
-		data := &roundtypes.ParsedScorecard{
-			Mode: sharedtypes.RoundModeSingles,
-			PlayerScores: []roundtypes.PlayerScoreRow{
-				{PlayerName: "Alice", Total: 33, HoleScores: holes9},
-			},
-		}
+			holes9 := []int{3, 3, 4, 3, 5, 5, 2, 4, 4}
+			par9 := []int{3, 4, 3, 3, 4, 5, 3, 4, 3}
+			partial := []int{3, 4, 3}
 
-		res, _ := svc.NormalizeParsedScorecard(ctx, data, meta)
-		if res.Success == nil {
-			t.Fatalf("expected success, got failure: %v", res.Failure)
-		}
-		players := (*res.Success).Players
-		if len(players) != 1 {
-			t.Fatalf("expected 1 player, got %d", len(players))
-		}
-		if len(players[0].HoleScores) != 9 {
-			t.Errorf("expected 9 hole scores, got %d", len(players[0].HoleScores))
-		}
-		for i, v := range holes9 {
-			if players[0].HoleScores[i] != v {
-				t.Errorf("hole %d: want %d, got %d", i+1, v, players[0].HoleScores[i])
-			}
-		}
-	})
+			t.Run("Normalize/Singles - HoleScores cloned into NormalizedPlayer", func(t *testing.T) {
+				svc := &RoundService{
+					logger:          loggerfrolfbot.NoOpLogger,
+					tracer:          noop.NewTracerProvider().Tracer("test"),
+					metrics:         &roundmetrics.NoOpMetrics{},
+					importerMetrics: importermetrics.NewNoOpMetrics(),
+				}
+				meta := roundtypes.Metadata{GuildID: guildID, RoundID: roundID, ImportID: importID}
+				data := &roundtypes.ParsedScorecard{
+					Mode: sharedtypes.RoundModeSingles,
+					PlayerScores: []roundtypes.PlayerScoreRow{
+						{PlayerName: "Alice", Total: 33, HoleScores: holes9},
+					},
+				}
 
-	t.Run("Normalize/Singles - Partial HoleScores cloned as-is", func(t *testing.T) {
-		svc := &RoundService{
-			logger:          loggerfrolfbot.NoOpLogger,
-			tracer:          noop.NewTracerProvider().Tracer("test"),
-			metrics:         &roundmetrics.NoOpMetrics{},
-			importerMetrics: importermetrics.NewNoOpMetrics(),
-		}
-		meta := roundtypes.Metadata{GuildID: guildID, RoundID: roundID, ImportID: importID}
-		data := &roundtypes.ParsedScorecard{
-			Mode: sharedtypes.RoundModeSingles,
-			PlayerScores: []roundtypes.PlayerScoreRow{
-				{PlayerName: "Alice", Total: 10, HoleScores: partial},
-			},
-		}
+				res, _ := svc.NormalizeParsedScorecard(ctx, data, meta)
+				if res.Success == nil {
+					t.Fatalf("expected success, got failure: %v", res.Failure)
+				}
+				players := (*res.Success).Players
+				if len(players) != 1 {
+					t.Fatalf("expected 1 player, got %d", len(players))
+				}
+				if len(players[0].HoleScores) != 9 {
+					t.Errorf("expected 9 hole scores, got %d", len(players[0].HoleScores))
+				}
+				for i, v := range holes9 {
+					if players[0].HoleScores[i] != v {
+						t.Errorf("hole %d: want %d, got %d", i+1, v, players[0].HoleScores[i])
+					}
+				}
+			})
 
-		res, _ := svc.NormalizeParsedScorecard(ctx, data, meta)
-		if res.Success == nil {
-			t.Fatalf("expected success")
-		}
-		if len((*res.Success).Players[0].HoleScores) != 3 {
-			t.Errorf("expected 3 partial hole scores, got %d", len((*res.Success).Players[0].HoleScores))
-		}
-	})
+			t.Run("Normalize/Singles - Partial HoleScores cloned as-is", func(t *testing.T) {
+				svc := &RoundService{
+					logger:          loggerfrolfbot.NoOpLogger,
+					tracer:          noop.NewTracerProvider().Tracer("test"),
+					metrics:         &roundmetrics.NoOpMetrics{},
+					importerMetrics: importermetrics.NewNoOpMetrics(),
+				}
+				meta := roundtypes.Metadata{GuildID: guildID, RoundID: roundID, ImportID: importID}
+				data := &roundtypes.ParsedScorecard{
+					Mode: sharedtypes.RoundModeSingles,
+					PlayerScores: []roundtypes.PlayerScoreRow{
+						{PlayerName: "Alice", Total: 10, HoleScores: partial},
+					},
+				}
 
-	t.Run("Normalize/Doubles - HoleScores cloned into NormalizedTeam", func(t *testing.T) {
-		svc := &RoundService{
-			logger:          loggerfrolfbot.NoOpLogger,
-			tracer:          noop.NewTracerProvider().Tracer("test"),
-			metrics:         &roundmetrics.NoOpMetrics{},
-			importerMetrics: importermetrics.NewNoOpMetrics(),
-		}
-		meta := roundtypes.Metadata{GuildID: guildID, RoundID: roundID, ImportID: importID}
-		data := &roundtypes.ParsedScorecard{
-			Mode: sharedtypes.RoundModeDoubles,
-			PlayerScores: []roundtypes.PlayerScoreRow{
-				{TeamNames: []string{"Alice", "Bob"}, Total: 33, HoleScores: holes9},
-			},
-		}
+				res, _ := svc.NormalizeParsedScorecard(ctx, data, meta)
+				if res.Success == nil {
+					t.Fatalf("expected success")
+				}
+				if len((*res.Success).Players[0].HoleScores) != 3 {
+					t.Errorf("expected 3 partial hole scores, got %d", len((*res.Success).Players[0].HoleScores))
+				}
+			})
 
-		res, _ := svc.NormalizeParsedScorecard(ctx, data, meta)
-		if res.Success == nil {
-			t.Fatalf("expected success")
-		}
-		teams := (*res.Success).Teams
-		if len(teams) != 1 {
-			t.Fatalf("expected 1 team")
-		}
-		if len(teams[0].HoleScores) != 9 {
-			t.Errorf("expected 9 team hole scores, got %d", len(teams[0].HoleScores))
-		}
-	})
+			t.Run("Normalize/Doubles - HoleScores cloned into NormalizedTeam", func(t *testing.T) {
+				svc := &RoundService{
+					logger:          loggerfrolfbot.NoOpLogger,
+					tracer:          noop.NewTracerProvider().Tracer("test"),
+					metrics:         &roundmetrics.NoOpMetrics{},
+					importerMetrics: importermetrics.NewNoOpMetrics(),
+				}
+				meta := roundtypes.Metadata{GuildID: guildID, RoundID: roundID, ImportID: importID}
+				data := &roundtypes.ParsedScorecard{
+					Mode: sharedtypes.RoundModeDoubles,
+					PlayerScores: []roundtypes.PlayerScoreRow{
+						{TeamNames: []string{"Alice", "Bob"}, Total: 33, HoleScores: holes9},
+					},
+				}
 
-	t.Run("Normalize - ParScores cloned into NormalizedScorecard", func(t *testing.T) {
-		svc := &RoundService{
-			logger:          loggerfrolfbot.NoOpLogger,
-			tracer:          noop.NewTracerProvider().Tracer("test"),
-			metrics:         &roundmetrics.NoOpMetrics{},
-			importerMetrics: importermetrics.NewNoOpMetrics(),
-		}
-		meta := roundtypes.Metadata{GuildID: guildID, RoundID: roundID, ImportID: importID}
-		data := &roundtypes.ParsedScorecard{
-			Mode:         sharedtypes.RoundModeSingles,
-			ParScores:    par9,
-			PlayerScores: []roundtypes.PlayerScoreRow{{PlayerName: "Alice", Total: 33}},
-		}
+				res, _ := svc.NormalizeParsedScorecard(ctx, data, meta)
+				if res.Success == nil {
+					t.Fatalf("expected success")
+				}
+				teams := (*res.Success).Teams
+				if len(teams) != 1 {
+					t.Fatalf("expected 1 team")
+				}
+				if len(teams[0].HoleScores) != 9 {
+					t.Errorf("expected 9 team hole scores, got %d", len(teams[0].HoleScores))
+				}
+			})
 
-		res, _ := svc.NormalizeParsedScorecard(ctx, data, meta)
-		if res.Success == nil {
-			t.Fatalf("expected success")
-		}
-		if len((*res.Success).ParScores) != 9 {
-			t.Errorf("expected 9 par scores, got %d", len((*res.Success).ParScores))
-		}
-		for i, v := range par9 {
-			if (*res.Success).ParScores[i] != v {
-				t.Errorf("par hole %d: want %d, got %d", i+1, v, (*res.Success).ParScores[i])
-			}
-		}
-	})
+			t.Run("Normalize - ParScores cloned into NormalizedScorecard", func(t *testing.T) {
+				svc := &RoundService{
+					logger:          loggerfrolfbot.NoOpLogger,
+					tracer:          noop.NewTracerProvider().Tracer("test"),
+					metrics:         &roundmetrics.NoOpMetrics{},
+					importerMetrics: importermetrics.NewNoOpMetrics(),
+				}
+				meta := roundtypes.Metadata{GuildID: guildID, RoundID: roundID, ImportID: importID}
+				data := &roundtypes.ParsedScorecard{
+					Mode:         sharedtypes.RoundModeSingles,
+					ParScores:    par9,
+					PlayerScores: []roundtypes.PlayerScoreRow{{PlayerName: "Alice", Total: 33}},
+				}
 
-	t.Run("Ingest/Singles - HoleScores passed to ScoreInfo for matched player", func(t *testing.T) {
-		lookup := &batchLookupStub{
-			resolved: map[string]sharedtypes.DiscordID{"alice": "alice-id"},
-		}
-		svc := &RoundService{
-			repo:            NewFakeRepo(),
-			userLookup:      lookup,
-			logger:          loggerfrolfbot.NoOpLogger,
-			tracer:          noop.NewTracerProvider().Tracer("test"),
-			metrics:         &roundmetrics.NoOpMetrics{},
-			importerMetrics: importermetrics.NewNoOpMetrics(),
-		}
-		req := roundtypes.ImportIngestScorecardInput{
-			GuildID:  guildID,
-			RoundID:  roundID,
-			ImportID: importID,
-			NormalizedData: roundtypes.NormalizedScorecard{
-				Mode: sharedtypes.RoundModeSingles,
-				Players: []roundtypes.NormalizedPlayer{
-					{DisplayName: "Alice", Total: 33, HoleScores: holes9},
-				},
-			},
-		}
+				res, _ := svc.NormalizeParsedScorecard(ctx, data, meta)
+				if res.Success == nil {
+					t.Fatalf("expected success")
+				}
+				if len((*res.Success).ParScores) != 9 {
+					t.Errorf("expected 9 par scores, got %d", len((*res.Success).ParScores))
+				}
+				for i, v := range par9 {
+					if (*res.Success).ParScores[i] != v {
+						t.Errorf("par hole %d: want %d, got %d", i+1, v, (*res.Success).ParScores[i])
+					}
+				}
+			})
 
-		res, err := svc.IngestNormalizedScorecard(ctx, req)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if res.Success == nil {
-			t.Fatalf("expected success, got failure")
-		}
-		scores := (*res.Success).Scores
-		if len(scores) != 1 {
-			t.Fatalf("expected 1 score, got %d", len(scores))
-		}
-		if len(scores[0].HoleScores) != 9 {
-			t.Errorf("expected 9 hole scores in ScoreInfo, got %d", len(scores[0].HoleScores))
-		}
-	})
+			t.Run("Ingest/Singles - HoleScores passed to ScoreInfo for matched player", func(t *testing.T) {
+				lookup := &batchLookupStub{
+					resolved: map[string]sharedtypes.DiscordID{"alice": "alice-id"},
+				}
+				svc := &RoundService{
+					repo:            NewFakeRepo(),
+					userLookup:      lookup,
+					logger:          loggerfrolfbot.NoOpLogger,
+					tracer:          noop.NewTracerProvider().Tracer("test"),
+					metrics:         &roundmetrics.NoOpMetrics{},
+					importerMetrics: importermetrics.NewNoOpMetrics(),
+				}
+				req := roundtypes.ImportIngestScorecardInput{
+					GuildID:  guildID,
+					RoundID:  roundID,
+					ImportID: importID,
+					NormalizedData: roundtypes.NormalizedScorecard{
+						Mode: sharedtypes.RoundModeSingles,
+						Players: []roundtypes.NormalizedPlayer{
+							{DisplayName: "Alice", Total: 33, HoleScores: holes9},
+						},
+					},
+				}
 
-	t.Run("Ingest/Singles - Partial HoleScores pass through unchanged", func(t *testing.T) {
-		lookup := &batchLookupStub{
-			resolved: map[string]sharedtypes.DiscordID{"alice": "alice-id"},
-		}
-		svc := &RoundService{
-			repo:            NewFakeRepo(),
-			userLookup:      lookup,
-			logger:          loggerfrolfbot.NoOpLogger,
-			tracer:          noop.NewTracerProvider().Tracer("test"),
-			metrics:         &roundmetrics.NoOpMetrics{},
-			importerMetrics: importermetrics.NewNoOpMetrics(),
-		}
-		req := roundtypes.ImportIngestScorecardInput{
-			GuildID:  guildID,
-			RoundID:  roundID,
-			ImportID: importID,
-			NormalizedData: roundtypes.NormalizedScorecard{
-				Mode: sharedtypes.RoundModeSingles,
-				Players: []roundtypes.NormalizedPlayer{
-					{DisplayName: "Alice", Total: 10, HoleScores: partial},
-				},
-			},
-		}
+				res, err := svc.IngestNormalizedScorecard(ctx, req)
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if res.Success == nil {
+					t.Fatalf("expected success, got failure")
+				}
+				scores := (*res.Success).Scores
+				if len(scores) != 1 {
+					t.Fatalf("expected 1 score, got %d", len(scores))
+				}
+				if len(scores[0].HoleScores) != 9 {
+					t.Errorf("expected 9 hole scores in ScoreInfo, got %d", len(scores[0].HoleScores))
+				}
+			})
 
-		res, _ := svc.IngestNormalizedScorecard(ctx, req)
-		if res.Success == nil {
-			t.Fatalf("expected success")
-		}
-		if len((*res.Success).Scores[0].HoleScores) != 3 {
-			t.Errorf("expected 3 partial hole scores, got %d", len((*res.Success).Scores[0].HoleScores))
-		}
-	})
+			t.Run("Ingest/Singles - Partial HoleScores pass through unchanged", func(t *testing.T) {
+				lookup := &batchLookupStub{
+					resolved: map[string]sharedtypes.DiscordID{"alice": "alice-id"},
+				}
+				svc := &RoundService{
+					repo:            NewFakeRepo(),
+					userLookup:      lookup,
+					logger:          loggerfrolfbot.NoOpLogger,
+					tracer:          noop.NewTracerProvider().Tracer("test"),
+					metrics:         &roundmetrics.NoOpMetrics{},
+					importerMetrics: importermetrics.NewNoOpMetrics(),
+				}
+				req := roundtypes.ImportIngestScorecardInput{
+					GuildID:  guildID,
+					RoundID:  roundID,
+					ImportID: importID,
+					NormalizedData: roundtypes.NormalizedScorecard{
+						Mode: sharedtypes.RoundModeSingles,
+						Players: []roundtypes.NormalizedPlayer{
+							{DisplayName: "Alice", Total: 10, HoleScores: partial},
+						},
+					},
+				}
 
-	t.Run("Ingest/Singles - Guest player gets HoleScores", func(t *testing.T) {
-		lookup := &batchLookupStub{
-			resolved: map[string]sharedtypes.DiscordID{}, // no matches → guest
-		}
-		svc := &RoundService{
-			repo:            NewFakeRepo(),
-			userLookup:      lookup,
-			logger:          loggerfrolfbot.NoOpLogger,
-			tracer:          noop.NewTracerProvider().Tracer("test"),
-			metrics:         &roundmetrics.NoOpMetrics{},
-			importerMetrics: importermetrics.NewNoOpMetrics(),
-		}
-		req := roundtypes.ImportIngestScorecardInput{
-			GuildID:           guildID,
-			RoundID:           roundID,
-			ImportID:          importID,
-			AllowGuestPlayers: true,
-			NormalizedData: roundtypes.NormalizedScorecard{
-				Mode: sharedtypes.RoundModeSingles,
-				Players: []roundtypes.NormalizedPlayer{
-					{DisplayName: "Guest McGee", Total: 38, HoleScores: holes9},
-				},
-			},
-		}
+				res, _ := svc.IngestNormalizedScorecard(ctx, req)
+				if res.Success == nil {
+					t.Fatalf("expected success")
+				}
+				if len((*res.Success).Scores[0].HoleScores) != 3 {
+					t.Errorf("expected 3 partial hole scores, got %d", len((*res.Success).Scores[0].HoleScores))
+				}
+			})
 
-		res, _ := svc.IngestNormalizedScorecard(ctx, req)
-		if res.Success == nil {
-			t.Fatalf("expected success")
-		}
-		scores := (*res.Success).Scores
-		if len(scores) != 1 {
-			t.Fatalf("expected 1 score entry")
-		}
-		if scores[0].UserID != "" {
-			t.Errorf("expected guest (empty UserID), got %q", scores[0].UserID)
-		}
-		if len(scores[0].HoleScores) != 9 {
-			t.Errorf("expected 9 hole scores on guest ScoreInfo, got %d", len(scores[0].HoleScores))
-		}
-	})
+			t.Run("Ingest/Singles - Guest player gets HoleScores", func(t *testing.T) {
+				lookup := &batchLookupStub{
+					resolved: map[string]sharedtypes.DiscordID{}, // no matches → guest
+				}
+				svc := &RoundService{
+					repo:            NewFakeRepo(),
+					userLookup:      lookup,
+					logger:          loggerfrolfbot.NoOpLogger,
+					tracer:          noop.NewTracerProvider().Tracer("test"),
+					metrics:         &roundmetrics.NoOpMetrics{},
+					importerMetrics: importermetrics.NewNoOpMetrics(),
+				}
+				req := roundtypes.ImportIngestScorecardInput{
+					GuildID:           guildID,
+					RoundID:           roundID,
+					ImportID:          importID,
+					AllowGuestPlayers: true,
+					NormalizedData: roundtypes.NormalizedScorecard{
+						Mode: sharedtypes.RoundModeSingles,
+						Players: []roundtypes.NormalizedPlayer{
+							{DisplayName: "Guest McGee", Total: 38, HoleScores: holes9},
+						},
+					},
+				}
 
-	t.Run("Ingest - ParScores returned in IngestScorecardResult", func(t *testing.T) {
-		lookup := &batchLookupStub{
-			resolved: map[string]sharedtypes.DiscordID{"alice": "alice-id"},
-		}
-		svc := &RoundService{
-			repo:            NewFakeRepo(),
-			userLookup:      lookup,
-			logger:          loggerfrolfbot.NoOpLogger,
-			tracer:          noop.NewTracerProvider().Tracer("test"),
-			metrics:         &roundmetrics.NoOpMetrics{},
-			importerMetrics: importermetrics.NewNoOpMetrics(),
-		}
-		req := roundtypes.ImportIngestScorecardInput{
-			GuildID:  guildID,
-			RoundID:  roundID,
-			ImportID: importID,
-			NormalizedData: roundtypes.NormalizedScorecard{
-				Mode:      sharedtypes.RoundModeSingles,
-				ParScores: par9,
-				Players: []roundtypes.NormalizedPlayer{
-					{DisplayName: "Alice", Total: 33},
-				},
-			},
-		}
+				res, _ := svc.IngestNormalizedScorecard(ctx, req)
+				if res.Success == nil {
+					t.Fatalf("expected success")
+				}
+				scores := (*res.Success).Scores
+				if len(scores) != 1 {
+					t.Fatalf("expected 1 score entry")
+				}
+				if scores[0].UserID != "" {
+					t.Errorf("expected guest (empty UserID), got %q", scores[0].UserID)
+				}
+				if len(scores[0].HoleScores) != 9 {
+					t.Errorf("expected 9 hole scores on guest ScoreInfo, got %d", len(scores[0].HoleScores))
+				}
+			})
 
-		res, err := svc.IngestNormalizedScorecard(ctx, req)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if res.Success == nil {
-			t.Fatalf("expected success")
-		}
-		result := *res.Success
-		if len(result.ParScores) != 9 {
-			t.Errorf("expected 9 par scores in result, got %d", len(result.ParScores))
-		}
-		for i, v := range par9 {
-			if result.ParScores[i] != v {
-				t.Errorf("par hole %d: want %d, got %d", i+1, v, result.ParScores[i])
-			}
-		}
-	})
+			t.Run("Ingest - ParScores returned in IngestScorecardResult", func(t *testing.T) {
+				lookup := &batchLookupStub{
+					resolved: map[string]sharedtypes.DiscordID{"alice": "alice-id"},
+				}
+				svc := &RoundService{
+					repo:            NewFakeRepo(),
+					userLookup:      lookup,
+					logger:          loggerfrolfbot.NoOpLogger,
+					tracer:          noop.NewTracerProvider().Tracer("test"),
+					metrics:         &roundmetrics.NoOpMetrics{},
+					importerMetrics: importermetrics.NewNoOpMetrics(),
+				}
+				req := roundtypes.ImportIngestScorecardInput{
+					GuildID:  guildID,
+					RoundID:  roundID,
+					ImportID: importID,
+					NormalizedData: roundtypes.NormalizedScorecard{
+						Mode:      sharedtypes.RoundModeSingles,
+						ParScores: par9,
+						Players: []roundtypes.NormalizedPlayer{
+							{DisplayName: "Alice", Total: 33},
+						},
+					},
+				}
+
+				res, err := svc.IngestNormalizedScorecard(ctx, req)
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if res.Success == nil {
+					t.Fatalf("expected success")
+				}
+				result := *res.Success
+				if len(result.ParScores) != 9 {
+					t.Errorf("expected 9 par scores in result, got %d", len(result.ParScores))
+				}
+				for i, v := range par9 {
+					if result.ParScores[i] != v {
+						t.Errorf("par hole %d: want %d, got %d", i+1, v, result.ParScores[i])
+					}
+				}
+			})
+		})
+	}
 }

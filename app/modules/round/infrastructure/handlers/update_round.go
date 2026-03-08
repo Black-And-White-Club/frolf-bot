@@ -244,7 +244,7 @@ func (h *RoundHandlers) HandleRoundUpdateValidated(
 
 		results := []handlerwrapper.Result{
 			{
-				Topic:   roundevents.RoundUpdatedV1,
+				Topic:   roundevents.RoundUpdatedV2,
 				Payload: updatedPayload,
 			},
 		}
@@ -254,7 +254,7 @@ func (h *RoundHandlers) HandleRoundUpdateValidated(
 		if guildID == "" && updatedPayload.Round.GuildID != "" {
 			guildID = updatedPayload.Round.GuildID
 		}
-		results = h.addParallelIdentityResults(ctx, results, roundevents.RoundUpdatedV1, guildID)
+		results = h.addParallelIdentityResults(ctx, results, roundevents.RoundUpdatedV2, guildID)
 
 		// Check if we need to reschedule (only for time-sensitive fields)
 		if h.shouldRescheduleEvents(payload.RoundUpdateRequestPayload) {

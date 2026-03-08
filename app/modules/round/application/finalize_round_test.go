@@ -5,7 +5,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"reflect"
+	"slices"
 	"testing"
 
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
@@ -229,7 +229,7 @@ func TestRoundService_FinalizeRound(t *testing.T) {
 			tt.assertFunc(t, res)
 
 			if tt.wantTrace != nil {
-				if !reflect.DeepEqual(repo.Trace(), tt.wantTrace) {
+				if !slices.Equal(repo.Trace(), tt.wantTrace) {
 					t.Errorf("expected trace %v, got %v", tt.wantTrace, repo.Trace())
 				}
 			}

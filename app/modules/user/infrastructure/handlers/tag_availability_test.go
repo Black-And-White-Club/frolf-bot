@@ -64,8 +64,8 @@ func TestUserHandlers_HandleTagAvailable(t *testing.T) {
 			wantTopic: userevents.UserCreatedV1,
 			wantErr:   false,
 			validate: func(t *testing.T, res []handlerwrapper.Result) {
-				if res[1].Topic != sharedevents.LeaderboardBatchTagAssignmentRequestedV1 {
-					t.Fatalf("expected topic %s, got %s", sharedevents.LeaderboardBatchTagAssignmentRequestedV1, res[1].Topic)
+				if res[1].Topic != sharedevents.LeaderboardBatchTagAssignmentRequestedV2 {
+					t.Fatalf("expected topic %s, got %s", sharedevents.LeaderboardBatchTagAssignmentRequestedV2, res[1].Topic)
 				}
 				payload, ok := res[1].Payload.(*sharedevents.BatchTagAssignmentRequestedPayloadV1)
 				if !ok {

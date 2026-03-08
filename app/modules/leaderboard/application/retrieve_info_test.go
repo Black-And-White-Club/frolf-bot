@@ -236,23 +236,33 @@ func TestLeaderboardService_CheckTagAvailability(t *testing.T) {
 }
 
 func TestLeaderboardService_enrichWithSeasonData_RepoErrorDoesNotFail(t *testing.T) {
-	repo := NewFakeLeaderboardRepo()
-	repo.GetSeasonStandingsFunc = func(ctx context.Context, db bun.IDB, guildID string, seasonID string, memberIDs []sharedtypes.DiscordID) (map[sharedtypes.DiscordID]*leaderboarddb.SeasonStanding, error) {
-		return nil, errors.New("season standings unavailable")
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
 	}
 
-	s := &LeaderboardService{
-		repo:    repo,
-		logger:  loggerfrolfbot.NoOpLogger,
-		metrics: &leaderboardmetrics.NoOpMetrics{},
-		tracer:  noop.NewTracerProvider().Tracer("test"),
-	}
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			repo := NewFakeLeaderboardRepo()
+			repo.GetSeasonStandingsFunc = func(ctx context.Context, db bun.IDB, guildID string, seasonID string, memberIDs []sharedtypes.DiscordID) (map[sharedtypes.DiscordID]*leaderboarddb.SeasonStanding, error) {
+				return nil, errors.New("season standings unavailable")
+			}
 
-	entries := []leaderboardtypes.LeaderboardEntry{
-		{UserID: "user1", TagNumber: 1},
-	}
-	err := s.enrichWithSeasonData(context.Background(), nil, sharedtypes.GuildID("guild-1"), "season-1", entries)
-	if err != nil {
-		t.Fatalf("expected nil error when enrichment fails, got %v", err)
+			s := &LeaderboardService{
+				repo:    repo,
+				logger:  loggerfrolfbot.NoOpLogger,
+				metrics: &leaderboardmetrics.NoOpMetrics{},
+				tracer:  noop.NewTracerProvider().Tracer("test"),
+			}
+
+			entries := []leaderboardtypes.LeaderboardEntry{
+				{UserID: "user1", TagNumber: 1},
+			}
+			err := s.enrichWithSeasonData(context.Background(), nil, sharedtypes.GuildID("guild-1"), "season-1", entries)
+			if err != nil {
+				t.Fatalf("expected nil error when enrichment fails, got %v", err)
+			}
+		})
 	}
 }

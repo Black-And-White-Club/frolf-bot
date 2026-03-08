@@ -20,22 +20,32 @@ import (
 // -----------------------------------------------------------------------------
 
 func TestNewLeaderboardService(t *testing.T) {
-	fakeRepo := NewFakeLeaderboardRepo()
-	testHandler := loggerfrolfbot.NewTestHandler()
-	logger := slog.New(testHandler)
-	mockMetrics := &leaderboardmetrics.NoOpMetrics{}
-	tracer := noop.NewTracerProvider().Tracer("test")
-
-	service := NewLeaderboardService(nil, fakeRepo, logger, mockMetrics, tracer)
-
-	if service == nil {
-		t.Fatalf("NewLeaderboardService returned nil")
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
 	}
-	if service.repo != fakeRepo {
-		t.Errorf("repo not correctly assigned")
-	}
-	if service.logger != logger {
-		t.Errorf("logger not correctly assigned")
+
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			fakeRepo := NewFakeLeaderboardRepo()
+			testHandler := loggerfrolfbot.NewTestHandler()
+			logger := slog.New(testHandler)
+			mockMetrics := &leaderboardmetrics.NoOpMetrics{}
+			tracer := noop.NewTracerProvider().Tracer("test")
+
+			service := NewLeaderboardService(nil, fakeRepo, logger, mockMetrics, tracer)
+
+			if service == nil {
+				t.Fatalf("NewLeaderboardService returned nil")
+			}
+			if service.repo != fakeRepo {
+				t.Errorf("repo not correctly assigned")
+			}
+			if service.logger != logger {
+				t.Errorf("logger not correctly assigned")
+			}
+		})
 	}
 }
 
@@ -126,53 +136,73 @@ func Test_withTelemetry(t *testing.T) {
 }
 
 func Test_runInTx(t *testing.T) {
-	type Success = string
-	type Failure = string
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
+	}
 
-	t.Run("executes directly when db is nil", func(t *testing.T) {
-		s := &LeaderboardService{db: nil}
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			type Success = string
+			type Failure = string
 
-		res, err := runInTx(s, context.Background(), func(ctx context.Context, db bun.IDB) (results.OperationResult[Success, Failure], error) {
-			if db != nil {
-				return results.OperationResult[Success, Failure]{}, errors.New("expected nil db")
-			}
-			return results.SuccessResult[Success, Failure]("executed_no_tx"), nil
+			t.Run("executes directly when db is nil", func(t *testing.T) {
+				s := &LeaderboardService{db: nil}
+
+				res, err := runInTx(s, context.Background(), func(ctx context.Context, db bun.IDB) (results.OperationResult[Success, Failure], error) {
+					if db != nil {
+						return results.OperationResult[Success, Failure]{}, errors.New("expected nil db")
+					}
+					return results.SuccessResult[Success, Failure]("executed_no_tx"), nil
+				})
+
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if !res.IsSuccess() || *res.Success != "executed_no_tx" {
+					t.Errorf("expected success 'executed_no_tx', got %v", res.Success)
+				}
+			})
+
+			// Note: Testing actual transaction behavior (db.RunInTx) usually requires
+			// a mock DB (sqlmock) or an integration test.
+			// This test focuses on the nil-guard logic you provided.
 		})
-
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !res.IsSuccess() || *res.Success != "executed_no_tx" {
-			t.Errorf("expected success 'executed_no_tx', got %v", res.Success)
-		}
-	})
-
-	// Note: Testing actual transaction behavior (db.RunInTx) usually requires
-	// a mock DB (sqlmock) or an integration test.
-	// This test focuses on the nil-guard logic you provided.
+	}
 }
 
 func TestLeaderboardService_EnsureGuildLeaderboard(t *testing.T) {
-	ctx := context.Background()
-	guildID := sharedtypes.GuildID("test-guild")
-
-	fakeRepo := NewFakeLeaderboardRepo()
-	s := &LeaderboardService{
-		repo:    fakeRepo,
-		logger:  loggerfrolfbot.NoOpLogger,
-		metrics: &leaderboardmetrics.NoOpMetrics{},
-		tracer:  noop.NewTracerProvider().Tracer("test"),
-		db:      nil,
+	__codexTDCases := []struct {
+		name string
+	}{
+		{name: "default"},
 	}
 
-	res, err := s.EnsureGuildLeaderboard(ctx, guildID)
-	if err != nil {
-		t.Fatalf("EnsureGuildLeaderboard() unexpected error: %v", err)
-	}
-	if !res.IsSuccess() {
-		t.Fatalf("expected success result")
-	}
-	if *res.Success {
-		t.Fatalf("expected normalized no-op initialization to return false")
+	for _, __codexTDCase := range __codexTDCases {
+		t.Run(__codexTDCase.name, func(t *testing.T) {
+			ctx := context.Background()
+			guildID := sharedtypes.GuildID("test-guild")
+
+			fakeRepo := NewFakeLeaderboardRepo()
+			s := &LeaderboardService{
+				repo:    fakeRepo,
+				logger:  loggerfrolfbot.NoOpLogger,
+				metrics: &leaderboardmetrics.NoOpMetrics{},
+				tracer:  noop.NewTracerProvider().Tracer("test"),
+				db:      nil,
+			}
+
+			res, err := s.EnsureGuildLeaderboard(ctx, guildID)
+			if err != nil {
+				t.Fatalf("EnsureGuildLeaderboard() unexpected error: %v", err)
+			}
+			if !res.IsSuccess() {
+				t.Fatalf("expected success result")
+			}
+			if *res.Success {
+				t.Fatalf("expected normalized no-op initialization to return false")
+			}
+		})
 	}
 }

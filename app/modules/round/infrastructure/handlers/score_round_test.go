@@ -168,7 +168,7 @@ func TestRoundHandlers_HandleScoreUpdateValidated(t *testing.T) {
 			payload:         testPayload,
 			wantErr:         false,
 			wantResultLen:   1,
-			wantResultTopic: roundevents.RoundParticipantScoreUpdatedV1,
+			wantResultTopic: roundevents.RoundParticipantScoreUpdatedV2,
 		},
 		{
 			name: "Service returns failure",

@@ -72,7 +72,7 @@ func (h *LeaderboardHandlers) HandleTagSwapRequested(
 			}
 
 			return []handlerwrapper.Result{{
-				Topic: leaderboardevents.TagSwapProcessedV1,
+				Topic: leaderboardevents.TagSwapProcessedV2,
 				Payload: &leaderboardevents.TagSwapProcessedPayloadV1{
 					GuildID:     payload.GuildID,
 					RequestorID: payload.RequestorID,
@@ -91,5 +91,5 @@ func (h *LeaderboardHandlers) HandleTagSwapRequested(
 		{UserID: payload.RequestorID, TagNumber: targetTag},
 	}
 
-	return h.mapSuccessResults(payload.GuildID, payload.RequestorID, "manual-swap", requests, "tag_swap", replyTo), nil
+	return h.mapSuccessResults(ctx, payload.GuildID, payload.RequestorID, "manual-swap", requests, sharedtypes.ServiceUpdateSourceTagSwap, replyTo), nil
 }

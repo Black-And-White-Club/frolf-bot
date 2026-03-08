@@ -42,14 +42,14 @@ func TestHandleParticipantRemovalRequest(t *testing.T) {
 				}
 				msg := message.NewMessage(uuid.New().String(), payloadBytes)
 				msg.Metadata.Set(middleware.CorrelationIDMetadataKey, uuid.New().String())
-				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundParticipantRemovalRequestedV1, msg); err != nil {
+				if err := testutils.PublishMessage(t, env.EventBus, env.Ctx, roundevents.RoundParticipantRemovalRequestedV2, msg); err != nil {
 					t.Fatalf("Publish failed: %v", err)
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{roundevents.RoundParticipantRemovedV1},
+			expectedOutgoingTopics: []string{roundevents.RoundParticipantRemovedV2},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
-				msgs := receivedMsgs[roundevents.RoundParticipantRemovedV1]
+				msgs := receivedMsgs[roundevents.RoundParticipantRemovedV2]
 				if len(msgs) == 0 {
 					t.Fatalf("expected participant removed message, got none")
 				}

@@ -243,6 +243,12 @@ func (h *RoundHandlers) HandleParseScorecardRequest(ctx context.Context, payload
 	if req.FileURL == "" {
 		req.FileURL = payload.UDiscURL
 	}
+	// UDisc URL imports don't carry a FileName, but the parser factory needs
+	// a file extension to select the CSV parser. UDisc /leaderboard/export
+	// always returns CSV, so default to that when unset.
+	if req.FileName == "" && payload.UDiscURL != "" {
+		req.FileName = "scorecard.csv"
+	}
 
 	result, err := h.service.ParseScorecard(ctx, &req)
 	if err != nil {
@@ -441,7 +447,7 @@ func (h *RoundHandlers) HandleImportCompleted(
 	// Map Result to Event Payload
 	success := *res.Success
 
-	// 1. Emit RoundParticipantScoreUpdatedV1 for UI/Projections
+	// 1. Emit RoundParticipantScoreUpdatedV2 for UI/Projections
 	scoreUpdatedPayload := &roundevents.ParticipantScoreUpdatedPayloadV1{
 		GuildID:        success.GuildID,
 		RoundID:        success.RoundID,
@@ -469,7 +475,7 @@ func (h *RoundHandlers) HandleImportCompleted(
 
 	results := []handlerwrapper.Result{
 		{
-			Topic:   roundevents.RoundParticipantScoreUpdatedV1,
+			Topic:   roundevents.RoundParticipantScoreUpdatedV2,
 			Payload: scoreUpdatedPayload,
 		},
 		{
@@ -479,7 +485,7 @@ func (h *RoundHandlers) HandleImportCompleted(
 	}
 
 	// Add both legacy GuildID and internal ClubUUID scoped versions for PWA/NATS transition
-	results = h.addParallelIdentityResults(ctx, results, roundevents.RoundParticipantScoreUpdatedV1, success.GuildID)
+	results = h.addParallelIdentityResults(ctx, results, roundevents.RoundParticipantScoreUpdatedV2, success.GuildID)
 
 	return results, nil
 }

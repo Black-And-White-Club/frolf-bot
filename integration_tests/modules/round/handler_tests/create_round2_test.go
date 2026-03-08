@@ -119,11 +119,11 @@ func TestHandleRoundEntityCreated(t *testing.T) {
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{roundevents.RoundCreatedV1},
+			expectedOutgoingTopics: []string{roundevents.RoundCreatedV2},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
-				msgs := receivedMsgs[roundevents.RoundCreatedV1]
+				msgs := receivedMsgs[roundevents.RoundCreatedV2]
 				if len(msgs) == 0 {
-					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundCreatedV1)
+					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundCreatedV2)
 				}
 				var payload roundevents.RoundCreatedPayloadV1
 				if err := deps.TestHelpers.UnmarshalPayload(msgs[0], &payload); err != nil {
@@ -156,11 +156,11 @@ func TestHandleRoundEntityCreated(t *testing.T) {
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{roundevents.RoundCreatedV1},
+			expectedOutgoingTopics: []string{roundevents.RoundCreatedV2},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
-				msgs := receivedMsgs[roundevents.RoundCreatedV1]
+				msgs := receivedMsgs[roundevents.RoundCreatedV2]
 				if len(msgs) == 0 {
-					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundCreatedV1)
+					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundCreatedV2)
 				}
 			},
 			timeout: 10 * time.Second,
@@ -196,11 +196,11 @@ func TestHandleRoundEntityCreated(t *testing.T) {
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{roundevents.RoundCreatedV1},
+			expectedOutgoingTopics: []string{roundevents.RoundCreatedV2},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
-				msgs := receivedMsgs[roundevents.RoundCreatedV1]
+				msgs := receivedMsgs[roundevents.RoundCreatedV2]
 				if len(msgs) == 0 {
-					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundCreatedV1)
+					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundCreatedV2)
 				}
 			},
 			timeout: 10 * time.Second,
@@ -228,11 +228,11 @@ func TestHandleRoundEntityCreated(t *testing.T) {
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{roundevents.RoundCreatedV1},
+			expectedOutgoingTopics: []string{roundevents.RoundCreatedV2},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
-				msgs := receivedMsgs[roundevents.RoundCreatedV1]
+				msgs := receivedMsgs[roundevents.RoundCreatedV2]
 				if len(msgs) == 0 {
-					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundCreatedV1)
+					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundCreatedV2)
 				}
 			},
 			timeout: 10 * time.Second,
@@ -269,11 +269,11 @@ func TestHandleRoundEntityCreated(t *testing.T) {
 				}
 				return msg1
 			},
-			expectedOutgoingTopics: []string{roundevents.RoundCreatedV1},
+			expectedOutgoingTopics: []string{roundevents.RoundCreatedV2},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
-				msgs := receivedMsgs[roundevents.RoundCreatedV1]
+				msgs := receivedMsgs[roundevents.RoundCreatedV2]
 				if len(msgs) < 2 {
-					t.Fatalf("Expected at least 2 messages on topic %q, got %d", roundevents.RoundCreatedV1, len(msgs))
+					t.Fatalf("Expected at least 2 messages on topic %q, got %d", roundevents.RoundCreatedV2, len(msgs))
 				}
 			},
 			timeout: 10 * time.Second,
@@ -292,7 +292,7 @@ func TestHandleRoundEntityCreated(t *testing.T) {
 			},
 			expectedOutgoingTopics: []string{},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
-				created := receivedMsgs[roundevents.RoundCreatedV1]
+				created := receivedMsgs[roundevents.RoundCreatedV2]
 				failed := receivedMsgs[roundevents.RoundCreationFailedV1]
 				if len(created) > 0 || len(failed) > 0 {
 					t.Errorf("Expected no messages for invalid JSON, got created=%d, failed=%d", len(created), len(failed))
@@ -320,9 +320,9 @@ func TestHandleRoundEntityCreated(t *testing.T) {
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{roundevents.RoundCreatedV1},
+			expectedOutgoingTopics: []string{roundevents.RoundCreatedV2},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
-				msgs := receivedMsgs[roundevents.RoundCreatedV1]
+				msgs := receivedMsgs[roundevents.RoundCreatedV2]
 				if len(msgs) == 0 {
 					t.Fatalf("Expected at least one round.created message")
 				}
@@ -368,9 +368,9 @@ func TestHandleRoundEntityCreated(t *testing.T) {
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{roundevents.RoundCreatedV1},
+			expectedOutgoingTopics: []string{roundevents.RoundCreatedV2},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
-				msgs := receivedMsgs[roundevents.RoundCreatedV1]
+				msgs := receivedMsgs[roundevents.RoundCreatedV2]
 				if len(msgs) == 0 {
 					t.Fatalf("Expected round.created message")
 				}

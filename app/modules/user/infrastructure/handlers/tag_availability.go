@@ -68,7 +68,7 @@ func (h *UserHandlers) HandleTagAvailable(
 
 	if success.TagNumber != nil {
 		events = append(events, handlerwrapper.Result{
-			Topic: sharedevents.LeaderboardBatchTagAssignmentRequestedV1,
+			Topic: sharedevents.LeaderboardBatchTagAssignmentRequestedV2,
 			Payload: &sharedevents.BatchTagAssignmentRequestedPayloadV1{
 				ScopedGuildID:    sharedevents.ScopedGuildID{GuildID: payload.GuildID},
 				RequestingUserID: payload.UserID,

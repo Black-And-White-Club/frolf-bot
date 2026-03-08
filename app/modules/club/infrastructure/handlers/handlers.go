@@ -72,7 +72,7 @@ func (h *ClubHandlers) HandleClubInfoRequest(ctx context.Context, payload *clube
 			// Return successful response with null/empty fields to prevent client timeout
 			// This allows the PWA to see "Name Missing" instead of indefinite loading
 			return []handlerwrapper.Result{{
-				Topic: clubevents.ClubInfoResponseV1, // Will be overridden by dynamic reply logic below if needed
+				Topic: clubevents.ClubInfoResponseV2, // Will be overridden by dynamic reply logic below if needed
 				Payload: &clubevents.ClubInfoResponsePayloadV1{
 					UUID: payload.ClubUUID,
 					Name: "Club Not Found",
@@ -83,7 +83,7 @@ func (h *ClubHandlers) HandleClubInfoRequest(ctx context.Context, payload *clube
 	}
 
 	// Determine reply topic (dynamic ReplyTo takes precedence over static constant)
-	replyTopic := clubevents.ClubInfoResponseV1
+	replyTopic := clubevents.ClubInfoResponseV2
 	if rt, ok := ctx.Value(handlerwrapper.CtxKeyReplyTo).(string); ok && rt != "" {
 		replyTopic = rt
 	}

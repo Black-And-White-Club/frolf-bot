@@ -59,6 +59,7 @@ type Service interface {
 
 	// Schedule Round Events
 	ScheduleRoundEvents(ctx context.Context, req *roundtypes.ScheduleRoundEventsRequest) (ScheduleRoundEventsResult, error)
+	CancelScheduledRoundStart(ctx context.Context, roundID sharedtypes.RoundID) error
 
 	// Update Participant Tags
 	UpdateScheduledRoundsWithNewTags(ctx context.Context, req *roundtypes.UpdateScheduledRoundsWithNewTagsRequest) (UpdateScheduledRoundsWithNewTagsResult, error)
@@ -90,7 +91,11 @@ type ScheduleRoundEventsResult = results.OperationResult[*roundtypes.ScheduleRou
 type ScoreUpdateResult = results.OperationResult[*roundtypes.ScoreUpdateResult, error]
 type BulkScoreUpdateResult = results.OperationResult[*roundtypes.BulkScoreUpdateResult, error]
 type AllScoresSubmittedResult = results.OperationResult[*roundtypes.AllScoresSubmittedResult, error]
-type StartRoundResult = results.OperationResult[*roundtypes.Round, error]
+
+type StartRoundResult struct {
+	results.OperationResult[*roundtypes.Round, error]
+	AlreadyStarted bool
+}
 
 type ProcessRoundReminderRequest struct {
 	GuildID   sharedtypes.GuildID

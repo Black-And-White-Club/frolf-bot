@@ -45,11 +45,11 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{roundevents.RoundUpdatedV1},
+			expectedOutgoingTopics: []string{roundevents.RoundUpdatedV2},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
-				msgs := receivedMsgs[roundevents.RoundUpdatedV1]
+				msgs := receivedMsgs[roundevents.RoundUpdatedV2]
 				if len(msgs) == 0 {
-					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundUpdatedV1)
+					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundUpdatedV2)
 				}
 				var result roundevents.RoundEntityUpdatedPayloadV1
 				if err := deps.TestHelpers.UnmarshalPayload(msgs[0], &result); err != nil {
@@ -82,11 +82,11 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{roundevents.RoundUpdatedV1},
+			expectedOutgoingTopics: []string{roundevents.RoundUpdatedV2},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
-				msgs := receivedMsgs[roundevents.RoundUpdatedV1]
+				msgs := receivedMsgs[roundevents.RoundUpdatedV2]
 				if len(msgs) == 0 {
-					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundUpdatedV1)
+					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundUpdatedV2)
 				}
 				var result roundevents.RoundEntityUpdatedPayloadV1
 				if err := deps.TestHelpers.UnmarshalPayload(msgs[0], &result); err != nil {
@@ -119,11 +119,11 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{roundevents.RoundUpdatedV1},
+			expectedOutgoingTopics: []string{roundevents.RoundUpdatedV2},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
-				msgs := receivedMsgs[roundevents.RoundUpdatedV1]
+				msgs := receivedMsgs[roundevents.RoundUpdatedV2]
 				if len(msgs) == 0 {
-					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundUpdatedV1)
+					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundUpdatedV2)
 				}
 				var result roundevents.RoundEntityUpdatedPayloadV1
 				if err := deps.TestHelpers.UnmarshalPayload(msgs[0], &result); err != nil {
@@ -157,11 +157,11 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{roundevents.RoundUpdatedV1},
+			expectedOutgoingTopics: []string{roundevents.RoundUpdatedV2},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
-				msgs := receivedMsgs[roundevents.RoundUpdatedV1]
+				msgs := receivedMsgs[roundevents.RoundUpdatedV2]
 				if len(msgs) == 0 {
-					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundUpdatedV1)
+					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundUpdatedV2)
 				}
 				var result roundevents.RoundEntityUpdatedPayloadV1
 				if err := deps.TestHelpers.UnmarshalPayload(msgs[0], &result); err != nil {
@@ -194,11 +194,11 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{roundevents.RoundUpdatedV1},
+			expectedOutgoingTopics: []string{roundevents.RoundUpdatedV2},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
-				msgs := receivedMsgs[roundevents.RoundUpdatedV1]
+				msgs := receivedMsgs[roundevents.RoundUpdatedV2]
 				if len(msgs) == 0 {
-					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundUpdatedV1)
+					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundUpdatedV2)
 				}
 				var result roundevents.RoundEntityUpdatedPayloadV1
 				if err := deps.TestHelpers.UnmarshalPayload(msgs[0], &result); err != nil {
@@ -238,11 +238,11 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{roundevents.RoundUpdatedV1},
+			expectedOutgoingTopics: []string{roundevents.RoundUpdatedV2},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
-				msgs := receivedMsgs[roundevents.RoundUpdatedV1]
+				msgs := receivedMsgs[roundevents.RoundUpdatedV2]
 				if len(msgs) == 0 {
-					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundUpdatedV1)
+					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundUpdatedV2)
 				}
 				var result roundevents.RoundEntityUpdatedPayloadV1
 				if err := deps.TestHelpers.UnmarshalPayload(msgs[0], &result); err != nil {
@@ -277,11 +277,11 @@ func TestHandleRoundUpdateValidated(t *testing.T) {
 				}
 				return msg
 			},
-			expectedOutgoingTopics: []string{roundevents.RoundUpdatedV1},
+			expectedOutgoingTopics: []string{roundevents.RoundUpdatedV2},
 			validateFn: func(t *testing.T, deps HandlerTestDeps, env *testutils.TestEnvironment, triggerMsg *message.Message, receivedMsgs map[string][]*message.Message, initialState interface{}) {
-				msgs := receivedMsgs[roundevents.RoundUpdatedV1]
+				msgs := receivedMsgs[roundevents.RoundUpdatedV2]
 				if len(msgs) == 0 {
-					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundUpdatedV1)
+					t.Fatalf("Expected at least one message on topic %q", roundevents.RoundUpdatedV2)
 				}
 				var result roundevents.RoundEntityUpdatedPayloadV1
 				if err := deps.TestHelpers.UnmarshalPayload(msgs[0], &result); err != nil {

@@ -127,7 +127,7 @@ func (h *RoundHandlers) HandleRoundDeleteAuthorized(
 	)
 
 	results := mapOperationResult(mappedResult,
-		roundevents.RoundDeletedV1,
+		roundevents.RoundDeletedV2,
 		roundevents.RoundDeleteErrorV1,
 	)
 
@@ -142,7 +142,7 @@ func (h *RoundHandlers) HandleRoundDeleteAuthorized(
 	}
 
 	// Add both legacy GuildID and internal ClubUUID scoped versions for PWA/NATS transition
-	results = h.addParallelIdentityResults(ctx, results, roundevents.RoundDeletedV1, payload.GuildID)
+	results = h.addParallelIdentityResults(ctx, results, roundevents.RoundDeletedV2, payload.GuildID)
 
 	return results, nil
 }

@@ -502,7 +502,7 @@ func ToObsConfig(appCfg *Config) obs.Config {
 	return obs.Config{
 		ServiceName:     "frolf-bot", // Or dynamic from app build
 		Environment:     appCfg.Observability.Environment,
-		Version:         "1.2.3", // Could inject via `ldflags`
+		Version:         "",
 		LokiURL:         appCfg.Observability.LokiURL,
 		MetricsAddress:  appCfg.Observability.MetricsAddress,
 		TempoEndpoint:   appCfg.Observability.TempoEndpoint,

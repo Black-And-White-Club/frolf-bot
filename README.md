@@ -106,14 +106,26 @@ docker run -d \
 # Run all migrations (River + application)
 make migrate-all
 
-# Rollback migrations
+# Safe migration flow (backup first, then migrate)
+make migrate-safe
+
+# Rollback latest migration group per module
 make rollback-all
+
+# Create backup snapshot
+make db-backup
+
+# Restore snapshot (destructive)
+make db-restore RESTORE_FILE=backups/<file>.dump FORCE=1
 
 # Clean everything
 make clean-all
 ```
 
 ## Notes
+
+- `main.go --migrate` intentionally uses the historical shared `bun_migrations` table for backward compatibility with existing databases, while `cmd/bun/main.go` uses per-module migration tables for operator workflows. Avoid mixing those entrypoints on the same database unless you expect the status output to differ.
+- When rolling out queue-based round scheduling to an older environment, inspect existing River jobs before deployment so stale `round_start` jobs do not race the re-enabled scheduling path. `make migrate-safe` gives you a backup-first flow; `make river-clean` is only appropriate for disposable/dev databases because it drops River artifacts outright.
 
 - This is a **pure event-driven service** - no HTTP endpoints
 - All observability is exported via OpenTelemetry
