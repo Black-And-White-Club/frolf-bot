@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strings"
@@ -16,8 +18,6 @@ import (
 	"github.com/uptrace/bun/migrate"
 	"github.com/urfave/cli/v2"
 )
-
-var dependencyOrderedModules = migrationrunner.OrderedModuleNamesFromConfig()
 
 func main() {
 	// Load configuration for database connection ONLY
@@ -58,17 +58,7 @@ func newMultiModuleDBCommand(migrators map[string]*migrate.Migrator) *cli.Comman
 				Name:  "init",
 				Usage: "create migration tables",
 				Action: func(c *cli.Context) error {
-					moduleNames, err := orderedModuleNames(migrators, false)
-					if err != nil {
-						return err
-					}
-					for _, moduleName := range moduleNames {
-						fmt.Printf("Initializing migrations for module: %s\n", moduleName)
-					}
-					if err := migrationrunner.InitModules(c.Context, migrationrunner.AsModuleMigrators(migrators)); err != nil {
-						return err
-					}
-					return nil
+					return initModules(c.Context, os.Stdout, migrationrunner.AsModuleMigrators(migrators))
 				},
 			},
 			{
@@ -177,4 +167,22 @@ func newMultiModuleDBCommand(migrators map[string]*migrate.Migrator) *cli.Comman
 
 func orderedModuleNames(migrators map[string]*migrate.Migrator, reverse bool) ([]string, error) {
 	return migrationrunner.OrderedModuleNames(migrators, reverse)
+}
+
+func initModules(ctx context.Context, out io.Writer, migrators map[string]migrationrunner.ModuleMigrator) error {
+	moduleNames, err := migrationrunner.OrderedModuleNames(migrators, false)
+	if err != nil {
+		return err
+	}
+
+	for _, moduleName := range moduleNames {
+		if _, err := fmt.Fprintf(out, "Initializing migrations for module: %s\n", moduleName); err != nil {
+			return err
+		}
+		if err := migrators[moduleName].Init(ctx); err != nil {
+			return fmt.Errorf("init %s migrations: %w", moduleName, err)
+		}
+	}
+
+	return nil
 }

@@ -41,6 +41,9 @@ func TestHandleRoundStarted(t *testing.T) {
 				if _, err := (realDB).UpdateRound(env.Ctx, env.DB, sharedtypes.GuildID("test-guild"), roundID, &roundtypes.Round{Title: roundtypes.Title("Test Round")}); err != nil {
 					t.Fatalf("Failed to set round title in DB: %v", err)
 				}
+				if err := realDB.UpdateRoundState(env.Ctx, env.DB, sharedtypes.GuildID("test-guild"), roundID, roundtypes.RoundStateUpcoming); err != nil {
+					t.Fatalf("Failed to set round state to upcoming in DB: %v", err)
+				}
 
 				payload := roundevents.RoundStartRequestedPayloadV1{
 					GuildID: sharedtypes.GuildID("test-guild"),

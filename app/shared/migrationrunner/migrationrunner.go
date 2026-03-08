@@ -13,6 +13,7 @@ import (
 	roundmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories/migrations"
 	scoremigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories/migrations"
 	usermigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories/migrations"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/riverqueue/river/rivermigrate"
@@ -209,11 +210,28 @@ func MigrateRiver(ctx context.Context, dsn string) error {
 	}
 
 	if _, err := migrator.Migrate(ctx, rivermigrate.DirectionUp, &rivermigrate.MigrateOpts{}); err != nil {
-		if strings.Contains(err.Error(), "already exists") && strings.Contains(err.Error(), "river_migration") {
+		if shouldIgnoreRiverMigrationError(err) {
 			return nil
 		}
 		return fmt.Errorf("run River migrations: %w", err)
 	}
 
 	return nil
+}
+
+func shouldIgnoreRiverMigrationError(err error) bool {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		return false
+	}
+
+	if pgErr.Code != "42P07" {
+		return false
+	}
+
+	if pgErr.TableName == "river_migration" {
+		return true
+	}
+
+	return strings.Contains(pgErr.Message, "river_migration")
 }

@@ -42,6 +42,10 @@ func (h *RoundHandlers) HandleRoundStartRequested(
 		return []handlerwrapper.Result{}, nil
 	}
 
+	if result.AlreadyStarted {
+		return []handlerwrapper.Result{}, nil
+	}
+
 	round := *result.Success
 	startedPayload := &roundevents.RoundStartedPayloadV1{
 		GuildID:   round.GuildID,

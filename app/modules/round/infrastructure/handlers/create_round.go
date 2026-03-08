@@ -188,24 +188,64 @@ func (h *RoundHandlers) HandleRoundEntityCreated(
 	// Discord channel/message metadata.
 	if usesDirectRoundScheduling(payload.RequestSource) && mappedResult.Success != nil {
 		if createdPayload, ok := (*mappedResult.Success).(*roundevents.RoundCreatedPayloadV1); ok {
-			handlerResults = append(handlerResults, handlerwrapper.Result{
-				Topic: roundevents.RoundEventMessageIDUpdatedV1,
-				Payload: &roundevents.RoundScheduledPayloadV1{
-					GuildID: createdPayload.GuildID,
-					BaseRoundPayload: roundtypes.BaseRoundPayload{
-						RoundID:     createdPayload.RoundID,
-						Title:       createdPayload.Title,
-						Description: createdPayload.Description,
-						Location:    createdPayload.Location,
-						StartTime:   createdPayload.StartTime,
-						UserID:      createdPayload.UserID,
-					},
-					EventMessageID:     payload.Round.EventMessageID,
-					Config:             createdPayload.Config,
-					ChannelID:          createdPayload.ChannelID,
-					NativeEventPlanned: boolPtr(false),
-				},
+			scheduleTitle := createdPayload.Title
+			if scheduleTitle == "" {
+				scheduleTitle = payload.Round.Title
+			}
+
+			scheduleDescription := createdPayload.Description
+			if scheduleDescription == "" {
+				scheduleDescription = payload.Round.Description
+			}
+
+			scheduleLocation := createdPayload.Location
+			if scheduleLocation == "" {
+				scheduleLocation = payload.Round.Location
+			}
+
+			scheduleStartTime := createdPayload.StartTime
+			if scheduleStartTime == nil {
+				scheduleStartTime = payload.Round.StartTime
+			}
+			if scheduleStartTime == nil {
+				return nil, errors.New("round start time missing from created payload")
+			}
+
+			scheduleUserID := createdPayload.UserID
+			if scheduleUserID == "" {
+				scheduleUserID = payload.Round.CreatedBy
+			}
+
+			scheduleConfig := createdPayload.Config
+			if scheduleConfig == nil {
+				scheduleConfig = payload.Config
+			}
+
+			nativeEventPlanned := false
+			scheduleResult, scheduleErr := h.service.ScheduleRoundEvents(ctx, &roundtypes.ScheduleRoundEventsRequest{
+				GuildID:            createdPayload.GuildID,
+				RoundID:            createdPayload.RoundID,
+				Title:              scheduleTitle.String(),
+				Description:        scheduleDescription.String(),
+				Location:           scheduleLocation.String(),
+				StartTime:          *scheduleStartTime,
+				UserID:             scheduleUserID,
+				EventMessageID:     payload.Round.EventMessageID,
+				ChannelID:          createdPayload.ChannelID,
+				Config:             guildConfigFromFragment(scheduleConfig),
+				NativeEventPlanned: &nativeEventPlanned,
 			})
+			if scheduleErr != nil {
+				return nil, scheduleErr
+			}
+			if scheduleResult.Failure != nil && h.logger != nil {
+				h.logger.WarnContext(ctx, "direct round scheduling failed in service",
+					attr.ExtractCorrelationID(ctx),
+					attr.String("guild_id", string(createdPayload.GuildID)),
+					attr.RoundID("round_id", createdPayload.RoundID),
+					attr.Any("failure", *scheduleResult.Failure),
+				)
+			}
 		}
 	}
 
@@ -307,14 +347,10 @@ func (h *RoundHandlers) HandleRoundEventMessageIDUpdate(
 	}, nil
 }
 
-func boolPtr(v bool) *bool {
-	return &v
-}
-
 func usesDirectRoundScheduling(requestSource *string) bool {
 	if requestSource == nil {
 		return false
 	}
 
-	return strings.EqualFold(strings.TrimSpace(*requestSource), "pwa")
+	return strings.EqualFold(strings.TrimSpace(*requestSource), requestSourcePWA)
 }

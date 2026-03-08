@@ -1,9 +1,14 @@
 package main
 
 import (
-	"reflect"
+	"bytes"
+	"context"
+	"errors"
+	"slices"
+	"strings"
 	"testing"
 
+	"github.com/Black-And-White-Club/frolf-bot/app/shared/migrationrunner"
 	"github.com/uptrace/bun/migrate"
 )
 
@@ -35,8 +40,9 @@ func TestOrderedModuleNames(t *testing.T) {
 					t.Fatalf("orderedModuleNames returned error: %v", err)
 				}
 
-				if !reflect.DeepEqual(got, dependencyOrderedModules) {
-					t.Fatalf("unexpected forward order: got=%v want=%v", got, dependencyOrderedModules)
+				want := migrationrunner.OrderedModuleNamesFromConfig()
+				if !slices.Equal(got, want) {
+					t.Fatalf("unexpected forward order: got=%v want=%v", got, want)
 				}
 			})
 
@@ -50,11 +56,72 @@ func TestOrderedModuleNames(t *testing.T) {
 					t.Fatalf("orderedModuleNames returned error: %v", err)
 				}
 
-				if !reflect.DeepEqual(got, want) {
+				if !slices.Equal(got, want) {
 					t.Fatalf("unexpected reverse order: got=%v want=%v", got, want)
 				}
 			})
 		})
+	}
+}
+
+type fakeModuleMigrator struct {
+	initErr error
+	record  *[]string
+	name    string
+}
+
+func (f *fakeModuleMigrator) Init(context.Context) error {
+	*f.record = append(*f.record, f.name)
+	return f.initErr
+}
+
+func (f *fakeModuleMigrator) Migrate(context.Context, ...migrate.MigrationOption) (*migrate.MigrationGroup, error) {
+	return &migrate.MigrationGroup{}, nil
+}
+
+func (f *fakeModuleMigrator) Rollback(context.Context, ...migrate.MigrationOption) (*migrate.MigrationGroup, error) {
+	return &migrate.MigrationGroup{}, nil
+}
+
+func TestInitModules_LogsOnlyAttemptedModules(t *testing.T) {
+	t.Parallel()
+
+	record := make([]string, 0, len(migrationrunner.OrderedModuleNamesFromConfig()))
+	migrators := make(map[string]migrationrunner.ModuleMigrator, len(migrationrunner.OrderedModuleNamesFromConfig()))
+	for _, moduleName := range migrationrunner.OrderedModuleNamesFromConfig() {
+		migrators[moduleName] = &fakeModuleMigrator{
+			name:   moduleName,
+			record: &record,
+		}
+	}
+	migrators["club"] = &fakeModuleMigrator{
+		name:    "club",
+		record:  &record,
+		initErr: errors.New("boom"),
+	}
+
+	var out bytes.Buffer
+	err := initModules(context.Background(), &out, migrators)
+	if err == nil {
+		t.Fatal("expected initModules error")
+	}
+	if !strings.Contains(err.Error(), "init club migrations") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	wantRecord := []string{"guild", "user", "club"}
+	if !slices.Equal(record, wantRecord) {
+		t.Fatalf("unexpected init order: got=%v want=%v", record, wantRecord)
+	}
+
+	wantLog := strings.Join([]string{
+		"Initializing migrations for module: guild",
+		"Initializing migrations for module: user",
+		"Initializing migrations for module: club",
+		"",
+	}, "\n")
+	if out.String() != wantLog {
+		t.Fatalf("unexpected log output:\n got=%q\nwant=%q", out.String(), wantLog)
 	}
 }
 

@@ -115,6 +115,8 @@ func (b *Builder) viewerPermissions(clubUUID, guildID string) *Permissions {
 // subscribePatterns generates subscribe patterns for round/leaderboard/guild events.
 // Scoped subjects follow pattern: {domain}.{action}[.{sub}...].v{n}.{id}
 // Round and leaderboard subjects are allowed on both v1 and v2 during the migration.
+// TODO: drop the v1 patterns after all scoped producers and consumers have fully
+// moved to v2 subjects. Keeping them indefinitely bloats every issued token.
 func subscribePatterns(clubUUID, guildID, userUUID, userID string) []string {
 	patterns := []string{}
 

@@ -5,7 +5,7 @@ import (
 
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
-	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
+	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
 	"github.com/google/uuid"
 )
@@ -15,7 +15,7 @@ func TestStartRound(t *testing.T) {
 		name            string
 		initialSetup    func(t *testing.T, deps RoundTestDeps) (sharedtypes.GuildID, sharedtypes.RoundID)
 		expectedFailure bool
-		validateResult  func(t *testing.T, res results.OperationResult[*roundtypes.Round, error], roundID sharedtypes.RoundID)
+		validateResult  func(t *testing.T, res roundservice.StartRoundResult, roundID sharedtypes.RoundID)
 	}{
 		{
 			name: "Successful round start",
@@ -36,9 +36,12 @@ func TestStartRound(t *testing.T) {
 				return "test-guild", roundID
 			},
 			expectedFailure: false,
-			validateResult: func(t *testing.T, res results.OperationResult[*roundtypes.Round, error], roundID sharedtypes.RoundID) {
+			validateResult: func(t *testing.T, res roundservice.StartRoundResult, roundID sharedtypes.RoundID) {
 				if res.Success == nil {
 					t.Fatalf("Expected success payload, got failure: %+v", res.Failure)
+				}
+				if res.AlreadyStarted {
+					t.Fatalf("Expected a fresh start, got AlreadyStarted=true")
 				}
 				round := *res.Success
 				if round.ID != roundID {
@@ -55,7 +58,7 @@ func TestStartRound(t *testing.T) {
 				return "test-guild", sharedtypes.RoundID(uuid.New())
 			},
 			expectedFailure: true,
-			validateResult: func(t *testing.T, res results.OperationResult[*roundtypes.Round, error], roundID sharedtypes.RoundID) {
+			validateResult: func(t *testing.T, res roundservice.StartRoundResult, roundID sharedtypes.RoundID) {
 				if res.Failure == nil {
 					t.Fatalf("Expected failure payload, but got nil")
 				}

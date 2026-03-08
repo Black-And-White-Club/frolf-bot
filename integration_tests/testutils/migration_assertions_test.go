@@ -2,7 +2,7 @@ package testutils
 
 import (
 	"context"
-	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/uptrace/bun"
@@ -97,7 +97,7 @@ func assertPrimaryKeyColumns(t *testing.T, ctx context.Context, db *bun.DB, tabl
 		t.Fatalf("error iterating primary key column rows: %v", err)
 	}
 
-	if !reflect.DeepEqual(actual, expected) {
+	if !slices.Equal(actual, expected) {
 		t.Fatalf("unexpected primary key columns for %q: got=%v want=%v", tableName, actual, expected)
 	}
 }

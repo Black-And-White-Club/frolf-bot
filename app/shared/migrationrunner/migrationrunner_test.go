@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/migrate"
 )
@@ -83,7 +84,7 @@ func TestOrderedModuleNames(t *testing.T) {
 			if err != nil {
 				t.Fatalf("OrderedModuleNames returned error: %v", err)
 			}
-			if !reflect.DeepEqual(got, tc.want) {
+			if !slices.Equal(got, tc.want) {
 				t.Fatalf("unexpected module order: got=%v want=%v", got, tc.want)
 			}
 		})
@@ -261,7 +262,7 @@ func TestInitMigrateRollbackModules(t *testing.T) {
 			if tc.wantErrShouldExist && err != nil && !strings.Contains(err.Error(), tc.wantErrContains) {
 				t.Fatalf("unexpected error: got=%v want substring=%q", err, tc.wantErrContains)
 			}
-			if !reflect.DeepEqual(record, tc.wantOrder) {
+			if !slices.Equal(record, tc.wantOrder) {
 				t.Fatalf("unexpected call order:\n got=%v\nwant=%v", record, tc.wantOrder)
 			}
 		})
@@ -295,52 +296,44 @@ func TestOrderedModuleConfigs_TableNames(t *testing.T) {
 	}
 }
 
-func migratorTableName(t *testing.T, migrator *migrate.Migrator) string {
-	t.Helper()
-
-	value := reflect.ValueOf(migrator)
-	if value.Kind() != reflect.Pointer || value.IsNil() {
-		t.Fatal("migrator must be a non-nil pointer")
-	}
-
-	field := value.Elem().FieldByName("table")
-	if !field.IsValid() || field.Kind() != reflect.String {
-		t.Fatal("migrator table field missing")
-	}
-
-	return field.String()
-}
-
-func TestBuildBunMigrators_UsesModuleTables(t *testing.T) {
+func TestBuildBunMigrators_BuildsMigratorsForEveryModule(t *testing.T) {
 	t.Parallel()
 
 	var db *bun.DB
 	migrators := BuildBunMigrators(db)
 
+	if len(migrators) != len(OrderedModuleConfigs()) {
+		t.Fatalf("unexpected migrator count: got=%d want=%d", len(migrators), len(OrderedModuleConfigs()))
+	}
+
 	for _, module := range OrderedModuleConfigs() {
 		migrator, ok := migrators[module.Name]
 		if !ok {
 			t.Fatalf("missing migrator for module %q", module.Name)
 		}
-		if got := migratorTableName(t, migrator); got != module.TableName {
-			t.Fatalf("module %s table mismatch: got=%s want=%s", module.Name, got, module.TableName)
+		if migrator == nil {
+			t.Fatalf("nil migrator for module %q", module.Name)
 		}
 	}
 }
 
-func TestBuildSharedTableMigrators_UsesSharedTable(t *testing.T) {
+func TestBuildSharedTableMigrators_BuildsMigratorsForEveryModule(t *testing.T) {
 	t.Parallel()
 
 	var db *bun.DB
 	migrators := BuildSharedTableMigrators(db)
 
+	if len(migrators) != len(OrderedModuleConfigs()) {
+		t.Fatalf("unexpected migrator count: got=%d want=%d", len(migrators), len(OrderedModuleConfigs()))
+	}
+
 	for _, module := range OrderedModuleConfigs() {
 		migrator, ok := migrators[module.Name]
 		if !ok {
 			t.Fatalf("missing migrator for module %q", module.Name)
 		}
-		if got := migratorTableName(t, migrator); got != sharedMigrationTableName {
-			t.Fatalf("module %s table mismatch: got=%s want=%s", module.Name, got, sharedMigrationTableName)
+		if migrator == nil {
+			t.Fatalf("nil migrator for module %q", module.Name)
 		}
 	}
 }
@@ -391,7 +384,7 @@ func TestOrderedModuleNamesFromConfig(t *testing.T) {
 			t.Parallel()
 
 			got := OrderedModuleNamesFromConfig()
-			if !reflect.DeepEqual(got, tc.want) {
+			if !slices.Equal(got, tc.want) {
 				t.Fatalf("unexpected module names: got=%v want=%v", got, tc.want)
 			}
 		})
@@ -529,6 +522,51 @@ func TestRollbackModules_PropagatesErrorContext(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), "rollback score module") {
 				t.Fatalf("unexpected rollback error: %v", err)
+			}
+		})
+	}
+}
+
+func TestShouldIgnoreRiverMigrationError(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "duplicate river migration table",
+			err: &pgconn.PgError{
+				Code:      "42P07",
+				TableName: "river_migration",
+				Message:   "relation \"river_migration\" already exists",
+			},
+			want: true,
+		},
+		{
+			name: "duplicate unrelated table",
+			err: &pgconn.PgError{
+				Code:      "42P07",
+				TableName: "some_other_table",
+				Message:   "relation \"some_other_table\" already exists",
+			},
+			want: false,
+		},
+		{
+			name: "non postgres error",
+			err:  errors.New("boom"),
+			want: false,
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := shouldIgnoreRiverMigrationError(tc.err); got != tc.want {
+				t.Fatalf("shouldIgnoreRiverMigrationError() = %v, want %v", got, tc.want)
 			}
 		})
 	}

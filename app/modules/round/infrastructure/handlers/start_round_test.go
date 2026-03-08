@@ -39,17 +39,19 @@ func TestRoundHandlers_HandleRoundStartRequested_Basic(t *testing.T) {
 			name: "Successfully handle RoundStarted",
 			fakeSetup: func(fake *FakeService, u *FakeUserService) {
 				fake.StartRoundFunc = func(ctx context.Context, req *roundtypes.StartRoundRequest) (roundservice.StartRoundResult, error) {
-					return results.SuccessResult[*roundtypes.Round, error](&roundtypes.Round{
-						ID:             testRoundID,
-						GuildID:        testGuildID,
-						Title:          "Test Round",
-						Location:       "Test Location",
-						EventMessageID: "msg-123",
-						Participants: []roundtypes.Participant{
-							{UserID: sharedtypes.DiscordID("user1")},
-							{UserID: sharedtypes.DiscordID("user2")},
-						},
-					}), nil
+					return roundservice.StartRoundResult{
+						OperationResult: results.SuccessResult[*roundtypes.Round, error](&roundtypes.Round{
+							ID:             testRoundID,
+							GuildID:        testGuildID,
+							Title:          "Test Round",
+							Location:       "Test Location",
+							EventMessageID: "msg-123",
+							Participants: []roundtypes.Participant{
+								{UserID: sharedtypes.DiscordID("user1")},
+								{UserID: sharedtypes.DiscordID("user2")},
+							},
+						}),
+					}, nil
 				}
 				u.GetClubUUIDByDiscordGuildIDFunc = func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) {
 					return testClubUUID, nil
@@ -69,12 +71,14 @@ func TestRoundHandlers_HandleRoundStartRequested_Basic(t *testing.T) {
 			name: "Successfully handle PWA-only start without discord message",
 			fakeSetup: func(fake *FakeService, u *FakeUserService) {
 				fake.StartRoundFunc = func(ctx context.Context, req *roundtypes.StartRoundRequest) (roundservice.StartRoundResult, error) {
-					return results.SuccessResult[*roundtypes.Round, error](&roundtypes.Round{
-						ID:       testRoundID,
-						GuildID:  testGuildID,
-						Title:    "Test Round",
-						Location: "Test Location",
-					}), nil
+					return roundservice.StartRoundResult{
+						OperationResult: results.SuccessResult[*roundtypes.Round, error](&roundtypes.Round{
+							ID:       testRoundID,
+							GuildID:  testGuildID,
+							Title:    "Test Round",
+							Location: "Test Location",
+						}),
+					}, nil
 				}
 				u.GetClubUUIDByDiscordGuildIDFunc = func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) {
 					return testClubUUID, nil
@@ -88,6 +92,26 @@ func TestRoundHandlers_HandleRoundStartRequested_Basic(t *testing.T) {
 				roundevents.RoundStartedV2 + "." + string(testGuildID),
 				roundevents.RoundStartedV2 + "." + testClubUUID.String(),
 			},
+		},
+		{
+			name: "Already started round emits no duplicate events",
+			fakeSetup: func(fake *FakeService, u *FakeUserService) {
+				fake.StartRoundFunc = func(ctx context.Context, req *roundtypes.StartRoundRequest) (roundservice.StartRoundResult, error) {
+					return roundservice.StartRoundResult{
+						OperationResult: results.SuccessResult[*roundtypes.Round, error](&roundtypes.Round{
+							ID:             testRoundID,
+							GuildID:        testGuildID,
+							Title:          "Test Round",
+							Location:       "Test Location",
+							EventMessageID: "msg-123",
+						}),
+						AlreadyStarted: true,
+					}, nil
+				}
+			},
+			payload:       testPayload,
+			wantErr:       false,
+			wantResultLen: 0,
 		},
 		{
 			name: "Service returns error",
@@ -104,7 +128,9 @@ func TestRoundHandlers_HandleRoundStartRequested_Basic(t *testing.T) {
 			name: "Service returns failure result",
 			fakeSetup: func(fake *FakeService, u *FakeUserService) {
 				fake.StartRoundFunc = func(ctx context.Context, req *roundtypes.StartRoundRequest) (roundservice.StartRoundResult, error) {
-					return results.FailureResult[*roundtypes.Round, error](errors.New("start failed")), nil
+					return roundservice.StartRoundResult{
+						OperationResult: results.FailureResult[*roundtypes.Round, error](errors.New("start failed")),
+					}, nil
 				}
 			},
 			payload:       testPayload,

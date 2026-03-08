@@ -5,7 +5,6 @@ import (
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
-	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 )
@@ -17,13 +16,6 @@ func (h *RoundHandlers) HandleDiscordMessageIDUpdated(
 	ctx context.Context,
 	payload *roundevents.RoundScheduledPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	var config *guildtypes.GuildConfig
-	if payload.Config != nil {
-		config = &guildtypes.GuildConfig{
-			EventChannelID: payload.Config.EventChannelID,
-		}
-	}
-
 	result, err := h.service.ScheduleRoundEvents(ctx, &roundtypes.ScheduleRoundEventsRequest{
 		GuildID:            payload.GuildID,
 		RoundID:            payload.RoundID,
@@ -34,7 +26,7 @@ func (h *RoundHandlers) HandleDiscordMessageIDUpdated(
 		UserID:             payload.UserID,
 		EventMessageID:     payload.EventMessageID,
 		ChannelID:          payload.ChannelID,
-		Config:             config,
+		Config:             guildConfigFromFragment(payload.Config),
 		NativeEventPlanned: payload.NativeEventPlanned,
 	})
 	if err != nil {

@@ -202,16 +202,14 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 	}
 
 	tests := []struct {
-		name              string
-		fakeSetup         func(*FakeService, *FakeUserService)
-		payload           *roundevents.RoundEntityCreatedPayloadV1
-		wantErr           bool
-		wantResultLen     int
-		wantResultTopic   string
-		wantLastTopic     string
-		expectedErrMsg    string
-		assertPayload     func(t *testing.T, resultPayload any)
-		assertLastPayload func(t *testing.T, resultPayload any)
+		name            string
+		fakeSetup       func(*FakeService, *FakeUserService)
+		payload         *roundevents.RoundEntityCreatedPayloadV1
+		wantErr         bool
+		wantResultLen   int
+		wantResultTopic string
+		expectedErrMsg  string
+		assertPayload   func(t *testing.T, resultPayload any)
 	}{
 		{
 			name: "Successfully handle RoundEntityCreated",
@@ -320,6 +318,21 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 				u.GetClubUUIDByDiscordGuildIDFunc = func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) {
 					return testClubUUID, nil
 				}
+				fake.ScheduleRoundEventsFunc = func(ctx context.Context, req *roundtypes.ScheduleRoundEventsRequest) (roundservice.ScheduleRoundEventsResult, error) {
+					if req.GuildID != guildID {
+						t.Fatalf("expected guild id %q, got %q", guildID, req.GuildID)
+					}
+					if req.RoundID != testRoundID {
+						t.Fatalf("expected round id %q, got %q", testRoundID, req.RoundID)
+					}
+					if req.ChannelID != "pwa-provided-channel-id" {
+						t.Fatalf("expected channel id %q, got %q", "pwa-provided-channel-id", req.ChannelID)
+					}
+					if req.NativeEventPlanned == nil || *req.NativeEventPlanned {
+						t.Fatalf("expected NativeEventPlanned=false, got %+v", req.NativeEventPlanned)
+					}
+					return results.SuccessResult[*roundtypes.ScheduleRoundEventsResult, error](&roundtypes.ScheduleRoundEventsResult{}), nil
+				}
 			},
 			payload: &roundevents.RoundEntityCreatedPayloadV1{
 				GuildID:          guildID,
@@ -329,9 +342,8 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 				RequestSource:    func() *string { v := "pwa"; return &v }(),
 			},
 			wantErr:         false,
-			wantResultLen:   4,
+			wantResultLen:   3,
 			wantResultTopic: roundevents.RoundCreatedV2,
-			wantLastTopic:   roundevents.RoundEventMessageIDUpdatedV1,
 			assertPayload: func(t *testing.T, resultPayload any) {
 				t.Helper()
 				createdPayload, ok := resultPayload.(*roundevents.RoundCreatedPayloadV1)
@@ -344,19 +356,6 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 						"pwa-provided-channel-id",
 						createdPayload.ChannelID,
 					)
-				}
-			},
-			assertLastPayload: func(t *testing.T, resultPayload any) {
-				t.Helper()
-				scheduledPayload, ok := resultPayload.(*roundevents.RoundScheduledPayloadV1)
-				if !ok {
-					t.Fatalf("expected *roundevents.RoundScheduledPayloadV1, got %T", resultPayload)
-				}
-				if scheduledPayload.ChannelID != "pwa-provided-channel-id" {
-					t.Fatalf("expected scheduled channel_id %q, got %q", "pwa-provided-channel-id", scheduledPayload.ChannelID)
-				}
-				if scheduledPayload.NativeEventPlanned == nil || *scheduledPayload.NativeEventPlanned {
-					t.Fatalf("expected direct scheduling to set NativeEventPlanned=false, got %+v", scheduledPayload.NativeEventPlanned)
 				}
 			},
 		},
@@ -424,14 +423,8 @@ func TestRoundHandlers_HandleRoundEntityCreated(t *testing.T) {
 			if tt.wantResultLen > 0 && results[0].Topic != tt.wantResultTopic {
 				t.Errorf("HandleRoundEntityCreated() result topic = %v, want %v", results[0].Topic, tt.wantResultTopic)
 			}
-			if tt.wantLastTopic != "" && len(results) > 0 && results[len(results)-1].Topic != tt.wantLastTopic {
-				t.Errorf("HandleRoundEntityCreated() last result topic = %v, want %v", results[len(results)-1].Topic, tt.wantLastTopic)
-			}
 			if tt.assertPayload != nil && len(results) > 0 {
 				tt.assertPayload(t, results[0].Payload)
-			}
-			if tt.assertLastPayload != nil && len(results) > 0 {
-				tt.assertLastPayload(t, results[len(results)-1].Payload)
 			}
 		})
 	}

@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"time"
 
+	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
+	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	handlerwrapper "github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
@@ -15,6 +17,8 @@ import (
 	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
 	"github.com/google/uuid"
 )
+
+const requestSourcePWA = "pwa"
 
 // RoundHandlers implements the Handlers interface for round events.
 type RoundHandlers struct {
@@ -126,4 +130,22 @@ func (h *RoundHandlers) extractAnchorClock(ctx context.Context) roundutil.Clock 
 		return roundutil.NewAnchorClock(t)
 	}
 	return roundutil.RealClock{}
+}
+
+func guildConfigFromFragment(fragment *sharedevents.GuildConfigFragment) *guildtypes.GuildConfig {
+	if fragment == nil {
+		return nil
+	}
+
+	return &guildtypes.GuildConfig{
+		GuildID:              fragment.GuildID,
+		SignupChannelID:      fragment.SignupChannelID,
+		SignupMessageID:      fragment.SignupMessageID,
+		EventChannelID:       fragment.EventChannelID,
+		LeaderboardChannelID: fragment.LeaderboardChannelID,
+		UserRoleID:           fragment.UserRoleID,
+		EditorRoleID:         fragment.EditorRoleID,
+		AdminRoleID:          fragment.AdminRoleID,
+		SignupEmoji:          fragment.SignupEmoji,
+	}
 }
