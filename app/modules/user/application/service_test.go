@@ -12,6 +12,7 @@ import (
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
+	"github.com/google/uuid"
 	"github.com/uptrace/bun"
 	"go.opentelemetry.io/otel/trace/noop"
 )
@@ -470,6 +471,65 @@ func TestUserService_LookupProfiles(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "non-discord numeric ids do not enqueue sync requests",
+			ids:  []sharedtypes.DiscordID{"5", "23"},
+			verify: func(t *testing.T, res results.OperationResult[*LookupProfilesResponse, error], err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if !res.IsSuccess() {
+					t.Fatalf("expected success")
+				}
+				resp := *res.Success
+				if got := len(resp.SyncRequests); got != 0 {
+					t.Fatalf("expected no sync requests, got %d", got)
+				}
+			},
+		},
+		{
+			name: "club membership external id is used for manual profiles",
+			ids:  []sharedtypes.DiscordID{"23"},
+			setupFake: func(f *FakeUserRepository) {
+				clubUUID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+				displayName := "muffinmaster123"
+				f.GetClubUUIDByDiscordGuildIDFn = func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (uuid.UUID, error) {
+					return clubUUID, nil
+				}
+				f.GetClubMembershipByExternalIDFn = func(ctx context.Context, db bun.IDB, externalID string, gotClubUUID uuid.UUID) (*userdb.ClubMembership, error) {
+					if externalID != "23" {
+						t.Fatalf("unexpected externalID %q", externalID)
+					}
+					if gotClubUUID != clubUUID {
+						t.Fatalf("unexpected club UUID %s", gotClubUUID)
+					}
+					return &userdb.ClubMembership{
+						ClubUUID:    clubUUID,
+						ExternalID:  pointer("23"),
+						DisplayName: &displayName,
+					}, nil
+				}
+			},
+			verify: func(t *testing.T, res results.OperationResult[*LookupProfilesResponse, error], err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if !res.IsSuccess() {
+					t.Fatalf("expected success")
+				}
+				resp := *res.Success
+				profile := resp.Profiles["23"]
+				if profile == nil {
+					t.Fatalf("expected profile for external id 23")
+				}
+				if profile.DisplayName != "muffinmaster123" {
+					t.Fatalf("expected muffinmaster123, got %q", profile.DisplayName)
+				}
+				if got := len(resp.SyncRequests); got != 0 {
+					t.Fatalf("expected no sync requests for manual external profile, got %d", got)
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -479,7 +539,7 @@ func TestUserService_LookupProfiles(t *testing.T) {
 				tt.setupFake(fakeRepo)
 			}
 			s := NewUserService(fakeRepo, loggerfrolfbot.NoOpLogger, &usermetrics.NoOpMetrics{}, noop.NewTracerProvider().Tracer("test"), nil)
-			res, err := s.LookupProfiles(ctx, tt.ids, "")
+			res, err := s.LookupProfiles(ctx, tt.ids, "guild-1")
 			tt.verify(t, res, err)
 		})
 	}

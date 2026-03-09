@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
@@ -11,6 +12,7 @@ import (
 	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
+	"github.com/google/uuid"
 	"github.com/uptrace/bun"
 )
 
@@ -141,6 +143,13 @@ func (s *UserService) executeLookupProfiles(
 		SyncRequests: make([]*userevents.UserProfileSyncRequestPayloadV1, 0),
 	}
 
+	clubUUID := uuid.Nil
+	if guildID != "" {
+		if resolvedClubUUID, err := s.repo.GetClubUUIDByDiscordGuildID(ctx, db, guildID); err == nil {
+			clubUUID = resolvedClubUUID
+		}
+	}
+
 	for _, u := range users {
 		responseProfiles[u.GetUserID()] = &usertypes.UserProfile{
 			UserID:        u.GetUserID(),
@@ -156,7 +165,7 @@ func (s *UserService) executeLookupProfiles(
 				u.ProfileUpdatedAt == nil ||
 				time.Since(*u.ProfileUpdatedAt) > ProfileSyncStaleness
 
-			if needsSync {
+			if needsSync && shouldSyncDiscordProfile(u.GetUserID()) {
 				result.SyncRequests = append(result.SyncRequests, &userevents.UserProfileSyncRequestPayloadV1{
 					UserID:  u.GetUserID(),
 					GuildID: guildID,
@@ -168,9 +177,18 @@ func (s *UserService) executeLookupProfiles(
 	// For users not in DB, generate default profiles
 	for _, id := range userIDs {
 		if _, exists := responseProfiles[id]; !exists {
+			if clubUUID != uuid.Nil {
+				if membership, err := s.repo.GetClubMembershipByExternalID(ctx, db, string(id), clubUUID); err == nil && membership != nil {
+					if profile := userProfileFromClubMembership(id, membership); profile != nil {
+						responseProfiles[id] = profile
+						continue
+					}
+				}
+			}
+
 			responseProfiles[id] = s.generateDefaultProfile(id)
 			// Also request sync for new users we haven't seen before
-			if guildID != "" {
+			if guildID != "" && shouldSyncDiscordProfile(id) {
 				result.SyncRequests = append(result.SyncRequests, &userevents.UserProfileSyncRequestPayloadV1{
 					UserID:  id,
 					GuildID: guildID,
@@ -193,6 +211,39 @@ func (s *UserService) generateDefaultProfile(userID sharedtypes.DiscordID) *user
 	userIDInt, _ := strconv.ParseUint(idStr, 10, 64)
 	index := (userIDInt >> 22) % 6
 	avatarURL := fmt.Sprintf("https://cdn.discordapp.com/embed/avatars/%d.png", index)
+
+	return &usertypes.UserProfile{
+		UserID:      userID,
+		DisplayName: displayName,
+		AvatarURL:   avatarURL,
+	}
+}
+
+func shouldSyncDiscordProfile(userID sharedtypes.DiscordID) bool {
+	if !userID.IsValid() {
+		return false
+	}
+
+	length := len(strings.TrimSpace(string(userID)))
+	return length >= 17 && length <= 20
+}
+
+func userProfileFromClubMembership(userID sharedtypes.DiscordID, membership *userdb.ClubMembership) *usertypes.UserProfile {
+	if membership == nil {
+		return nil
+	}
+
+	displayName := ""
+	if membership.DisplayName != nil {
+		displayName = strings.TrimSpace(*membership.DisplayName)
+	}
+	avatarURL := ""
+	if membership.AvatarURL != nil {
+		avatarURL = strings.TrimSpace(*membership.AvatarURL)
+	}
+	if displayName == "" && avatarURL == "" {
+		return nil
+	}
 
 	return &usertypes.UserProfile{
 		UserID:      userID,
