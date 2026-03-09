@@ -105,6 +105,12 @@ func leaderboardProfileLookupIDs(leaderboard leaderboardtypes.LeaderboardData) [
 		if lookupID := normalizeLeaderboardProfileLookupID(string(entry.UserID)); lookupID != "" {
 			add(lookupID)
 		}
+		// Always include the tag number as a lookup ID so that entries whose
+		// UserID is a placeholder label (e.g. "Tag 23 Placeholder") can still
+		// be resolved via club membership by external ID. For real Discord
+		// users the extra numeric ID is harmless — the user service returns a
+		// default profile for it and no sync is triggered (guarded by
+		// shouldSyncDiscordProfile).
 		if entry.TagNumber > 0 {
 			add(strconv.Itoa(int(entry.TagNumber)))
 		}

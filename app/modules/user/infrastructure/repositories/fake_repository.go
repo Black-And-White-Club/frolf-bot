@@ -28,6 +28,7 @@ type FakeRepository struct {
 	GetClubMembershipFn                    func(ctx context.Context, db bun.IDB, userUUID, clubUUID uuid.UUID) (*ClubMembership, error)
 	UpsertClubMembershipFn                 func(ctx context.Context, db bun.IDB, membership *ClubMembership) error
 	GetClubMembershipByExternalIDFn        func(ctx context.Context, db bun.IDB, externalID string, clubUUID uuid.UUID) (*ClubMembership, error)
+	GetClubMembershipsByExternalIDsFn      func(ctx context.Context, db bun.IDB, externalIDs []string, clubUUID uuid.UUID) ([]*ClubMembership, error)
 	GetClubMembershipsByUserUUIDFn         func(ctx context.Context, db bun.IDB, userUUID uuid.UUID) ([]*ClubMembership, error)
 	GetClubMembershipsByUserUUIDsFn        func(ctx context.Context, db bun.IDB, userUUIDs []uuid.UUID) ([]*ClubMembership, error)
 	UpdateClubMembershipRoleByDiscordIDsFn func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, role sharedtypes.UserRoleEnum) error
@@ -129,6 +130,13 @@ func (f *FakeRepository) MarkMagicLinkUsed(ctx context.Context, db bun.IDB, toke
 func (f *FakeRepository) GetClubMembershipByExternalID(ctx context.Context, db bun.IDB, externalID string, clubUUID uuid.UUID) (*ClubMembership, error) {
 	if f.GetClubMembershipByExternalIDFn != nil {
 		return f.GetClubMembershipByExternalIDFn(ctx, db, externalID, clubUUID)
+	}
+	return nil, nil
+}
+
+func (f *FakeRepository) GetClubMembershipsByExternalIDs(ctx context.Context, db bun.IDB, externalIDs []string, clubUUID uuid.UUID) ([]*ClubMembership, error) {
+	if f.GetClubMembershipsByExternalIDsFn != nil {
+		return f.GetClubMembershipsByExternalIDsFn(ctx, db, externalIDs, clubUUID)
 	}
 	return nil, nil
 }

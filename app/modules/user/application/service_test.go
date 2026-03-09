@@ -496,18 +496,21 @@ func TestUserService_LookupProfiles(t *testing.T) {
 				f.GetClubUUIDByDiscordGuildIDFn = func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (uuid.UUID, error) {
 					return clubUUID, nil
 				}
-				f.GetClubMembershipByExternalIDFn = func(ctx context.Context, db bun.IDB, externalID string, gotClubUUID uuid.UUID) (*userdb.ClubMembership, error) {
-					if externalID != "23" {
-						t.Fatalf("unexpected externalID %q", externalID)
-					}
+				f.GetClubMembershipsByExternalIDsFn = func(ctx context.Context, db bun.IDB, externalIDs []string, gotClubUUID uuid.UUID) ([]*userdb.ClubMembership, error) {
 					if gotClubUUID != clubUUID {
 						t.Fatalf("unexpected club UUID %s", gotClubUUID)
 					}
-					return &userdb.ClubMembership{
-						ClubUUID:    clubUUID,
-						ExternalID:  pointer("23"),
-						DisplayName: &displayName,
-					}, nil
+					var out []*userdb.ClubMembership
+					for _, id := range externalIDs {
+						if id == "23" {
+							out = append(out, &userdb.ClubMembership{
+								ClubUUID:    clubUUID,
+								ExternalID:  pointer("23"),
+								DisplayName: &displayName,
+							})
+						}
+					}
+					return out, nil
 				}
 			},
 			verify: func(t *testing.T, res results.OperationResult[*LookupProfilesResponse, error], err error) {
@@ -530,6 +533,87 @@ func TestUserService_LookupProfiles(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "club membership external id overrides placeholder user profile",
+			ids:  []sharedtypes.DiscordID{"23"},
+			setupFake: func(f *FakeUserRepository) {
+				clubUUID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+				placeholderDisplayName := "Tag 23 Placeholder"
+				manualDisplayName := "muffinmaster123"
+				f.GetByUserIDsFunc = func(ctx context.Context, db bun.IDB, ids []sharedtypes.DiscordID) ([]*userdb.User, error) {
+					return []*userdb.User{
+						{
+							UserID:      pointer(sharedtypes.DiscordID("23")),
+							DisplayName: &placeholderDisplayName,
+						},
+					}, nil
+				}
+				f.GetClubUUIDByDiscordGuildIDFn = func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (uuid.UUID, error) {
+					return clubUUID, nil
+				}
+				f.GetClubMembershipsByExternalIDsFn = func(ctx context.Context, db bun.IDB, externalIDs []string, gotClubUUID uuid.UUID) ([]*userdb.ClubMembership, error) {
+					if gotClubUUID != clubUUID {
+						t.Fatalf("unexpected club UUID %s", gotClubUUID)
+					}
+					var out []*userdb.ClubMembership
+					for _, id := range externalIDs {
+						if id == "23" {
+							out = append(out, &userdb.ClubMembership{
+								ClubUUID:    clubUUID,
+								ExternalID:  pointer("23"),
+								DisplayName: &manualDisplayName,
+							})
+						}
+					}
+					return out, nil
+				}
+			},
+			verify: func(t *testing.T, res results.OperationResult[*LookupProfilesResponse, error], err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if !res.IsSuccess() {
+					t.Fatalf("expected success")
+				}
+				resp := *res.Success
+				profile := resp.Profiles["23"]
+				if profile == nil {
+					t.Fatalf("expected profile for external id 23")
+				}
+				if profile.DisplayName != "muffinmaster123" {
+					t.Fatalf("expected muffinmaster123, got %q", profile.DisplayName)
+				}
+			},
+		},
+		{
+			name: "batch lookup is called once for multiple users",
+			ids:  []sharedtypes.DiscordID{"5", "23", "42"},
+			setupFake: func(f *FakeUserRepository) {
+				clubUUID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+				callCount := 0
+				f.GetClubUUIDByDiscordGuildIDFn = func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (uuid.UUID, error) {
+					return clubUUID, nil
+				}
+				f.GetClubMembershipsByExternalIDsFn = func(ctx context.Context, db bun.IDB, externalIDs []string, gotClubUUID uuid.UUID) ([]*userdb.ClubMembership, error) {
+					callCount++
+					if callCount > 1 {
+						t.Errorf("GetClubMembershipsByExternalIDs called %d times, expected 1", callCount)
+					}
+					if len(externalIDs) != 3 {
+						t.Errorf("expected 3 externalIDs, got %d", len(externalIDs))
+					}
+					return nil, nil
+				}
+			},
+			verify: func(t *testing.T, res results.OperationResult[*LookupProfilesResponse, error], err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if !res.IsSuccess() {
+					t.Fatalf("expected success")
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -541,6 +625,55 @@ func TestUserService_LookupProfiles(t *testing.T) {
 			s := NewUserService(fakeRepo, loggerfrolfbot.NoOpLogger, &usermetrics.NoOpMetrics{}, noop.NewTracerProvider().Tracer("test"), nil)
 			res, err := s.LookupProfiles(ctx, tt.ids, "guild-1")
 			tt.verify(t, res, err)
+		})
+	}
+}
+
+func TestIsDiscordSnowflake(t *testing.T) {
+	tests := []struct {
+		userID sharedtypes.DiscordID
+		want   bool
+	}{
+		{"5", false},
+		{"23", false},
+		{"123456789012345", false},      // 15 digits — too short
+		{"1234567890123456", false},     // 16 digits — too short
+		{"12345678901234567", true},     // 17 digits
+		{"123456789012345678", true},    // 18 digits
+		{"1234567890123456789", true},   // 19 digits
+		{"12345678901234567890", false}, // 20 digits — too long
+		{"not-a-number", false},
+		{"", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.userID), func(t *testing.T) {
+			got := isDiscordSnowflake(tt.userID)
+			if got != tt.want {
+				t.Errorf("isDiscordSnowflake(%q) = %v, want %v", tt.userID, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGenerateDefaultDisplayName_RoundTrip(t *testing.T) {
+	ids := []sharedtypes.DiscordID{
+		"5",
+		"23",
+		"123456",
+		"1234567",
+		"123456789012345678",
+	}
+
+	for _, id := range ids {
+		t.Run(string(id), func(t *testing.T) {
+			generated := generateDefaultDisplayName(id)
+			if !isSyntheticLookupDisplayName(id, generated) {
+				t.Errorf("isSyntheticLookupDisplayName(%q, %q) = false, want true", id, generated)
+			}
+			if isSyntheticLookupDisplayName(id, "Real Name") {
+				t.Errorf("isSyntheticLookupDisplayName(%q, \"Real Name\") = true, want false", id)
+			}
 		})
 	}
 }

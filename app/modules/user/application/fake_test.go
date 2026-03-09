@@ -55,6 +55,7 @@ type FakeUserRepository struct {
 	GetClubMembershipsByUserUUIDFn         func(ctx context.Context, db bun.IDB, userUUID uuid.UUID) ([]*userdb.ClubMembership, error)
 	UpsertClubMembershipFn                 func(ctx context.Context, db bun.IDB, membership *userdb.ClubMembership) error
 	GetClubMembershipByExternalIDFn        func(ctx context.Context, db bun.IDB, externalID string, clubUUID uuid.UUID) (*userdb.ClubMembership, error)
+	GetClubMembershipsByExternalIDsFn      func(ctx context.Context, db bun.IDB, externalIDs []string, clubUUID uuid.UUID) ([]*userdb.ClubMembership, error)
 	GetClubMembershipsByUserUUIDsFn        func(ctx context.Context, db bun.IDB, userUUIDs []uuid.UUID) ([]*userdb.ClubMembership, error)
 	UpdateClubMembershipRoleByDiscordIDsFn func(ctx context.Context, db bun.IDB, userID sharedtypes.DiscordID, guildID sharedtypes.GuildID, role sharedtypes.UserRoleEnum) error
 
@@ -229,6 +230,14 @@ func (f *FakeUserRepository) GetClubMembershipsByUserUUID(ctx context.Context, d
 	f.record("GetClubMembershipsByUserUUID")
 	if f.GetClubMembershipsByUserUUIDFn != nil {
 		return f.GetClubMembershipsByUserUUIDFn(ctx, db, userUUID)
+	}
+	return nil, nil
+}
+
+func (f *FakeUserRepository) GetClubMembershipsByExternalIDs(ctx context.Context, db bun.IDB, externalIDs []string, clubUUID uuid.UUID) ([]*userdb.ClubMembership, error) {
+	f.record("GetClubMembershipsByExternalIDs")
+	if f.GetClubMembershipsByExternalIDsFn != nil {
+		return f.GetClubMembershipsByExternalIDsFn(ctx, db, externalIDs, clubUUID)
 	}
 	return nil, nil
 }

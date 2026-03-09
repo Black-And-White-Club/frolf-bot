@@ -373,6 +373,25 @@ func (r *Impl) GetClubMembershipByExternalID(ctx context.Context, db bun.IDB, ex
 	return cm, nil
 }
 
+func (r *Impl) GetClubMembershipsByExternalIDs(ctx context.Context, db bun.IDB, externalIDs []string, clubUUID uuid.UUID) ([]*ClubMembership, error) {
+	if db == nil {
+		db = r.db
+	}
+	if len(externalIDs) == 0 {
+		return []*ClubMembership{}, nil
+	}
+	var memberships []*ClubMembership
+	err := db.NewSelect().
+		Model(&memberships).
+		Where("external_id IN (?)", bun.In(externalIDs)).
+		Where("club_uuid = ?", clubUUID).
+		Scan(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("userdb.GetClubMembershipsByExternalIDs: %w", err)
+	}
+	return memberships, nil
+}
+
 // --- USER WITH MEMBERSHIP METHODS ---
 
 // GetUserByUserID fetches user and membership in one query.
