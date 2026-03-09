@@ -4,10 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strconv"
+	"strings"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	userevents "github.com/Black-And-White-Club/frolf-bot-shared/events/user"
+	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
@@ -39,11 +42,7 @@ func (h *LeaderboardHandlers) HandleGetLeaderboardRequest(
 	}
 	leaderboard := *result.Success
 
-	// Collect user IDs from leaderboard entries
-	userIDs := make([]sharedtypes.DiscordID, 0, len(leaderboard))
-	for _, entry := range leaderboard {
-		userIDs = append(userIDs, entry.UserID)
-	}
+	userIDs := leaderboardProfileLookupIDs(leaderboard)
 
 	// Lookup profiles
 	profiles := make(map[sharedtypes.DiscordID]*usertypes.UserProfile)
@@ -83,6 +82,60 @@ func (h *LeaderboardHandlers) HandleGetLeaderboardRequest(
 	}
 
 	return results, nil
+}
+
+func leaderboardProfileLookupIDs(leaderboard leaderboardtypes.LeaderboardData) []sharedtypes.DiscordID {
+	seen := make(map[sharedtypes.DiscordID]struct{}, len(leaderboard)*2)
+	userIDs := make([]sharedtypes.DiscordID, 0, len(leaderboard)*2)
+
+	add := func(id string) {
+		trimmed := strings.TrimSpace(id)
+		if trimmed == "" {
+			return
+		}
+		discordID := sharedtypes.DiscordID(trimmed)
+		if _, exists := seen[discordID]; exists {
+			return
+		}
+		seen[discordID] = struct{}{}
+		userIDs = append(userIDs, discordID)
+	}
+
+	for _, entry := range leaderboard {
+		if lookupID := normalizeLeaderboardProfileLookupID(string(entry.UserID)); lookupID != "" {
+			add(lookupID)
+		}
+		if entry.TagNumber > 0 {
+			add(strconv.Itoa(int(entry.TagNumber)))
+		}
+	}
+
+	return userIDs
+}
+
+func normalizeLeaderboardProfileLookupID(raw string) string {
+	candidate := strings.TrimSpace(raw)
+	if candidate == "" {
+		return ""
+	}
+
+	if strings.HasPrefix(candidate, "<@") && strings.HasSuffix(candidate, ">") {
+		candidate = strings.TrimSuffix(strings.TrimPrefix(candidate, "<@"), ">")
+	}
+
+	candidate = strings.TrimPrefix(candidate, "!")
+	candidate = strings.TrimPrefix(candidate, "@")
+	if candidate == "" {
+		return ""
+	}
+
+	for _, ch := range candidate {
+		if ch < '0' || ch > '9' {
+			return ""
+		}
+	}
+
+	return candidate
 }
 
 // HandleGetTagByUserIDRequest performs a single tag lookup.

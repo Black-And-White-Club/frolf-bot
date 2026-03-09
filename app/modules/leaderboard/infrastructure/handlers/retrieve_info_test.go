@@ -6,13 +6,16 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"slices"
 	"testing"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
+	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
 	"github.com/google/uuid"
 )
 
@@ -73,6 +76,54 @@ func TestLeaderboardHandlers_HandleGetLeaderboardRequest(t *testing.T) {
 				t.Errorf("Topic = %s, want %s", res[0].Topic, tt.wantTopic)
 			}
 		})
+	}
+}
+
+func TestLeaderboardHandlers_HandleGetLeaderboardRequest_ProfileLookupUsesTagFallbackIDs(t *testing.T) {
+	testGuildID := sharedtypes.GuildID("test-guild-123")
+	testPayload := &leaderboardevents.GetLeaderboardRequestedPayloadV1{
+		GuildID: testGuildID,
+	}
+
+	fakeSvc := NewFakeService()
+	fakeSvc.GetLeaderboardFunc = func(ctx context.Context, guildID sharedtypes.GuildID, seasonID string) (results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error], error) {
+		return results.SuccessResult[[]leaderboardtypes.LeaderboardEntry, error]([]leaderboardtypes.LeaderboardEntry{
+			{UserID: "Tag 23 Placeholder", TagNumber: 23},
+			{UserID: "legacy-unmapped-id", TagNumber: 24},
+			{UserID: "839877196898238526", TagNumber: 1},
+		}), nil
+	}
+
+	fakeUsers := NewFakeUserService()
+	var gotUserIDs []sharedtypes.DiscordID
+	fakeUsers.LookupProfilesFunc = func(ctx context.Context, userIDs []sharedtypes.DiscordID, guildID sharedtypes.GuildID) (results.OperationResult[*userservice.LookupProfilesResponse, error], error) {
+		gotUserIDs = append([]sharedtypes.DiscordID(nil), userIDs...)
+		return results.SuccessResult[*userservice.LookupProfilesResponse, error](&userservice.LookupProfilesResponse{
+			Profiles: make(map[sharedtypes.DiscordID]*usertypes.UserProfile),
+		}), nil
+	}
+
+	h := &LeaderboardHandlers{
+		service:     fakeSvc,
+		userService: fakeUsers,
+		logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+
+	if _, err := h.HandleGetLeaderboardRequest(context.Background(), testPayload); err != nil {
+		t.Fatalf("HandleGetLeaderboardRequest() error = %v", err)
+	}
+
+	wantUserIDs := []sharedtypes.DiscordID{"23", "24", "839877196898238526", "1"}
+	for _, want := range wantUserIDs {
+		if !slices.Contains(gotUserIDs, want) {
+			t.Fatalf("expected lookup IDs to contain %q, got %v", want, gotUserIDs)
+		}
+	}
+	if slices.Contains(gotUserIDs, sharedtypes.DiscordID("Tag 23 Placeholder")) {
+		t.Fatalf("expected placeholder label to be excluded from lookup IDs, got %v", gotUserIDs)
+	}
+	if slices.Contains(gotUserIDs, sharedtypes.DiscordID("legacy-unmapped-id")) {
+		t.Fatalf("expected legacy unmapped ID to be excluded from lookup IDs, got %v", gotUserIDs)
 	}
 }
 
