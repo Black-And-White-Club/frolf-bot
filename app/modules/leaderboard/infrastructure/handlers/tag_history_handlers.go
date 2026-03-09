@@ -17,6 +17,11 @@ func (h *LeaderboardHandlers) HandleTagHistoryRequest(
 	ctx context.Context,
 	payload *leaderboardevents.TagHistoryRequestedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
+	h.logger.DebugContext(ctx, "tag history requested",
+		slog.String("guild_id", payload.GuildID),
+		slog.String("member_id", payload.MemberID),
+		slog.Int("limit", payload.Limit),
+	)
 	history, err := h.service.GetTagHistory(ctx, sharedtypes.GuildID(payload.GuildID), payload.MemberID, payload.Limit)
 	if err != nil {
 		h.logger.ErrorContext(ctx, "failed to get tag history",

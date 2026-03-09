@@ -65,26 +65,29 @@ func (r *TagHistoryRepo) GetTagHistoryForRound(ctx context.Context, db bun.IDB, 
 func (r *TagHistoryRepo) GetTagHistoryForMember(ctx context.Context, db bun.IDB, guildID, memberID string, limit int) ([]TagHistoryEntry, error) {
 	var entries []TagHistoryEntry
 
-	// UNION two index-backed queries instead of OR to avoid sequential scan.
+	// Build UNION via bun query builder. The outer query must NOT use .Model()
+	// because that injects the model's table name as FROM, overriding TableExpr.
+	// Instead, pass the destination to Scan directly.
 	newQ := db.NewSelect().
 		TableExpr("tag_history").
+		ColumnExpr("*").
 		Where("guild_id = ?", guildID).
 		Where("new_member_id = ?", memberID)
 	oldQ := db.NewSelect().
 		TableExpr("tag_history").
+		ColumnExpr("*").
 		Where("guild_id = ?", guildID).
 		Where("old_member_id = ?", memberID)
 
 	q := db.NewSelect().
-		With("combined", newQ.Union(oldQ)).
-		Model(&entries).
-		TableExpr("combined").
-		OrderExpr("created_at DESC")
+		TableExpr("(?) AS combined", newQ.Union(oldQ)).
+		ColumnExpr("combined.*").
+		OrderExpr("combined.created_at DESC")
 	if limit > 0 {
 		q = q.Limit(limit)
 	}
 
-	err := q.Scan(ctx)
+	err := q.Scan(ctx, &entries)
 	if err != nil {
 		return nil, fmt.Errorf("taghistory.GetTagHistoryForMember: %w", err)
 	}
