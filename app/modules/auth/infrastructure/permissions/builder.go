@@ -268,6 +268,8 @@ func (b *Builder) adminPermissions(clubUUID, userUUID, guildID, userID string) *
 		leaderboardevents.LeaderboardEndSeasonV1,
 		"leaderboard.batch.tag.assignment.requested.v2",
 		"round.scorecard.admin.upload.requested.v2",
+		"round.admin.backfill.check.v1",
+		"round.admin.backfill.requested.v1",
 	)
 
 	// Admin-only subscribe subjects for operation feedback (unscoped global topics)

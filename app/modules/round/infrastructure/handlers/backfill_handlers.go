@@ -94,5 +94,17 @@ func (h *RoundHandlers) HandleAdminBackfillRoundRequested(ctx context.Context, p
 		attr.String("import_id", importID),
 	)
 
-	return []handlerwrapper.Result{{Topic: roundevents.ScorecardAdminUploadRequestedV2, Payload: uploadPayload}}, nil
+	results := []handlerwrapper.Result{{Topic: roundevents.ScorecardAdminUploadRequestedV2, Payload: uploadPayload}}
+
+	// Reply to the PWA inbox if this was a request-reply call.
+	if replyTo, ok := ctx.Value(handlerwrapper.CtxKeyReplyTo).(string); ok && replyTo != "" {
+		results = append(results, handlerwrapper.Result{
+			Topic: replyTo,
+			Payload: &roundevents.AdminBackfillRoundResponsePayloadV1{
+				RoundID: round.ID.String(),
+			},
+		})
+	}
+
+	return results, nil
 }

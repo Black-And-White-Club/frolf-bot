@@ -101,6 +101,8 @@ func TestBuilder_ForRole(t *testing.T) {
 					leaderboardevents.LeaderboardGetSeasonStandingsV1,
 					"leaderboard.batch.tag.assignment.requested.v2",
 					"round.scorecard.admin.upload.requested.v2",
+					"round.admin.backfill.check.v1",
+					"round.admin.backfill.requested.v1",
 				}
 
 				for _, expectedPub := range expectedPublishSubjects {
