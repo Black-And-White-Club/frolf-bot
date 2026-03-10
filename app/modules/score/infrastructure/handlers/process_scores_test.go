@@ -14,6 +14,10 @@ import (
 	"github.com/google/uuid"
 )
 
+func ptrTagNumber(value sharedtypes.TagNumber) *sharedtypes.TagNumber {
+	return &value
+}
+
 func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 	testGuildID := sharedtypes.GuildID("guild-1234")
 	testRoundID := sharedtypes.RoundID(uuid.New())
@@ -47,6 +51,9 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 							TagMappings: []sharedtypes.TagMapping{
 								{DiscordID: testUserID, TagNumber: testTagNumber},
 							},
+							FinishRanksByDiscordID: map[sharedtypes.DiscordID]int{
+								testUserID: 1,
+							},
 						},
 					}, nil
 				}
@@ -58,6 +65,64 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 				}
 				if res[0].Topic != sharedevents.LeaderboardBatchTagAssignmentRequestedV2 {
 					t.Errorf("expected topic %s, got %s", sharedevents.LeaderboardBatchTagAssignmentRequestedV2, res[0].Topic)
+				}
+				batchPayload, ok := res[0].Payload.(*sharedevents.BatchTagAssignmentRequestedPayloadV1)
+				if !ok {
+					t.Fatalf("expected *BatchTagAssignmentRequestedPayloadV1, got %T", res[0].Payload)
+				}
+				if len(batchPayload.Assignments) != 1 {
+					t.Fatalf("expected 1 assignment, got %d", len(batchPayload.Assignments))
+				}
+				if batchPayload.Assignments[0].FinishRank != 1 {
+					t.Errorf("expected FinishRank=1, got %d", batchPayload.Assignments[0].FinishRank)
+				}
+			},
+		},
+		{
+			name: "Singles flow skips ranked players missing both resolved and original tags but preserves finish rank for tagged players",
+			payload: &sharedevents.ProcessRoundScoresRequestedPayloadV1{
+				GuildID:   testGuildID,
+				RoundID:   testRoundID,
+				Overwrite: true,
+				RoundMode: sharedtypes.RoundModeSingles,
+				Scores: []sharedtypes.ScoreInfo{
+					{UserID: "user-a", Score: 50, TagNumber: ptrTagNumber(7)},
+					{UserID: "user-b", Score: 51},
+					{UserID: "", Score: 52},
+				},
+			},
+			setupFake: func(f *FakeScoreService) {
+				f.ProcessRoundScoresFunc = func(ctx context.Context, gID sharedtypes.GuildID, rID sharedtypes.RoundID, scores []sharedtypes.ScoreInfo, overwrite bool) (results.OperationResult[scoreservice.ProcessRoundScoresResult, error], error) {
+					return results.OperationResult[scoreservice.ProcessRoundScoresResult, error]{
+						Success: &scoreservice.ProcessRoundScoresResult{
+							FinishRanksByDiscordID: map[sharedtypes.DiscordID]int{
+								"user-a": 1,
+								"user-b": 2,
+							},
+						},
+					}, nil
+				}
+			},
+			wantErr: false,
+			checkResults: func(t *testing.T, res []handlerwrapper.Result) {
+				if len(res) != 1 {
+					t.Fatalf("expected 1 result, got %d", len(res))
+				}
+				batchPayload, ok := res[0].Payload.(*sharedevents.BatchTagAssignmentRequestedPayloadV1)
+				if !ok {
+					t.Fatalf("expected *BatchTagAssignmentRequestedPayloadV1, got %T", res[0].Payload)
+				}
+				if len(batchPayload.Assignments) != 1 {
+					t.Fatalf("expected 1 assignment, got %d", len(batchPayload.Assignments))
+				}
+				if batchPayload.Assignments[0].UserID != "user-a" {
+					t.Fatalf("unexpected assignment user: %+v", batchPayload.Assignments[0])
+				}
+				if batchPayload.Assignments[0].TagNumber != 7 {
+					t.Errorf("expected TagNumber=7, got %d", batchPayload.Assignments[0].TagNumber)
+				}
+				if batchPayload.Assignments[0].FinishRank != 1 {
+					t.Errorf("expected FinishRank=1, got %d", batchPayload.Assignments[0].FinishRank)
 				}
 			},
 		},
@@ -125,8 +190,17 @@ func TestScoreHandlers_HandleProcessRoundScoresRequest(t *testing.T) {
 			expectedErrMsg: "direct service error",
 		},
 		{
-			name:    "FinishRank propagated to batch event for tied players",
-			payload: basePayload,
+			name: "FinishRank propagated to batch event for tied players",
+			payload: &sharedevents.ProcessRoundScoresRequestedPayloadV1{
+				GuildID:   testGuildID,
+				RoundID:   testRoundID,
+				Overwrite: true,
+				RoundMode: sharedtypes.RoundModeSingles,
+				Scores: []sharedtypes.ScoreInfo{
+					{UserID: "user-a", Score: 50, TagNumber: ptrTagNumber(1)},
+					{UserID: "user-b", Score: 50, TagNumber: ptrTagNumber(5)},
+				},
+			},
 			setupFake: func(f *FakeScoreService) {
 				tag1 := sharedtypes.TagNumber(1)
 				tag2 := sharedtypes.TagNumber(5)

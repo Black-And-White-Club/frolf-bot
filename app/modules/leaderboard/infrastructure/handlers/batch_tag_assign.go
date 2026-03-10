@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 
+	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	leaderboardtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/leaderboard"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
@@ -115,11 +116,28 @@ func (h *LeaderboardHandlers) handleRoundBasedAssignmentWithCommandFlow(
 	}
 
 	replyTo, _ := ctx.Value(handlerwrapper.CtxKeyReplyTo).(string)
+	// Fetch the post-commit snapshot after ProcessRoundCommand has applied tag changes.
+	// This event is informational; if the read fails, keep the committed round results
+	// and downstream per-user updates instead of retrying the whole round.
+	results := make([]handlerwrapper.Result, 0, 1)
+	leaderboardUpdatedResult, err := h.buildLeaderboardUpdatedResult(ctx, payload.GuildID, *payload.RoundID)
+	if err != nil {
+		if h.logger != nil {
+			h.logger.WarnContext(ctx, "failed to fetch leaderboard snapshot after round processing; continuing without leaderboard_updated event",
+				"guild_id", payload.GuildID,
+				"round_id", payload.RoundID.String(),
+				"error", err,
+			)
+		}
+	} else {
+		results = append(results, leaderboardUpdatedResult)
+	}
 
 	memberIDs := make([]string, 0, len(output.FinalParticipantTags))
 	for memberID := range output.FinalParticipantTags {
 		memberIDs = append(memberIDs, memberID)
 	}
+	// Keep per-user tag events stable for tests and consumers that observe publish order.
 	sort.Strings(memberIDs)
 
 	roundRequests := make([]sharedtypes.TagAssignmentRequest, 0, len(output.FinalParticipantTags))
@@ -131,7 +149,7 @@ func (h *LeaderboardHandlers) handleRoundBasedAssignmentWithCommandFlow(
 		})
 	}
 
-	results := h.mapSuccessResults(ctx, payload.GuildID, payload.RequestingUserID, payload.BatchID, roundRequests, payload.Source, replyTo)
+	results = append(results, h.mapSuccessResults(ctx, payload.GuildID, payload.RequestingUserID, payload.BatchID, roundRequests, payload.Source, replyTo)...)
 
 	if !output.PointsSkipped {
 		pointsAwarded := make(map[sharedtypes.DiscordID]int, len(output.PointAwards))
@@ -194,28 +212,46 @@ func (h *LeaderboardHandlers) handleRoundBasedAssignmentWithCommandFlow(
 		results = append(results, pointsResult)
 	}
 
+	results = h.addParallelIdentityResults(ctx, results, leaderboardevents.LeaderboardUpdatedV2, payload.GuildID)
 	propagateCorrelationID(ctx, results)
 
 	return results, nil
 }
 
-func leaderboardDataFromFinalTags(finalTags map[string]int) leaderboardtypes.LeaderboardData {
-	data := make(leaderboardtypes.LeaderboardData, 0, len(finalTags))
-	for memberID, tag := range finalTags {
-		if tag <= 0 {
-			continue
-		}
-		data = append(data, leaderboardtypes.LeaderboardEntry{
-			UserID:    sharedtypes.DiscordID(memberID),
-			TagNumber: sharedtypes.TagNumber(tag),
-		})
+func (h *LeaderboardHandlers) buildLeaderboardUpdatedResult(
+	ctx context.Context,
+	guildID sharedtypes.GuildID,
+	roundID sharedtypes.RoundID,
+) (handlerwrapper.Result, error) {
+	fullLeaderboardResult, err := h.service.GetLeaderboard(ctx, guildID, "")
+	if err != nil {
+		return handlerwrapper.Result{}, fmt.Errorf("fetch full leaderboard after round processing: %w", err)
 	}
-	sort.Slice(data, func(i, j int) bool {
-		if data[i].TagNumber == data[j].TagNumber {
-			return data[i].UserID < data[j].UserID
+	if fullLeaderboardResult.IsFailure() {
+		if fullLeaderboardResult.Failure != nil {
+			return handlerwrapper.Result{}, fmt.Errorf("fetch full leaderboard after round processing: %w", *fullLeaderboardResult.Failure)
 		}
-		return data[i].TagNumber < data[j].TagNumber
-	})
+		return handlerwrapper.Result{}, fmt.Errorf("fetch full leaderboard after round processing: unknown failure")
+	}
+	if fullLeaderboardResult.Success == nil {
+		return handlerwrapper.Result{}, fmt.Errorf("fetch full leaderboard after round processing: success data is nil")
+	}
+
+	return handlerwrapper.Result{
+		Topic: leaderboardevents.LeaderboardUpdatedV2,
+		Payload: &leaderboardevents.LeaderboardUpdatedPayloadV1{
+			GuildID:         guildID,
+			RoundID:         roundID,
+			LeaderboardData: leaderboardDataMap(*fullLeaderboardResult.Success),
+		},
+	}, nil
+}
+
+func leaderboardDataMap(entries leaderboardtypes.LeaderboardData) map[sharedtypes.TagNumber]sharedtypes.DiscordID {
+	data := make(map[sharedtypes.TagNumber]sharedtypes.DiscordID, len(entries))
+	for _, entry := range entries {
+		data[entry.TagNumber] = entry.UserID
+	}
 	return data
 }
 

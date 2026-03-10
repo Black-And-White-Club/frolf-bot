@@ -1,10 +1,12 @@
 package leaderboardhandlers
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 
 	leaderboardevents "github.com/Black-And-White-Club/frolf-bot-shared/events/leaderboard"
@@ -18,6 +20,7 @@ import (
 	leaderboarddomain "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/domain"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLeaderboardHandlers_HandleBatchTagAssignmentRequested(t *testing.T) {
@@ -142,6 +145,12 @@ func TestLeaderboardHandlers_HandleRoundBasedAssignment(t *testing.T) {
 						},
 					}, nil
 				}
+				f.GetLeaderboardFunc = func(ctx context.Context, guildID sharedtypes.GuildID, seasonID string) (results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error], error) {
+					return results.SuccessResult[[]leaderboardtypes.LeaderboardEntry, error]([]leaderboardtypes.LeaderboardEntry{
+						{UserID: "user-2", TagNumber: 2},
+						{UserID: "user-1", TagNumber: 1},
+					}), nil
+				}
 			},
 			setupRoundLookup: func(rl *FakeRoundLookup) {
 				rl.GetRoundFunc = func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (*roundtypes.Round, error) {
@@ -155,23 +164,35 @@ func TestLeaderboardHandlers_HandleRoundBasedAssignment(t *testing.T) {
 			},
 			wantErr: false,
 			validate: func(t *testing.T, res []handlerwrapper.Result) {
-				assert.Len(t, res, 6)
+				assert.Len(t, res, 9)
 
 				// Find PointsAwarded event
 				var pointsEvent *sharedevents.PointsAwardedPayloadV1
+				var leaderboardUpdated *leaderboardevents.LeaderboardUpdatedPayloadV1
 				tagUpdatedCount := 0
+				leaderboardUpdatedCount := 0
 				for _, r := range res {
 					if r.Topic == sharedevents.PointsAwardedV1 {
 						pointsEvent = r.Payload.(*sharedevents.PointsAwardedPayloadV1)
 						// Check metadata
 						assert.Equal(t, "msg-123", r.Metadata["discord_message_id"])
 					}
+					if r.Topic == leaderboardevents.LeaderboardUpdatedV2 {
+						leaderboardUpdatedCount++
+						leaderboardUpdated = r.Payload.(*leaderboardevents.LeaderboardUpdatedPayloadV1)
+					}
 					if r.Topic == leaderboardevents.LeaderboardTagUpdatedV2 {
 						tagUpdatedCount++
 					}
 				}
 				assert.NotNil(t, pointsEvent)
+				require.NotNil(t, leaderboardUpdated)
+				assert.Equal(t, 1, leaderboardUpdatedCount)
 				assert.Equal(t, 1, tagUpdatedCount)
+				assert.Equal(t, map[sharedtypes.TagNumber]sharedtypes.DiscordID{
+					1: "user-1",
+					2: "user-2",
+				}, leaderboardUpdated.LeaderboardData)
 				assert.Equal(t, "msg-123", pointsEvent.EventMessageID)
 				assert.Equal(t, roundtypes.Title("Enriched Round"), pointsEvent.Title)
 				assert.Len(t, pointsEvent.Teams, 1)
@@ -208,15 +229,79 @@ func TestLeaderboardHandlers_HandleRoundBasedAssignment(t *testing.T) {
 			wantErr: false,
 			validate: func(t *testing.T, res []handlerwrapper.Result) {
 				var pointsEvent *sharedevents.PointsAwardedPayloadV1
+				foundLeaderboardUpdated := false
 				for _, r := range res {
+					if r.Topic == leaderboardevents.LeaderboardUpdatedV2 {
+						foundLeaderboardUpdated = true
+					}
 					if r.Topic == sharedevents.PointsAwardedV1 {
 						pointsEvent = r.Payload.(*sharedevents.PointsAwardedPayloadV1)
 						assert.Empty(t, r.Metadata["discord_message_id"])
 					}
 				}
+				assert.True(t, foundLeaderboardUpdated)
 				assert.NotNil(t, pointsEvent)
 				assert.Empty(t, pointsEvent.EventMessageID)
 				assert.Empty(t, pointsEvent.Title)
+			},
+		},
+		{
+			name: "Leaderboard snapshot failure - warns but continues without leaderboard update event",
+			payload: &sharedevents.BatchTagAssignmentRequestedPayloadV1{
+				ScopedGuildID: sharedevents.ScopedGuildID{GuildID: testGuildID},
+				BatchID:       testBatchID,
+				RoundID:       &testRoundID,
+				Source:        sharedtypes.ServiceUpdateSourceProcessScores,
+				Assignments: []sharedevents.TagAssignmentInfoV1{
+					{UserID: "user-1", TagNumber: 1},
+				},
+			},
+			setupFake: func(f *FakeService) {
+				f.ProcessRoundCommandFunc = func(ctx context.Context, cmd leaderboardservice.ProcessRoundCommand) (*leaderboardservice.ProcessRoundOutput, error) {
+					return &leaderboardservice.ProcessRoundOutput{
+						FinalParticipantTags: map[string]int{"user-1": 1},
+						PointAwards: []leaderboarddomain.PointAward{
+							{MemberID: "user-1", Points: 10},
+						},
+					}, nil
+				}
+				f.GetLeaderboardFunc = func(ctx context.Context, guildID sharedtypes.GuildID, seasonID string) (results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error], error) {
+					return results.OperationResult[[]leaderboardtypes.LeaderboardEntry, error]{}, fmt.Errorf("snapshot read failed")
+				}
+			},
+			setupRoundLookup: func(rl *FakeRoundLookup) {
+				rl.GetRoundFunc = func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{
+						EventMessageID: "msg-123",
+						Title:          "Enriched Round",
+						Participants:   []roundtypes.Participant{{UserID: "user-1"}},
+					}, nil
+				}
+			},
+			wantErr: false,
+			validate: func(t *testing.T, res []handlerwrapper.Result) {
+				assert.Len(t, res, 6)
+
+				var pointsEvent *sharedevents.PointsAwardedPayloadV1
+				leaderboardUpdatedCount := 0
+				tagUpdatedCount := 0
+				for _, r := range res {
+					if r.Topic == sharedevents.PointsAwardedV1 {
+						pointsEvent = r.Payload.(*sharedevents.PointsAwardedPayloadV1)
+					}
+					if r.Topic == leaderboardevents.LeaderboardUpdatedV2 {
+						leaderboardUpdatedCount++
+					}
+					if r.Topic == leaderboardevents.LeaderboardTagUpdatedV2 {
+						tagUpdatedCount++
+					}
+				}
+
+				assert.Zero(t, leaderboardUpdatedCount)
+				assert.Equal(t, 1, tagUpdatedCount)
+				require.NotNil(t, pointsEvent)
+				assert.Equal(t, "msg-123", pointsEvent.EventMessageID)
+				assert.Equal(t, roundtypes.Title("Enriched Round"), pointsEvent.Title)
 			},
 		},
 		{
@@ -242,11 +327,16 @@ func TestLeaderboardHandlers_HandleRoundBasedAssignment(t *testing.T) {
 			wantErr:          false,
 			validate: func(t *testing.T, res []handlerwrapper.Result) {
 				var pointsEvent *sharedevents.PointsAwardedPayloadV1
+				foundLeaderboardUpdated := false
 				for _, r := range res {
+					if r.Topic == leaderboardevents.LeaderboardUpdatedV2 {
+						foundLeaderboardUpdated = true
+					}
 					if r.Topic == sharedevents.PointsAwardedV1 {
 						pointsEvent = r.Payload.(*sharedevents.PointsAwardedPayloadV1)
 					}
 				}
+				assert.True(t, foundLeaderboardUpdated)
 				assert.NotNil(t, pointsEvent)
 				assert.Empty(t, pointsEvent.EventMessageID)
 				assert.Empty(t, pointsEvent.Title)
@@ -279,11 +369,16 @@ func TestLeaderboardHandlers_HandleRoundBasedAssignment(t *testing.T) {
 			wantErr: false,
 			validate: func(t *testing.T, res []handlerwrapper.Result) {
 				var pointsEvent *sharedevents.PointsAwardedPayloadV1
+				foundLeaderboardUpdated := false
 				for _, r := range res {
+					if r.Topic == leaderboardevents.LeaderboardUpdatedV2 {
+						foundLeaderboardUpdated = true
+					}
 					if r.Topic == sharedevents.PointsAwardedV1 {
 						pointsEvent = r.Payload.(*sharedevents.PointsAwardedPayloadV1)
 					}
 				}
+				assert.True(t, foundLeaderboardUpdated)
 				assert.NotNil(t, pointsEvent)
 				assert.Empty(t, pointsEvent.EventMessageID)
 				assert.Empty(t, pointsEvent.Title)
@@ -296,6 +391,7 @@ func TestLeaderboardHandlers_HandleRoundBasedAssignment(t *testing.T) {
 			fakeSvc := NewFakeService()
 			fakeSaga := NewFakeSagaCoordinator()
 			var roundLookup RoundLookup
+			logBuffer := &bytes.Buffer{}
 			if tt.setupRoundLookup != nil {
 				fakeRoundLookup := &FakeRoundLookup{}
 				tt.setupRoundLookup(fakeRoundLookup)
@@ -310,7 +406,7 @@ func TestLeaderboardHandlers_HandleRoundBasedAssignment(t *testing.T) {
 				userService:     &FakeUserService{GetClubUUIDByDiscordGuildIDFunc: func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) { return testClubUUID, nil }},
 				sagaCoordinator: fakeSaga,
 				roundLookup:     roundLookup, // True nil interface if not set
-				logger:          slog.New(slog.NewTextHandler(io.Discard, nil)),
+				logger:          slog.New(slog.NewTextHandler(io.MultiWriter(io.Discard, logBuffer), nil)),
 			}
 
 			res, err := h.HandleBatchTagAssignmentRequested(context.Background(), tt.payload)
@@ -321,6 +417,11 @@ func TestLeaderboardHandlers_HandleRoundBasedAssignment(t *testing.T) {
 
 			if tt.validate != nil {
 				tt.validate(t, res)
+			}
+
+			if tt.name == "Leaderboard snapshot failure - warns but continues without leaderboard update event" {
+				assert.Contains(t, logBuffer.String(), "continuing without leaderboard_updated event")
+				assert.True(t, strings.Contains(logBuffer.String(), "snapshot read failed"), "expected snapshot failure to be logged")
 			}
 		})
 	}

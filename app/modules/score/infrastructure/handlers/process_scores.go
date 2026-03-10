@@ -60,14 +60,45 @@ func (h *ScoreHandlers) HandleProcessRoundScoresRequest(
 
 	// 3. Handle Success Case
 	if result.Success != nil {
-		// Use the tag mappings returned in our custom Success struct
-		batchAssignments := make([]sharedevents.TagAssignmentInfoV1, 0, len(result.Success.TagMappings))
+		// Round-based leaderboard processing only needs user IDs and finish ranks;
+		// the leaderboard service resolves current tags from its own source of truth.
+		tagByUser := make(map[sharedtypes.DiscordID]sharedtypes.TagNumber, len(result.Success.TagMappings))
 		for _, tm := range result.Success.TagMappings {
+			tagByUser[tm.DiscordID] = tm.TagNumber
+		}
+
+		batchAssignments := make([]sharedevents.TagAssignmentInfoV1, 0, len(payload.Scores))
+		seenUsers := make(map[sharedtypes.DiscordID]struct{}, len(payload.Scores))
+		for _, score := range payload.Scores {
+			if score.UserID == "" {
+				continue
+			}
+
+			finishRank, ok := result.Success.FinishRanksByDiscordID[score.UserID]
+			if !ok {
+				continue
+			}
+			if _, seen := seenUsers[score.UserID]; seen {
+				continue
+			}
+
+			tagNumber, ok := tagByUser[score.UserID]
+			if !ok {
+				// If score processing could not resolve a current tag and the original
+				// score payload also lacked one, skip the player entirely. Forwarding a
+				// ranked user with an unknown tag would create a partial assignment.
+				if score.TagNumber == nil {
+					continue
+				}
+				tagNumber = *score.TagNumber
+			}
+
 			batchAssignments = append(batchAssignments, sharedevents.TagAssignmentInfoV1{
-				UserID:     tm.DiscordID,
-				TagNumber:  tm.TagNumber,
-				FinishRank: result.Success.FinishRanksByDiscordID[tm.DiscordID],
+				UserID:     score.UserID,
+				TagNumber:  tagNumber,
+				FinishRank: finishRank,
 			})
+			seenUsers[score.UserID] = struct{}{}
 		}
 
 		if len(batchAssignments) == 0 {

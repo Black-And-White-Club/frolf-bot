@@ -267,6 +267,82 @@ func TestProcessRound_TiedFinishRank(t *testing.T) {
 	}
 }
 
+// TestProcessRound_ResolveGuildID verifies that resolveGuildID converts a club UUID
+// to its corresponding Discord snowflake before any leaderboard data is written.
+// This covers the backfill bug where the PWA sends a club UUID instead of a Discord guild ID.
+func TestProcessRound_ResolveGuildID(t *testing.T) {
+	deps := SetupTestLeaderboardService(t)
+	defer deps.Cleanup()
+
+	ctx := context.Background()
+
+	// A real-looking Discord snowflake and its matching club UUID.
+	discordGuildID := sharedtypes.GuildID("888000111222333444")
+	clubUUID := uuid.New()
+	seasonID := "season_resolve_1"
+	roundID := uuid.New()
+
+	_ = testutils.CleanLeaderboardIntegrationTables(ctx, deps.BunDB)
+
+	// Clubs is not in the standard cleanup list — delete explicitly.
+	_, err := deps.BunDB.ExecContext(ctx, "DELETE FROM clubs WHERE discord_guild_id = ?", discordGuildID)
+	require.NoError(t, err)
+
+	// Map the club UUID to the Discord guild ID.
+	_, err = deps.BunDB.ExecContext(ctx,
+		"INSERT INTO clubs (uuid, name, discord_guild_id) VALUES (?, 'Test Club', ?)",
+		clubUUID, discordGuildID)
+	require.NoError(t, err)
+
+	// Season and league members must live under the Discord guild ID (not the UUID).
+	resSeason, err := deps.Service.StartNewSeason(ctx, discordGuildID, seasonID, "UUID Resolve Test Season")
+	require.NoError(t, err)
+	require.True(t, resSeason.IsSuccess())
+
+	membersToSeed := []leaderboarddb.LeagueMember{
+		{GuildID: string(discordGuildID), MemberID: "resolve_user_a", CurrentTag: ptr(1)},
+		{GuildID: string(discordGuildID), MemberID: "resolve_user_b", CurrentTag: ptr(2)},
+	}
+	_, err = deps.BunDB.NewInsert().Model(&membersToSeed).Exec(ctx)
+	require.NoError(t, err)
+
+	// Submit the command using the club UUID as GuildID (simulates a PWA request).
+	cmd := leaderboardservice.ProcessRoundCommand{
+		GuildID: clubUUID.String(),
+		RoundID: roundID,
+		Participants: []leaderboardservice.RoundParticipantInput{
+			{MemberID: "resolve_user_b", FinishRank: 1},
+			{MemberID: "resolve_user_a", FinishRank: 2},
+		},
+	}
+
+	output, err := deps.Service.ProcessRoundCommand(ctx, cmd)
+	require.NoError(t, err)
+	require.NotNil(t, output)
+
+	// Tags must be assigned correctly — resolveGuildID converted the UUID.
+	assert.Equal(t, 1, output.FinalParticipantTags["resolve_user_b"])
+	assert.Equal(t, 2, output.FinalParticipantTags["resolve_user_a"])
+
+	// Leaderboard data must be stored under the Discord snowflake.
+	resLb, err := deps.Service.GetLeaderboard(ctx, discordGuildID, "")
+	require.NoError(t, err)
+	require.True(t, resLb.IsSuccess())
+
+	tagMap := make(map[string]int)
+	for _, entry := range *resLb.Success {
+		tagMap[string(entry.UserID)] = int(entry.TagNumber)
+	}
+	assert.Equal(t, 1, tagMap["resolve_user_b"], "tag for resolve_user_b should be under Discord snowflake")
+	assert.Equal(t, 2, tagMap["resolve_user_a"], "tag for resolve_user_a should be under Discord snowflake")
+
+	// Nothing should be stored under the club UUID.
+	resLbUUID, err := deps.Service.GetLeaderboard(ctx, sharedtypes.GuildID(clubUUID.String()), "")
+	require.NoError(t, err)
+	require.True(t, resLbUUID.IsSuccess(), "lookup under the club UUID should succeed but return no leaderboard entries")
+	assert.Empty(t, *resLbUUID.Success, "no leaderboard data should exist under the club UUID")
+}
+
 func ptr(i int) *int {
 	return &i
 }
