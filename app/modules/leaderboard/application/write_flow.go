@@ -73,7 +73,26 @@ const ChartHistoryLimit = 20
 //  6. Stream 2: Points calculation (if active season)
 //  7. Persist points to season_standings + point_history
 //  8. Record round outcome
+//
+// resolveGuildID converts a club UUID to a Discord guild snowflake if needed.
+// All leaderboard data is keyed on Discord guild IDs; the PWA sends club UUIDs.
+func (s *LeaderboardService) resolveGuildID(ctx context.Context, guildID string) string {
+	if _, err := uuid.Parse(guildID); err != nil {
+		return guildID // already a Discord snowflake
+	}
+	var discordGuildID string
+	if err := s.db.NewSelect().
+		TableExpr("clubs").
+		ColumnExpr("discord_guild_id").
+		Where("uuid = ?", guildID).
+		Scan(ctx, &discordGuildID); err == nil && discordGuildID != "" {
+		return discordGuildID
+	}
+	return guildID
+}
+
 func (s *LeaderboardService) processRoundCommandCore(ctx context.Context, cmd ProcessRoundCommand) (*ProcessRoundOutput, error) {
+	cmd.GuildID = s.resolveGuildID(ctx, cmd.GuildID)
 	var output *ProcessRoundOutput
 	err := s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
 		var txErr error
