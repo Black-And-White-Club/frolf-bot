@@ -19,7 +19,7 @@ type Round struct {
 	Description roundtypes.Description `bun:"description,notnull"`
 	Location    roundtypes.Location    `bun:"location,notnull"`
 	EventType   *roundtypes.EventType  `bun:"event_type,default:'casual'"`
-	StartTime   sharedtypes.StartTime  `bun:"start_time,notnull"`
+	StartTime   sharedtypes.StartTime  `bun:"start_time,notnull,type:timestamptz"`
 	Finalized   roundtypes.Finalized   `bun:"finalized,notnull"`
 	CreatedBy   sharedtypes.DiscordID  `bun:"created_by,notnull"`
 	State       roundtypes.RoundState  `bun:"state,notnull"`
