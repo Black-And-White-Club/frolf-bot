@@ -2,6 +2,7 @@ package rounddb
 
 import (
 	"context"
+	"time"
 
 	"github.com/uptrace/bun"
 
@@ -42,4 +43,5 @@ type Repository interface {
 	CreateRoundGroups(ctx context.Context, db bun.IDB, roundID sharedtypes.RoundID, participants []roundtypes.Participant) error
 	RoundHasGroups(ctx context.Context, db bun.IDB, roundID sharedtypes.RoundID) (bool, error)
 	GetRoundsByGuildID(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, states ...roundtypes.RoundState) ([]*roundtypes.Round, error)
+	GetFinalizedRoundsAfter(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, startTime time.Time) ([]*roundtypes.Round, error)
 }

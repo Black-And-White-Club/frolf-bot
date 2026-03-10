@@ -2,6 +2,7 @@ package roundservice
 
 import (
 	"context"
+	"time"
 
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
@@ -15,6 +16,8 @@ type Service interface {
 	// Create Round
 	ValidateRoundCreationWithClock(ctx context.Context, req *roundtypes.CreateRoundInput, timeParser roundtime.TimeParserInterface, clock roundutil.Clock) (CreateRoundResult, error)
 	StoreRound(ctx context.Context, round *roundtypes.Round, guildID sharedtypes.GuildID) (CreateRoundResult, error)
+	StoreHistoricalRound(ctx context.Context, guildID sharedtypes.GuildID, adminID sharedtypes.DiscordID, title roundtypes.Title, location roundtypes.Location, startTime time.Time) (CreateRoundResult, error)
+	GetFinalizedRoundsAfter(ctx context.Context, guildID sharedtypes.GuildID, startTime time.Time) ([]*roundtypes.Round, error)
 	UpdateRoundMessageID(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, discordMessageID string) (*roundtypes.Round, error)
 	UpdateDiscordEventID(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, discordEventID string) (*roundtypes.Round, error)
 
