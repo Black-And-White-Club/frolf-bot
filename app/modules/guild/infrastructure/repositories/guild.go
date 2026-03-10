@@ -9,6 +9,7 @@ import (
 
 	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/google/uuid"
 	"github.com/uptrace/bun"
 )
 
@@ -73,10 +74,24 @@ func (r *Impl) GetConfig(ctx context.Context, db bun.IDB, guildID sharedtypes.Gu
 		db = r.db
 	}
 
+	// guildID may be a club UUID (from the PWA) rather than a Discord guild snowflake.
+	// If so, resolve it to the Discord guild ID stored in guild_configs.
+	resolvedGuildID := guildID
+	if _, err := uuid.Parse(string(guildID)); err == nil {
+		var discordGuildID string
+		if err := db.NewSelect().
+			TableExpr("clubs").
+			ColumnExpr("discord_guild_id").
+			Where("uuid = ?", guildID).
+			Scan(ctx, &discordGuildID); err == nil && discordGuildID != "" {
+			resolvedGuildID = sharedtypes.GuildID(discordGuildID)
+		}
+	}
+
 	model := new(GuildConfig)
 	err := db.NewSelect().
 		Model(model).
-		Where("guild_id = ? AND is_active = true", guildID).
+		Where("guild_id = ? AND is_active = true", resolvedGuildID).
 		Scan(ctx)
 
 	if err != nil {
