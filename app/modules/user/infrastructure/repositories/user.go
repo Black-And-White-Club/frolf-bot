@@ -429,11 +429,24 @@ func (r *Impl) GetUserRole(ctx context.Context, db bun.IDB, userID sharedtypes.D
 	if db == nil {
 		db = r.db
 	}
+	// guildID may be a club UUID (from the PWA) rather than a Discord guild snowflake.
+	// If so, resolve it to the Discord guild ID stored in guild_memberships.
+	resolvedGuildID := guildID
+	if _, err := uuid.Parse(string(guildID)); err == nil {
+		var discordGuildID string
+		if err := db.NewSelect().
+			TableExpr("clubs").
+			ColumnExpr("discord_guild_id").
+			Where("uuid = ?", guildID).
+			Scan(ctx, &discordGuildID); err == nil && discordGuildID != "" {
+			resolvedGuildID = sharedtypes.GuildID(discordGuildID)
+		}
+	}
 	m := &GuildMembership{}
 	err := db.NewSelect().
 		Model(m).
 		Column("role").
-		Where("user_id = ? AND guild_id = ?", userID, guildID).
+		Where("user_id = ? AND guild_id = ?", userID, resolvedGuildID).
 		Scan(ctx)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
