@@ -580,6 +580,28 @@ func (r *Impl) GetRoundsByGuildID(ctx context.Context, db bun.IDB, guildID share
 	return rounds, nil
 }
 
+// GetFinalizedRoundsAfter returns finalized rounds for the given guild with a start_time after the given time.
+func (r *Impl) GetFinalizedRoundsAfter(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, startTime time.Time) ([]*roundtypes.Round, error) {
+	if db == nil {
+		db = r.db
+	}
+	var localRounds []*Round
+	err := db.NewSelect().
+		Model(&localRounds).
+		ExcludeColumn("file_data").
+		Where("guild_id = ? AND finalized = true AND start_time > ?", guildID, startTime).
+		OrderExpr("start_time ASC").
+		Scan(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query finalized rounds after date: %w", err)
+	}
+	rounds := make([]*roundtypes.Round, len(localRounds))
+	for i, lr := range localRounds {
+		rounds[i] = toSharedRound(lr)
+	}
+	return rounds, nil
+}
+
 // GetUpcomingRoundsByParticipant retrieves upcoming rounds that contain a specific participant
 func (r *Impl) GetUpcomingRoundsByParticipant(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) ([]*roundtypes.Round, error) {
 	if db == nil {

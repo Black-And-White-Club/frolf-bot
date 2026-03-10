@@ -188,6 +188,58 @@ func (s *RoundService) StoreRound(ctx context.Context, round *roundtypes.Round, 
 	return result, err
 }
 
+// StoreHistoricalRound creates a round with a past start time, bypassing future-date
+// validation and Discord event creation. Used exclusively by the admin backfill flow.
+func (s *RoundService) StoreHistoricalRound(ctx context.Context, guildID sharedtypes.GuildID, adminID sharedtypes.DiscordID, title roundtypes.Title, location roundtypes.Location, startTime time.Time) (CreateRoundResult, error) {
+	storeOp := func(ctx context.Context, db bun.IDB) (CreateRoundResult, error) {
+		defaultType := roundtypes.DefaultEventType
+
+		roundObject := roundtypes.Round{
+			ID:             sharedtypes.RoundID(uuid.New()),
+			Title:          title,
+			Description:    roundtypes.Description(""),
+			Location:       location,
+			StartTime:      (*sharedtypes.StartTime)(&startTime),
+			CreatedBy:      adminID,
+			State:          roundtypes.RoundStateUpcoming,
+			EventMessageID: "",
+			GuildID:        guildID,
+			Participants:   []roundtypes.Participant{},
+			EventType:      &defaultType,
+		}
+
+		if err := s.repo.CreateRound(ctx, db, guildID, &roundObject); err != nil {
+			s.metrics.RecordDBOperationError(ctx, "create_historical_round")
+			return results.FailureResult[*roundtypes.CreateRoundResult](fmt.Errorf("failed to store historical round: %w", err)), fmt.Errorf("failed to store historical round: %w", err)
+		}
+		s.metrics.RecordDBOperationSuccess(ctx, "create_historical_round")
+
+		hasGroups, err := s.repo.RoundHasGroups(ctx, db, roundObject.ID)
+		if err != nil {
+			return results.FailureResult[*roundtypes.CreateRoundResult](fmt.Errorf("failed checking round groups: %w", err)), err
+		}
+		if !hasGroups {
+			if err := s.repo.CreateRoundGroups(ctx, db, roundObject.ID, roundObject.Participants); err != nil {
+				return results.FailureResult[*roundtypes.CreateRoundResult](fmt.Errorf("failed creating round groups: %w", err)), err
+			}
+		}
+
+		s.logger.InfoContext(ctx, "Historical round created",
+			attr.StringUUID("round_id", roundObject.ID.String()),
+			attr.String("title", string(roundObject.Title)),
+			attr.String("guild_id", string(guildID)),
+			attr.Time("start_time", startTime),
+		)
+
+		created := &roundtypes.CreateRoundResult{Round: &roundObject}
+		return results.SuccessResult[*roundtypes.CreateRoundResult, error](created), nil
+	}
+
+	return withTelemetry(s, ctx, "StoreHistoricalRound", sharedtypes.RoundID(uuid.Nil), func(ctx context.Context) (CreateRoundResult, error) {
+		return runInTx(s, ctx, storeOp)
+	})
+}
+
 // UpdateRoundMessageID updates the Discord event message ID for a round in the database
 // and returns the updated Round object.
 func (s *RoundService) UpdateRoundMessageID(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, discordMessageID string) (*roundtypes.Round, error) {

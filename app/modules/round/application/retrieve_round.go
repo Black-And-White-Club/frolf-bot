@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
@@ -73,6 +74,21 @@ func (s *RoundService) GetRoundsForGuild(ctx context.Context, guildID sharedtype
 		attr.Int("count", len(rounds)),
 	)
 
+	return rounds, nil
+}
+
+// GetFinalizedRoundsAfter returns finalized rounds for the guild with start_time after the given time.
+// Used by the admin backfill pre-check to warn about tag ordering concerns.
+func (s *RoundService) GetFinalizedRoundsAfter(ctx context.Context, guildID sharedtypes.GuildID, startTime time.Time) ([]*roundtypes.Round, error) {
+	ctx, span := s.tracer.Start(ctx, "GetFinalizedRoundsAfter")
+	defer span.End()
+
+	rounds, err := s.repo.GetFinalizedRoundsAfter(ctx, s.db, guildID, startTime)
+	if err != nil {
+		s.metrics.RecordDBOperationError(ctx, "GetFinalizedRoundsAfter")
+		return nil, fmt.Errorf("failed to query finalized rounds after date: %w", err)
+	}
+	s.metrics.RecordDBOperationSuccess(ctx, "GetFinalizedRoundsAfter")
 	return rounds, nil
 }
 

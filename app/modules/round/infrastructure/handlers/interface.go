@@ -80,6 +80,10 @@ type Handlers interface {
 	HandlePaginationSnapshotGetRequested(ctx context.Context, payload *roundevents.PaginationSnapshotGetRequestedPayloadV1) ([]handlerwrapper.Result, error)
 	HandlePaginationSnapshotDeleteRequested(ctx context.Context, payload *roundevents.PaginationSnapshotDeleteRequestedPayloadV1) ([]handlerwrapper.Result, error)
 
+	// Admin backfill handlers
+	HandleAdminBackfillCheckRequested(ctx context.Context, payload *roundevents.AdminBackfillCheckRequestedPayloadV1) ([]handlerwrapper.Result, error)
+	HandleAdminBackfillRoundRequested(ctx context.Context, payload *roundevents.AdminBackfillRoundRequestedPayloadV1) ([]handlerwrapper.Result, error)
+
 	// Scorecard import handlers
 	HandleAdminScorecardUploadRequested(ctx context.Context, payload *roundevents.ScorecardUploadedPayloadV1) ([]handlerwrapper.Result, error)
 	HandleScorecardUploaded(ctx context.Context, payload *roundevents.ScorecardUploadedPayloadV1) ([]handlerwrapper.Result, error)

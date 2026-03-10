@@ -2,6 +2,7 @@ package roundhandlers
 
 import (
 	"context"
+	"time"
 
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
@@ -26,6 +27,8 @@ type FakeService struct {
 	// Create Round
 	ValidateRoundCreationWithClockFunc func(ctx context.Context, req *roundtypes.CreateRoundInput, timeParser roundtime.TimeParserInterface, clock roundutil.Clock) (roundservice.CreateRoundResult, error)
 	StoreRoundFunc                     func(ctx context.Context, round *roundtypes.Round, guildID sharedtypes.GuildID) (roundservice.CreateRoundResult, error)
+	StoreHistoricalRoundFunc           func(ctx context.Context, guildID sharedtypes.GuildID, adminID sharedtypes.DiscordID, title roundtypes.Title, location roundtypes.Location, startTime time.Time) (roundservice.CreateRoundResult, error)
+	GetFinalizedRoundsAfterFunc        func(ctx context.Context, guildID sharedtypes.GuildID, startTime time.Time) ([]*roundtypes.Round, error)
 	UpdateRoundMessageIDFunc           func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, discordMessageID string) (*roundtypes.Round, error)
 	UpdateDiscordEventIDFunc           func(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, discordEventID string) (*roundtypes.Round, error)
 	CancelScheduledRoundStartFunc      func(ctx context.Context, roundID sharedtypes.RoundID) error
@@ -116,6 +119,22 @@ func (f *FakeService) StoreRound(ctx context.Context, round *roundtypes.Round, g
 		return f.StoreRoundFunc(ctx, round, guildID)
 	}
 	return roundservice.CreateRoundResult{}, nil
+}
+
+func (f *FakeService) StoreHistoricalRound(ctx context.Context, guildID sharedtypes.GuildID, adminID sharedtypes.DiscordID, title roundtypes.Title, location roundtypes.Location, startTime time.Time) (roundservice.CreateRoundResult, error) {
+	f.record("StoreHistoricalRound")
+	if f.StoreHistoricalRoundFunc != nil {
+		return f.StoreHistoricalRoundFunc(ctx, guildID, adminID, title, location, startTime)
+	}
+	return roundservice.CreateRoundResult{}, nil
+}
+
+func (f *FakeService) GetFinalizedRoundsAfter(ctx context.Context, guildID sharedtypes.GuildID, startTime time.Time) ([]*roundtypes.Round, error) {
+	f.record("GetFinalizedRoundsAfter")
+	if f.GetFinalizedRoundsAfterFunc != nil {
+		return f.GetFinalizedRoundsAfterFunc(ctx, guildID, startTime)
+	}
+	return nil, nil
 }
 
 func (f *FakeService) UpdateRoundMessageID(ctx context.Context, guildID sharedtypes.GuildID, roundID sharedtypes.RoundID, discordMessageID string) (*roundtypes.Round, error) {

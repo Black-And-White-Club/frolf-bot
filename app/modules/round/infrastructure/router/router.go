@@ -126,6 +126,8 @@ func (r *RoundRouter) registerHandlers(h roundhandlers.Handlers) error {
 
 	registerHandler(deps, roundevents.ScorecardUploadedV1, h.HandleScorecardUploaded)
 	registerHandler(deps, roundevents.ScorecardAdminUploadRequestedV2, h.HandleAdminScorecardUploadRequested)
+	registerHandler(deps, roundevents.AdminBackfillCheckRequestedV1, h.HandleAdminBackfillCheckRequested)
+	registerHandler(deps, roundevents.AdminBackfillRoundRequestedV1, h.HandleAdminBackfillRoundRequested)
 	registerHandler(deps, roundevents.ScorecardURLRequestedV1, h.HandleScorecardURLRequested)
 	registerHandler(deps, roundevents.ScorecardParseRequestedV1, h.HandleParseScorecardRequest)
 	registerHandler(deps, roundevents.ScorecardParsedForNormalizationV1, h.HandleScorecardParsedForNormalization)
