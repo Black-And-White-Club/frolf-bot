@@ -9,12 +9,14 @@ import (
 	usertypes "github.com/Black-And-White-Club/frolf-bot-shared/types/user"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
+	clubdb "github.com/Black-And-White-Club/frolf-bot/app/modules/club/infrastructure/repositories"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 	roundtime "github.com/Black-And-White-Club/frolf-bot/app/modules/round/time_utils"
 	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
 	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/google/uuid"
+	"github.com/uptrace/bun"
 )
 
 // ------------------------
@@ -434,6 +436,7 @@ func (f *FakeService) ApplyImportedScores(ctx context.Context, req roundtypes.Im
 var _ roundservice.Service = (*FakeService)(nil)
 var _ userservice.Service = (*FakeUserService)(nil)
 var _ utils.Helpers = (*FakeHelpers)(nil)
+var _ ChallengeLookup = (*FakeChallengeLookup)(nil)
 
 // FakeUserService implements userservice.Service for handler testing.
 type FakeUserService struct {
@@ -509,6 +512,25 @@ func (f *FakeUserService) GetClubUUIDByDiscordGuildID(ctx context.Context, guild
 		return f.GetClubUUIDByDiscordGuildIDFunc(ctx, guildID)
 	}
 	return uuid.New(), nil
+}
+
+type FakeChallengeLookup struct {
+	GetChallengeByUUIDFunc func(ctx context.Context, db bun.IDB, challengeUUID uuid.UUID) (*clubdb.ClubChallenge, error)
+	GetByUUIDFunc          func(ctx context.Context, db bun.IDB, clubUUID uuid.UUID) (*clubdb.Club, error)
+}
+
+func (f *FakeChallengeLookup) GetChallengeByUUID(ctx context.Context, db bun.IDB, challengeUUID uuid.UUID) (*clubdb.ClubChallenge, error) {
+	if f.GetChallengeByUUIDFunc != nil {
+		return f.GetChallengeByUUIDFunc(ctx, db, challengeUUID)
+	}
+	return nil, nil
+}
+
+func (f *FakeChallengeLookup) GetByUUID(ctx context.Context, db bun.IDB, clubUUID uuid.UUID) (*clubdb.Club, error) {
+	if f.GetByUUIDFunc != nil {
+		return f.GetByUUIDFunc(ctx, db, clubUUID)
+	}
+	return nil, nil
 }
 
 // FakeHelpers implements utils.Helpers for testing

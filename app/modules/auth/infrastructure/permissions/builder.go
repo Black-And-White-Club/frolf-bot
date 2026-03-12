@@ -129,6 +129,9 @@ func subscribePatterns(clubUUID, guildID, userUUID, userID string) []string {
 		// round.*.*.*.v{1,2}.{id} - matches round.participant.score.updated.v2.{id} (6 tokens)
 		// leaderboard.*... follows the same migration pattern. Guild subjects remain v1 today.
 		patterns = append(patterns,
+			fmt.Sprintf("club.*.v1.%s", id),
+			fmt.Sprintf("club.*.*.v1.%s", id),
+			fmt.Sprintf("club.*.*.*.v1.%s", id),
 			fmt.Sprintf("round.*.v1.%s", id),
 			fmt.Sprintf("round.*.v2.%s", id),
 			fmt.Sprintf("round.*.*.v1.%s", id),
@@ -188,6 +191,8 @@ func publishPatterns(clubUUID, guildID string, includeParticipant bool) []string
 		}
 		// Request-reply patterns for fetching data
 		patterns = append(patterns,
+			fmt.Sprintf("club.challenge.list.request.v1.%s", id),
+			fmt.Sprintf("club.challenge.detail.request.v1.%s", id),
 			fmt.Sprintf("round.list.request.v2.%s", id),
 			fmt.Sprintf("leaderboard.snapshot.request.v2.%s", id),
 			fmt.Sprintf("leaderboard.tag.list.requested.v1.%s", id),
@@ -201,6 +206,11 @@ func publishPatterns(clubUUID, guildID string, includeParticipant bool) []string
 	if includeParticipant {
 		// Participant actions
 		patterns = append(patterns,
+			"club.challenge.open.requested.v1",
+			"club.challenge.respond.requested.v1",
+			"club.challenge.withdraw.requested.v1",
+			"club.challenge.round.link.requested.v1",
+			"club.challenge.round.unlink.requested.v1",
 			"round.participant.join.requested.v2",
 			"round.participant.declined.v1",
 			"round.participant.removal.requested.v2",
@@ -240,6 +250,7 @@ func (b *Builder) editorPermissions(clubUUID, userUUID, guildID, userID string) 
 		"round.update.requested.v2",
 		"round.delete.requested.v2",
 		"round.score.update.requested.v2",
+		"club.challenge.hide.requested.v1",
 		leaderboardevents.LeaderboardPointHistoryRequestedV1,
 		leaderboardevents.LeaderboardGetSeasonStandingsV1,
 	)

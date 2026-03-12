@@ -73,4 +73,43 @@ type Service interface {
 
 	// JoinByCode uses an invite code to join a club. The user must be authenticated.
 	JoinByCode(ctx context.Context, userUUID uuid.UUID, code string) error
+
+	// ListChallenges returns the board view for the requested club.
+	ListChallenges(ctx context.Context, req ChallengeListRequest) ([]clubtypes.ChallengeSummary, error)
+
+	// GetChallengeDetail returns a single challenge detail view.
+	GetChallengeDetail(ctx context.Context, req ChallengeDetailRequest) (*clubtypes.ChallengeDetail, error)
+
+	// OpenChallenge creates a new challenge between two club members.
+	OpenChallenge(ctx context.Context, req ChallengeOpenRequest) (*clubtypes.ChallengeDetail, error)
+
+	// RespondToChallenge accepts or declines an open challenge.
+	RespondToChallenge(ctx context.Context, req ChallengeRespondRequest) (*clubtypes.ChallengeDetail, error)
+
+	// WithdrawChallenge withdraws a challenge.
+	WithdrawChallenge(ctx context.Context, req ChallengeActionRequest) (*clubtypes.ChallengeDetail, error)
+
+	// HideChallenge hides a challenge from the board.
+	HideChallenge(ctx context.Context, req ChallengeActionRequest) (*clubtypes.ChallengeDetail, error)
+
+	// LinkChallengeRound links a normal round to an accepted challenge.
+	LinkChallengeRound(ctx context.Context, req ChallengeRoundLinkRequest) (*clubtypes.ChallengeDetail, error)
+
+	// UnlinkChallengeRound detaches the current active round link from a challenge.
+	UnlinkChallengeRound(ctx context.Context, req ChallengeActionRequest) (*clubtypes.ChallengeDetail, error)
+
+	// BindChallengeMessage stores the persistent Discord message reference.
+	BindChallengeMessage(ctx context.Context, req ChallengeMessageBindingRequest) (*clubtypes.ChallengeDetail, error)
+
+	// ExpireChallenge expires an open or accepted-unlinked challenge.
+	ExpireChallenge(ctx context.Context, req ChallengeExpireRequest) (*clubtypes.ChallengeDetail, error)
+
+	// CompleteChallengeForRound completes a challenge when a linked round finalizes.
+	CompleteChallengeForRound(ctx context.Context, req ChallengeRoundEventRequest) (*clubtypes.ChallengeDetail, error)
+
+	// ResetChallengeForRound unlinks a challenge when its linked round is deleted.
+	ResetChallengeForRound(ctx context.Context, req ChallengeRoundEventRequest) (*clubtypes.ChallengeDetail, error)
+
+	// RefreshChallengesForMembers emits refreshed detail for active challenges affected by tag changes.
+	RefreshChallengesForMembers(ctx context.Context, req ChallengeRefreshRequest) ([]clubtypes.ChallengeDetail, error)
 }

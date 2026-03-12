@@ -1004,6 +1004,8 @@ func historyReasonFromSource(source sharedtypes.ServiceUpdateSource) string {
 
 // getTagHistoryCore returns tag history for a member or all members in a guild.
 func (s *LeaderboardService) getTagHistoryCore(ctx context.Context, guildID, memberID string, limit int) ([]TagHistoryView, error) {
+	guildID = s.resolveGuildID(ctx, guildID)
+
 	if limit <= 0 {
 		limit = DefaultTagHistoryLimit
 	}
@@ -1036,6 +1038,8 @@ func (s *LeaderboardService) getTagHistoryCore(ctx context.Context, guildID, mem
 
 // generateTagGraphPNGCore generates a PNG chart of a member's tag history.
 func (s *LeaderboardService) generateTagGraphPNGCore(ctx context.Context, guildID, memberID string) ([]byte, error) {
+	guildID = s.resolveGuildID(ctx, guildID)
+
 	entries, err := s.tagHistRepo.GetTagHistoryForMember(ctx, s.db, guildID, memberID, ChartHistoryLimit)
 	if err != nil {
 		return nil, fmt.Errorf("LeaderboardService.GenerateTagGraphPNG: %w", err)

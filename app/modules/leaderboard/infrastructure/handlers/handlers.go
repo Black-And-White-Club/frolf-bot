@@ -140,17 +140,35 @@ func (h *LeaderboardHandlers) buildTagUpdatedResults(
 		newTag = &tag
 	}
 
+	var clubUUIDStr *string
+	if parsedClubUUID, err := uuid.Parse(string(guildID)); err == nil && parsedClubUUID != uuid.Nil {
+		str := parsedClubUUID.String()
+		clubUUIDStr = &str
+	} else if h.userService != nil && guildID != "" {
+		clubUUID, err := h.userService.GetClubUUIDByDiscordGuildID(ctx, guildID)
+		if err == nil && clubUUID != uuid.Nil {
+			str := clubUUID.String()
+			clubUUIDStr = &str
+		}
+	}
+
 	results := []handlerwrapper.Result{{
 		Topic: leaderboardevents.LeaderboardTagUpdatedV2,
 		Payload: &leaderboardevents.LeaderboardTagUpdatedPayloadV1{
-			GuildID: guildID,
-			UserID:  userID,
-			NewTag:  newTag,
-			Reason:  tagUpdateReasonForSource(source, newTag),
+			GuildID:  guildID,
+			ClubUUID: clubUUIDStr,
+			UserID:   userID,
+			NewTag:   newTag,
+			Reason:   tagUpdateReasonForSource(source, newTag),
 		},
 	}}
 
-	return h.addParallelIdentityResults(ctx, results, leaderboardevents.LeaderboardTagUpdatedV2, guildID)
+	results = addGuildScopedResult(results, leaderboardevents.LeaderboardTagUpdatedV2, guildID)
+	if clubUUIDStr != nil && *clubUUIDStr != string(guildID) {
+		results = addGuildScopedResult(results, leaderboardevents.LeaderboardTagUpdatedV2, *clubUUIDStr)
+	}
+
+	return results
 }
 
 func tagUpdateReasonForSource(source sharedtypes.ServiceUpdateSource, newTag *sharedtypes.TagNumber) string {
@@ -211,6 +229,10 @@ func addGuildScopedResult(results []handlerwrapper.Result, baseTopic string, gui
 func (h *LeaderboardHandlers) addParallelIdentityResults(ctx context.Context, results []handlerwrapper.Result, baseTopic string, guildID sharedtypes.GuildID) []handlerwrapper.Result {
 	// 1. Add legacy GuildID scoped result
 	results = addGuildScopedResult(results, baseTopic, guildID)
+
+	if parsedClubUUID, err := uuid.Parse(string(guildID)); err == nil && parsedClubUUID != uuid.Nil {
+		return results
+	}
 
 	// 2. Add internal ClubUUID scoped result
 	if h.userService != nil && guildID != "" {

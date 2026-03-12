@@ -176,6 +176,15 @@ func (app *App) readinessFailures(ctx context.Context) []string {
 		}
 		cancel()
 	}
+	if app.ClubModule == nil || app.ClubModule.QueueService == nil {
+		failures = append(failures, "club queue not initialized")
+	} else {
+		queueCtx, cancel := context.WithTimeout(ctx, dependencyCheckTimeout)
+		if err := app.ClubModule.QueueService.HealthCheck(queueCtx); err != nil {
+			failures = append(failures, fmt.Sprintf("club queue unavailable: %v", err))
+		}
+		cancel()
+	}
 
 	return failures
 }
@@ -203,7 +212,19 @@ func (app *App) initializeModules(ctx context.Context, routerRunCtx context.Cont
 		app.Observability.Provider.Logger.Error("Failed to initialize score module", attr.Error(err))
 		return fmt.Errorf("failed to initialize score module: %w", err)
 	}
-	if app.ClubModule, err = club.NewClubModule(ctx, app.Observability, app.EventBus, app.Router, app.Helpers, routerRunCtx, app.DB.GetDB(), app.HTTPRouter, app.DB.UserDB); err != nil {
+	if app.ClubModule, err = club.NewClubModule(ctx, club.ClubModuleOptions{
+		Observability:     app.Observability,
+		EventBus:          app.EventBus,
+		Router:            app.Router,
+		Helpers:           app.Helpers,
+		RouterCtx:         routerRunCtx,
+		DB:                app.DB.GetDB(),
+		HTTPRouter:        app.HTTPRouter,
+		UserRepo:          app.DB.UserDB,
+		RoundReader:       app.RoundModule.RoundService,
+		LeaderboardReader: app.LeaderboardModule.LeaderboardService,
+		PostgresDSN:       app.Config.Postgres.DSN,
+	}); err != nil {
 		app.Observability.Provider.Logger.Error("Failed to initialize club module", attr.Error(err))
 		return fmt.Errorf("failed to initialize club module: %w", err)
 	}

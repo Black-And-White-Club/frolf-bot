@@ -123,7 +123,7 @@ func (s *LeaderboardService) GetTagByUserID(
 			return results.OperationResult[sharedtypes.TagNumber, error]{}, err
 		}
 		if !found {
-			return results.FailureResult[sharedtypes.TagNumber, error](sql.ErrNoRows), nil
+			return results.FailureResult[sharedtypes.TagNumber](sql.ErrNoRows), nil
 		}
 		return results.SuccessResult[sharedtypes.TagNumber, error](sharedtypes.TagNumber(tag)), nil
 	})

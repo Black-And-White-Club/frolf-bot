@@ -9,6 +9,7 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
+	clubdb "github.com/Black-And-White-Club/frolf-bot/app/modules/club/infrastructure/repositories"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 	roundadapters "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/adapters"
 	roundhandlers "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/handlers"
@@ -125,6 +126,9 @@ func NewRoundModule(
 		return nil, fmt.Errorf("failed to initialize pagination snapshot store: %w", err)
 	}
 	handlers := roundhandlers.NewRoundHandlers(service, userService, logger, helpers, paginationSnapshotStore)
+	if concreteHandlers, ok := handlers.(*roundhandlers.RoundHandlers); ok {
+		concreteHandlers.SetChallengeLookup(clubdb.NewRepository(db))
+	}
 
 	// 3. Configure the router with handlers (registers topics and middleware)
 	if err := roundRouter.Configure(routerCtx, handlers); err != nil {
