@@ -12,6 +12,8 @@ import (
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLeaderboardHandlers_HandleLeaderboardUpdateRequested(t *testing.T) {
@@ -248,4 +250,67 @@ func TestBuildParticipantsFromUpdatePayload_ZeroFinishRankPassesThroughAsZero(t 
 			}
 		})
 	}
+}
+
+func TestLeaderboardHandlers_buildTagUpdatedResults_UsesUUIDGuildIDAsClubUUID(t *testing.T) {
+	clubUUID := uuid.New()
+	var guildLookupCalls int
+
+	h := &LeaderboardHandlers{
+		userService: &FakeUserService{
+			GetClubUUIDByDiscordGuildIDFunc: func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) {
+				guildLookupCalls++
+				return uuid.Nil, nil
+			},
+		},
+		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+
+	results := h.buildTagUpdatedResults(
+		context.Background(),
+		sharedtypes.GuildID(clubUUID.String()),
+		sharedtypes.DiscordID("member-1"),
+		sharedtypes.TagNumber(4),
+		sharedtypes.ServiceUpdateSourceProcessScores,
+	)
+
+	require.Len(t, results, 2)
+	payload, ok := results[0].Payload.(*leaderboardevents.LeaderboardTagUpdatedPayloadV1)
+	require.True(t, ok)
+	require.NotNil(t, payload.ClubUUID)
+	assert.Equal(t, clubUUID.String(), *payload.ClubUUID)
+	assert.Equal(t, 0, guildLookupCalls)
+	assert.Equal(t, leaderboardevents.LeaderboardTagUpdatedV2+"."+clubUUID.String(), results[1].Topic)
+}
+
+func TestLeaderboardHandlers_buildTagUpdatedResults_ResolvesClubUUIDOnce(t *testing.T) {
+	testClubUUID := uuid.New()
+	var guildLookupCalls int
+
+	h := &LeaderboardHandlers{
+		userService: &FakeUserService{
+			GetClubUUIDByDiscordGuildIDFunc: func(ctx context.Context, guildID sharedtypes.GuildID) (uuid.UUID, error) {
+				guildLookupCalls++
+				return testClubUUID, nil
+			},
+		},
+		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+
+	results := h.buildTagUpdatedResults(
+		context.Background(),
+		sharedtypes.GuildID("test-guild"),
+		sharedtypes.DiscordID("member-1"),
+		sharedtypes.TagNumber(4),
+		sharedtypes.ServiceUpdateSourceProcessScores,
+	)
+
+	require.Len(t, results, 3)
+	payload, ok := results[0].Payload.(*leaderboardevents.LeaderboardTagUpdatedPayloadV1)
+	require.True(t, ok)
+	require.NotNil(t, payload.ClubUUID)
+	assert.Equal(t, testClubUUID.String(), *payload.ClubUUID)
+	assert.Equal(t, 1, guildLookupCalls)
+	assert.Equal(t, leaderboardevents.LeaderboardTagUpdatedV2+"."+string(sharedtypes.GuildID("test-guild")), results[1].Topic)
+	assert.Equal(t, leaderboardevents.LeaderboardTagUpdatedV2+"."+testClubUUID.String(), results[2].Topic)
 }

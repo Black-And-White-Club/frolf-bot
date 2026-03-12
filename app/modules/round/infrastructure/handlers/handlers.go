@@ -12,18 +12,26 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	handlerwrapper "github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
+	clubdb "github.com/Black-And-White-Club/frolf-bot/app/modules/club/infrastructure/repositories"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 	roundutil "github.com/Black-And-White-Club/frolf-bot/app/modules/round/utils"
 	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
 	"github.com/google/uuid"
+	"github.com/uptrace/bun"
 )
 
 const requestSourcePWA = "pwa"
+
+type ChallengeLookup interface {
+	GetChallengeByUUID(ctx context.Context, db bun.IDB, challengeUUID uuid.UUID) (*clubdb.ClubChallenge, error)
+	GetByUUID(ctx context.Context, db bun.IDB, clubUUID uuid.UUID) (*clubdb.Club, error)
+}
 
 // RoundHandlers implements the Handlers interface for round events.
 type RoundHandlers struct {
 	service                 roundservice.Service
 	userService             userservice.Service
+	challengeLookup         ChallengeLookup
 	logger                  *slog.Logger
 	helpers                 utils.Helpers
 	paginationSnapshotStore PaginationSnapshotStore
@@ -49,6 +57,13 @@ func NewRoundHandlers(
 		helpers:                 helpers,
 		paginationSnapshotStore: paginationSnapshotStore,
 	}
+}
+
+func (h *RoundHandlers) SetChallengeLookup(challengeLookup ChallengeLookup) {
+	if h == nil {
+		return
+	}
+	h.challengeLookup = challengeLookup
 }
 
 // mapOperationResult converts a service OperationResult to handler Results.

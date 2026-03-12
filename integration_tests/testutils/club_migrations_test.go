@@ -110,6 +110,60 @@ func TestClubMigrations_TargetedInvariants(t *testing.T) {
 				}
 			},
 		},
+		{
+			name:              "create club challenge tables without rounds dependency",
+			migrationContains: "create_club_challenges",
+			setup: func(t *testing.T, ctx context.Context, db *bun.DB) {
+				t.Helper()
+
+				_, err := db.ExecContext(ctx, `
+					CREATE EXTENSION IF NOT EXISTS pgcrypto;
+					CREATE TABLE clubs (
+						uuid UUID PRIMARY KEY DEFAULT gen_random_uuid()
+					);
+					CREATE TABLE users (
+						uuid UUID PRIMARY KEY DEFAULT gen_random_uuid()
+					);
+					INSERT INTO clubs (uuid) VALUES ('00000000-0000-0000-0000-000000000401');
+					INSERT INTO users (uuid) VALUES
+						('00000000-0000-0000-0000-000000000402'),
+						('00000000-0000-0000-0000-000000000403');
+				`)
+				if err != nil {
+					t.Fatalf("failed creating club challenge prerequisites: %v", err)
+				}
+			},
+			assertions: func(t *testing.T, ctx context.Context, db *bun.DB) {
+				t.Helper()
+
+				assertTableExists(t, ctx, db, "club_challenges")
+				assertTableExists(t, ctx, db, "club_challenge_round_links")
+				assertIndexExists(t, ctx, db, "club_challenge_round_links", "idx_club_challenge_round_links_active_challenge")
+				assertIndexExists(t, ctx, db, "club_challenge_round_links", "idx_club_challenge_round_links_active_round")
+
+				_, err := db.ExecContext(ctx, `
+					INSERT INTO club_challenges (
+						uuid,
+						club_uuid,
+						challenger_user_uuid,
+						defender_user_uuid,
+						status
+					) VALUES (
+						'00000000-0000-0000-0000-000000000404',
+						'00000000-0000-0000-0000-000000000401',
+						'00000000-0000-0000-0000-000000000402',
+						'00000000-0000-0000-0000-000000000403',
+						'accepted'
+					);
+
+					INSERT INTO club_challenge_round_links (challenge_uuid, round_id)
+					VALUES ('00000000-0000-0000-0000-000000000404', '00000000-0000-0000-0000-000000000405');
+				`)
+				if err != nil {
+					t.Fatalf("failed inserting club challenge rows without rounds table: %v", err)
+				}
+			},
+		},
 	}
 
 	for _, tc := range tests {
@@ -170,6 +224,8 @@ func TestClubMigrations_RunAllUp_SmokeAndSchemaInvariants(t *testing.T) {
 
 			assertTableExists(t, ctx, db, "clubs")
 			assertTableExists(t, ctx, db, "club_invites")
+			assertTableExists(t, ctx, db, "club_challenges")
+			assertTableExists(t, ctx, db, "club_challenge_round_links")
 			assertForeignKeyConstraintReferences(t, ctx, db, "fk_club_memberships_club", "clubs")
 
 			var count int

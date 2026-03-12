@@ -3,14 +3,20 @@ package roundhandlers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
+	clubevents "github.com/Black-And-White-Club/frolf-bot-shared/events/club"
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	clubtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/club"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
+	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
+	clubdb "github.com/Black-And-White-Club/frolf-bot/app/modules/club/infrastructure/repositories"
 	roundtime "github.com/Black-And-White-Club/frolf-bot/app/modules/round/time_utils"
+	"github.com/google/uuid"
 )
 
 // HandleCreateRoundRequest handles the initial request to create a round.
@@ -18,10 +24,32 @@ func (h *RoundHandlers) HandleCreateRoundRequest(
 	ctx context.Context,
 	payload *roundevents.CreateRoundRequestedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
+	canonicalGuildID := payload.GuildID
+	var challengeContext *createRoundChallengeContext
+	if payload.ChallengeID != nil && strings.TrimSpace(*payload.ChallengeID) != "" {
+		var err error
+		challengeContext, err = h.challengeContextForCreateRound(ctx, payload.UserID, strings.TrimSpace(*payload.ChallengeID))
+		if err != nil {
+			var validationErr challengeRoundValidationError
+			if errors.As(err, &validationErr) {
+				return []handlerwrapper.Result{{
+					Topic: roundevents.RoundValidationFailedV1,
+					Payload: &roundevents.RoundValidationFailedPayloadV1{
+						GuildID:       payload.GuildID,
+						UserID:        payload.UserID,
+						ErrorMessages: []string{validationErr.Error()},
+					},
+				}}, nil
+			}
+			return nil, err
+		}
+		canonicalGuildID = challengeContext.guildID
+	}
+
 	if h.logger != nil {
 		h.logger.InfoContext(ctx, "processing create round request",
 			attr.ExtractCorrelationID(ctx),
-			attr.String("guild_id", string(payload.GuildID)),
+			attr.String("guild_id", string(canonicalGuildID)),
 			attr.UserID(payload.UserID),
 			attr.String("title", string(payload.Title)),
 			attr.String("start_time", payload.StartTime),
@@ -38,7 +66,7 @@ func (h *RoundHandlers) HandleCreateRoundRequest(
 
 	descVal := roundtypes.Description(description)
 	req := &roundtypes.CreateRoundInput{
-		GuildID:     payload.GuildID,
+		GuildID:     canonicalGuildID,
 		Title:       roundtypes.Title(payload.Title),
 		Description: &descVal,
 		Location:    roundtypes.Location(payload.Location),
@@ -53,7 +81,7 @@ func (h *RoundHandlers) HandleCreateRoundRequest(
 		if h.logger != nil {
 			h.logger.ErrorContext(ctx, "create round validation request failed",
 				attr.ExtractCorrelationID(ctx),
-				attr.String("guild_id", string(payload.GuildID)),
+				attr.String("guild_id", string(canonicalGuildID)),
 				attr.UserID(payload.UserID),
 				attr.Error(err),
 			)
@@ -64,18 +92,25 @@ func (h *RoundHandlers) HandleCreateRoundRequest(
 	// Explicitly map results to event payloads
 	mappedResult := result.Map(
 		func(res *roundtypes.CreateRoundResult) any {
+			roundPayload := *res.Round
+			roundPayload.GuildID = canonicalGuildID
+			if challengeContext != nil {
+				roundPayload.Participants = append([]roundtypes.Participant(nil), challengeContext.participants...)
+			}
+
 			return &roundevents.RoundEntityCreatedPayloadV1{
-				GuildID:          payload.GuildID,
-				Round:            *res.Round,
+				GuildID:          canonicalGuildID,
+				Round:            roundPayload,
 				DiscordChannelID: res.ChannelID,
-				DiscordGuildID:   string(payload.GuildID),
+				DiscordGuildID:   string(canonicalGuildID),
 				Config:           sharedevents.NewGuildConfigFragment(res.GuildConfig),
 				RequestSource:    payload.RequestSource,
+				ChallengeID:      payload.ChallengeID,
 			}
 		},
 		func(err error) any {
 			return &roundevents.RoundValidationFailedPayloadV1{
-				GuildID:       payload.GuildID,
+				GuildID:       canonicalGuildID,
 				UserID:        payload.UserID,
 				ErrorMessages: []string{err.Error()},
 			}
@@ -91,7 +126,7 @@ func (h *RoundHandlers) HandleCreateRoundRequest(
 		if mappedResult.Failure != nil {
 			h.logger.WarnContext(ctx, "create round request validation failed",
 				attr.ExtractCorrelationID(ctx),
-				attr.String("guild_id", string(payload.GuildID)),
+				attr.String("guild_id", string(canonicalGuildID)),
 				attr.UserID(payload.UserID),
 				attr.Any("failure", *mappedResult.Failure),
 			)
@@ -99,7 +134,7 @@ func (h *RoundHandlers) HandleCreateRoundRequest(
 			if successPayload, ok := (*mappedResult.Success).(*roundevents.RoundEntityCreatedPayloadV1); ok {
 				h.logger.InfoContext(ctx, "create round request validated successfully",
 					attr.ExtractCorrelationID(ctx),
-					attr.String("guild_id", string(payload.GuildID)),
+					attr.String("guild_id", string(canonicalGuildID)),
 					attr.RoundID("round_id", successPayload.Round.ID),
 				)
 			}
@@ -154,8 +189,9 @@ func (h *RoundHandlers) HandleRoundEntityCreated(
 					StartTime:   r.StartTime,
 					UserID:      r.CreatedBy,
 				},
-				ChannelID: channelID,
-				Config:    sharedevents.NewGuildConfigFragment(res.GuildConfig),
+				ChannelID:   channelID,
+				Config:      sharedevents.NewGuildConfigFragment(res.GuildConfig),
+				ChallengeID: payload.ChallengeID,
 			}
 
 			return createdPayload
@@ -249,6 +285,14 @@ func (h *RoundHandlers) HandleRoundEntityCreated(
 		}
 	}
 
+	if mappedResult.Success != nil {
+		if createdPayload, ok := (*mappedResult.Success).(*roundevents.RoundCreatedPayloadV1); ok {
+			if challengeLinkResult := newChallengeRoundLinkResult(createdPayload); challengeLinkResult != nil {
+				handlerResults = append(handlerResults, *challengeLinkResult)
+			}
+		}
+	}
+
 	if h.logger != nil {
 		if mappedResult.Failure != nil {
 			h.logger.WarnContext(ctx, "round creation persistence failed",
@@ -323,6 +367,7 @@ func (h *RoundHandlers) HandleRoundEventMessageIDUpdate(
 		},
 		EventMessageID:     discordMessageID,
 		NativeEventPlanned: payload.NativeEventPlanned,
+		ChallengeID:        payload.ChallengeID,
 	}
 
 	if h.logger != nil {
@@ -353,4 +398,137 @@ func usesDirectRoundScheduling(requestSource *string) bool {
 	}
 
 	return strings.EqualFold(strings.TrimSpace(*requestSource), requestSourcePWA)
+}
+
+type challengeRoundValidationError struct {
+	message string
+}
+
+func (e challengeRoundValidationError) Error() string {
+	return e.message
+}
+
+type createRoundChallengeContext struct {
+	guildID      sharedtypes.GuildID
+	participants []roundtypes.Participant
+}
+
+func (h *RoundHandlers) challengeContextForCreateRound(
+	ctx context.Context,
+	actorExternalID sharedtypes.DiscordID,
+	challengeID string,
+) (*createRoundChallengeContext, error) {
+	if h.challengeLookup == nil {
+		return nil, fmt.Errorf("challenge lookup unavailable")
+	}
+	if h.userService == nil {
+		return nil, fmt.Errorf("user service unavailable")
+	}
+
+	parsedChallengeID, err := uuid.Parse(challengeID)
+	if err != nil {
+		return nil, challengeRoundValidationError{message: "challenge_id must be a valid UUID"}
+	}
+
+	challenge, err := h.challengeLookup.GetChallengeByUUID(ctx, nil, parsedChallengeID)
+	if err != nil {
+		return nil, fmt.Errorf("load challenge for round creation: %w", err)
+	}
+	if challenge.Status != clubtypes.ChallengeStatusAccepted {
+		return nil, challengeRoundValidationError{message: "only accepted challenges can create linked rounds"}
+	}
+
+	club, err := h.challengeLookup.GetByUUID(ctx, nil, challenge.ClubUUID)
+	if err != nil {
+		return nil, fmt.Errorf("load challenge club for round creation: %w", err)
+	}
+	if club.DiscordGuildID == nil || strings.TrimSpace(*club.DiscordGuildID) == "" {
+		return nil, challengeRoundValidationError{message: "challenge club is missing a Discord guild ID"}
+	}
+
+	if err := h.validateChallengeRoundActor(ctx, sharedtypes.GuildID(strings.TrimSpace(*club.DiscordGuildID)), actorExternalID, challenge); err != nil {
+		return nil, err
+	}
+
+	challengerID, err := h.userService.GetDiscordIDByUUID(ctx, challenge.ChallengerUserUUID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve challenger Discord ID: %w", err)
+	}
+	if challengerID == "" {
+		return nil, challengeRoundValidationError{message: "challenge participants must have linked Discord identities"}
+	}
+
+	defenderID, err := h.userService.GetDiscordIDByUUID(ctx, challenge.DefenderUserUUID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve defender Discord ID: %w", err)
+	}
+	if defenderID == "" {
+		return nil, challengeRoundValidationError{message: "challenge participants must have linked Discord identities"}
+	}
+
+	return &createRoundChallengeContext{
+		guildID: sharedtypes.GuildID(strings.TrimSpace(*club.DiscordGuildID)),
+		participants: []roundtypes.Participant{
+			{UserID: challengerID, Response: roundtypes.ResponseAccept},
+			{UserID: defenderID, Response: roundtypes.ResponseAccept},
+		},
+	}, nil
+}
+
+func (h *RoundHandlers) validateChallengeRoundActor(
+	ctx context.Context,
+	guildID sharedtypes.GuildID,
+	actorExternalID sharedtypes.DiscordID,
+	challenge *clubdb.ClubChallenge,
+) error {
+	if challenge == nil {
+		return fmt.Errorf("challenge is required")
+	}
+	if actorExternalID == "" {
+		return challengeRoundValidationError{message: "challenge round creation requires an actor identity"}
+	}
+
+	actorUserUUID, err := h.userService.GetUUIDByDiscordID(ctx, actorExternalID)
+	if err == nil && actorUserUUID != uuid.Nil {
+		if actorUserUUID == challenge.ChallengerUserUUID || actorUserUUID == challenge.DefenderUserUUID {
+			return nil
+		}
+	}
+
+	roleResult, err := h.userService.GetUserRole(ctx, guildID, actorExternalID)
+	if err != nil {
+		return fmt.Errorf("resolve challenge scheduling role: %w", err)
+	}
+	if roleResult.Failure != nil {
+		return challengeRoundValidationError{message: "only challenge participants or club staff can schedule a challenge round"}
+	}
+	if roleResult.Success == nil {
+		return challengeRoundValidationError{message: "only challenge participants or club staff can schedule a challenge round"}
+	}
+
+	role := *roleResult.Success
+	if role != sharedtypes.UserRoleAdmin && role != sharedtypes.UserRoleEditor {
+		return challengeRoundValidationError{message: "only challenge participants or club staff can schedule a challenge round"}
+	}
+
+	return nil
+}
+
+func newChallengeRoundLinkResult(payload *roundevents.RoundCreatedPayloadV1) *handlerwrapper.Result {
+	if payload == nil || payload.ChallengeID == nil || *payload.ChallengeID == "" || payload.UserID == "" {
+		return nil
+	}
+
+	return &handlerwrapper.Result{
+		Topic: clubevents.ChallengeRoundLinkRequestedV1,
+		Payload: &clubevents.ChallengeRoundLinkRequestedPayloadV1{
+			GuildID:         string(payload.GuildID),
+			ActorExternalID: string(payload.UserID),
+			ChallengeID:     *payload.ChallengeID,
+			RoundID:         payload.RoundID.String(),
+		},
+		Metadata: map[string]string{
+			"idempotency_key": fmt.Sprintf("challenge-round-link:%s:%s", *payload.ChallengeID, payload.RoundID.String()),
+		},
+	}
 }

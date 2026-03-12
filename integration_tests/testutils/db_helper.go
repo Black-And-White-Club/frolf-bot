@@ -50,6 +50,10 @@ func runRiverMigrations(ctx context.Context, pgConnStr string) error {
 
 // Known application tables (cached to avoid querying information_schema every time)
 var appTables = []string{
+	"club_challenge_round_links",
+	"club_challenges",
+	"club_invites",
+	"clubs",
 	"guild_memberships",
 	"users",
 	"scores",
@@ -152,6 +156,10 @@ func CleanAllIntegrationTables(ctx context.Context, db *bun.DB) error {
 	return TruncateTables(
 		ctx,
 		db,
+		"club_challenge_round_links",
+		"club_challenges",
+		"club_invites",
+		"clubs",
 		"users",
 		"scores",
 		"league_members",

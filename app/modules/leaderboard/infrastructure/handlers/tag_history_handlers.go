@@ -22,7 +22,12 @@ func (h *LeaderboardHandlers) HandleTagHistoryRequest(
 		slog.String("member_id", payload.MemberID),
 		slog.Int("limit", payload.Limit),
 	)
-	history, err := h.service.GetTagHistory(ctx, sharedtypes.GuildID(payload.GuildID), payload.MemberID, payload.Limit)
+	guildID := payload.GuildID
+	if payload.ClubUUID != nil && *payload.ClubUUID != "" {
+		guildID = *payload.ClubUUID
+	}
+
+	history, err := h.service.GetTagHistory(ctx, sharedtypes.GuildID(guildID), payload.MemberID, payload.Limit)
 	if err != nil {
 		h.logger.ErrorContext(ctx, "failed to get tag history",
 			slog.String("guild_id", payload.GuildID),
@@ -72,7 +77,12 @@ func (h *LeaderboardHandlers) HandleTagGraphRequest(
 	ctx context.Context,
 	payload *leaderboardevents.TagGraphRequestedPayloadV1,
 ) ([]handlerwrapper.Result, error) {
-	pngData, err := h.service.GenerateTagGraphPNG(ctx, sharedtypes.GuildID(payload.GuildID), payload.MemberID)
+	guildID := payload.GuildID
+	if payload.ClubUUID != nil && *payload.ClubUUID != "" {
+		guildID = *payload.ClubUUID
+	}
+
+	pngData, err := h.service.GenerateTagGraphPNG(ctx, sharedtypes.GuildID(guildID), payload.MemberID)
 	if err != nil {
 		h.logger.ErrorContext(ctx, "failed to generate tag graph",
 			slog.String("guild_id", payload.GuildID),

@@ -71,6 +71,9 @@ func TestGetClub(t *testing.T) {
 			svc := NewClubService(
 				fakeRepo,
 				nil,
+				nil,
+				nil,
+				nil,
 				slog.Default(),
 				clubmetrics.NewNoop(),
 				nil,
@@ -98,7 +101,7 @@ func TestUpsertClubFromDiscord(t *testing.T) {
 	existingClub := &clubdb.Club{
 		UUID:           uuid.New(),
 		Name:           "Old Name",
-		DiscordGuildID: ptrString("123456789"),
+		DiscordGuildID: testPtrString("123456789"),
 	}
 
 	tests := []struct {
@@ -122,7 +125,7 @@ func TestUpsertClubFromDiscord(t *testing.T) {
 			},
 			guildID:  "123456789",
 			clubName: "New Club",
-			iconURL:  ptrString("https://example.com/icon.png"),
+			iconURL:  testPtrString("https://example.com/icon.png"),
 			wantName: "New Club",
 			wantErr:  false,
 		},
@@ -163,6 +166,9 @@ func TestUpsertClubFromDiscord(t *testing.T) {
 			svc := NewClubService(
 				fakeRepo,
 				nil,
+				nil,
+				nil,
+				nil,
 				slog.Default(),
 				clubmetrics.NewNoop(),
 				nil,
@@ -183,6 +189,6 @@ func TestUpsertClubFromDiscord(t *testing.T) {
 	}
 }
 
-func ptrString(s string) *string {
+func testPtrString(s string) *string {
 	return &s
 }

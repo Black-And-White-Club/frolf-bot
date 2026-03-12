@@ -48,18 +48,24 @@ func (g *discordGuild) hasManageGuild() bool {
 
 // ClubService implements the Service interface.
 type ClubService struct {
-	repo     clubdb.Repository
-	userRepo userdb.Repository
-	logger   *slog.Logger
-	metrics  clubmetrics.ClubMetrics
-	tracer   trace.Tracer
-	db       *bun.DB
+	repo              clubdb.Repository
+	userRepo          userdb.Repository
+	queueService      ChallengeQueueService
+	leaderboardReader ChallengeTagReader
+	roundReader       ChallengeRoundReader
+	logger            *slog.Logger
+	metrics           clubmetrics.ClubMetrics
+	tracer            trace.Tracer
+	db                *bun.DB
 }
 
 // NewClubService creates a new ClubService.
 func NewClubService(
 	repo clubdb.Repository,
 	userRepo userdb.Repository,
+	queueService ChallengeQueueService,
+	leaderboardReader ChallengeTagReader,
+	roundReader ChallengeRoundReader,
 	logger *slog.Logger,
 	metrics clubmetrics.ClubMetrics,
 	tracer trace.Tracer,
@@ -69,12 +75,15 @@ func NewClubService(
 		logger = slog.Default()
 	}
 	return &ClubService{
-		repo:     repo,
-		userRepo: userRepo,
-		logger:   logger,
-		metrics:  metrics,
-		tracer:   tracer,
-		db:       db,
+		repo:              repo,
+		userRepo:          userRepo,
+		queueService:      queueService,
+		leaderboardReader: leaderboardReader,
+		roundReader:       roundReader,
+		logger:            logger,
+		metrics:           metrics,
+		tracer:            tracer,
+		db:                db,
 	}
 }
 
@@ -560,6 +569,9 @@ func generateInviteCode() (string, error) {
 // operationFunc is the generic signature for service operation functions.
 type operationFunc[S any, F any] func(ctx context.Context) (results.OperationResult[S, F], error)
 
+// valueOperationFunc is the generic signature for value-returning service operations.
+type valueOperationFunc[T any] func(ctx context.Context) (T, error)
+
 // withTelemetry wraps a service operation with tracing, metrics, and panic recovery.
 func withTelemetry[S any, F any](
 	s *ClubService,
@@ -657,6 +669,86 @@ func withTelemetry[S any, F any](
 	}
 
 	return result, nil
+}
+
+// withValueTelemetry wraps a value-returning service operation with tracing,
+// metrics, structured logging, and panic recovery.
+func withValueTelemetry[T any](
+	s *ClubService,
+	ctx context.Context,
+	operationName string,
+	identifier string,
+	op valueOperationFunc[T],
+) (value T, err error) {
+	var span trace.Span
+	if s.tracer != nil {
+		ctx, span = s.tracer.Start(ctx, operationName, trace.WithAttributes(
+			attribute.String("operation", operationName),
+			attribute.String("identifier", identifier),
+		))
+	} else {
+		span = trace.SpanFromContext(ctx)
+	}
+	defer span.End()
+
+	if s.metrics != nil {
+		s.metrics.RecordOperationAttempt(ctx, operationName, "ClubService")
+	}
+
+	startTime := time.Now()
+	defer func() {
+		if s.metrics != nil {
+			s.metrics.RecordOperationDuration(ctx, operationName, "ClubService", time.Since(startTime))
+		}
+	}()
+
+	s.logger.InfoContext(ctx, "Operation triggered", attr.ExtractCorrelationID(ctx), attr.String("operation", operationName))
+
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("panic in %s: %v", operationName, r)
+			s.logger.ErrorContext(ctx, "Critical panic recovered",
+				attr.ExtractCorrelationID(ctx),
+				attr.String("identifier", identifier),
+				attr.Error(err),
+			)
+			if s.metrics != nil {
+				s.metrics.RecordOperationFailure(ctx, operationName, "ClubService")
+			}
+			span.RecordError(err)
+			var zero T
+			value = zero
+		}
+	}()
+
+	value, err = op(ctx)
+	if err != nil {
+		wrappedErr := fmt.Errorf("%s: %w", operationName, err)
+		s.logger.ErrorContext(ctx, "Operation failed with error",
+			attr.ExtractCorrelationID(ctx),
+			attr.String("operation", operationName),
+			attr.String("identifier", identifier),
+			attr.Error(wrappedErr),
+		)
+		if s.metrics != nil {
+			s.metrics.RecordOperationFailure(ctx, operationName, "ClubService")
+		}
+		span.RecordError(wrappedErr)
+		var zero T
+		return zero, wrappedErr
+	}
+
+	s.logger.InfoContext(ctx, "Operation completed successfully",
+		attr.ExtractCorrelationID(ctx),
+		attr.String("operation", operationName),
+		attr.String("identifier", identifier),
+	)
+
+	if s.metrics != nil {
+		s.metrics.RecordOperationSuccess(ctx, operationName, "ClubService")
+	}
+
+	return value, nil
 }
 
 // runInTx ensures the operation runs within a transaction.
