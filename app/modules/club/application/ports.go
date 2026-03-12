@@ -15,6 +15,7 @@ import (
 type ChallengeQueueService interface {
 	ScheduleOpenExpiry(ctx context.Context, challengeID uuid.UUID, expiresAt time.Time) error
 	ScheduleAcceptedExpiry(ctx context.Context, challengeID uuid.UUID, expiresAt time.Time) error
+	CancelOpenExpiry(ctx context.Context, challengeID uuid.UUID) error
 	CancelChallengeJobs(ctx context.Context, challengeID uuid.UUID) error
 	HealthCheck(ctx context.Context) error
 	Start(ctx context.Context) error

@@ -67,6 +67,10 @@ func (s *stubQueueService) ScheduleAcceptedExpiry(context.Context, uuid.UUID, ti
 	return nil
 }
 
+func (s *stubQueueService) CancelOpenExpiry(context.Context, uuid.UUID) error {
+	return nil
+}
+
 func (s *stubQueueService) CancelChallengeJobs(context.Context, uuid.UUID) error {
 	return nil
 }

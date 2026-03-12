@@ -442,11 +442,8 @@ func (h *RoundHandlers) challengeContextForCreateRound(
 	if err != nil {
 		return nil, fmt.Errorf("load challenge club for round creation: %w", err)
 	}
-	if club.DiscordGuildID == nil || strings.TrimSpace(*club.DiscordGuildID) == "" {
-		return nil, challengeRoundValidationError{message: "challenge club is missing a Discord guild ID"}
-	}
-
-	if err := h.validateChallengeRoundActor(ctx, sharedtypes.GuildID(strings.TrimSpace(*club.DiscordGuildID)), actorExternalID, challenge); err != nil {
+	canonicalGuildID := challengeRoundGuildID(club)
+	if err := h.validateChallengeRoundActor(ctx, canonicalGuildID, actorExternalID, challenge); err != nil {
 		return nil, err
 	}
 
@@ -467,12 +464,24 @@ func (h *RoundHandlers) challengeContextForCreateRound(
 	}
 
 	return &createRoundChallengeContext{
-		guildID: sharedtypes.GuildID(strings.TrimSpace(*club.DiscordGuildID)),
+		guildID: canonicalGuildID,
 		participants: []roundtypes.Participant{
 			{UserID: challengerID, Response: roundtypes.ResponseAccept},
 			{UserID: defenderID, Response: roundtypes.ResponseAccept},
 		},
 	}, nil
+}
+
+func challengeRoundGuildID(club *clubdb.Club) sharedtypes.GuildID {
+	if club == nil {
+		return ""
+	}
+	if club.DiscordGuildID != nil {
+		if guildID := strings.TrimSpace(*club.DiscordGuildID); guildID != "" {
+			return sharedtypes.GuildID(guildID)
+		}
+	}
+	return sharedtypes.GuildID(club.UUID.String())
 }
 
 func (h *RoundHandlers) validateChallengeRoundActor(

@@ -22,6 +22,7 @@ import (
 type QueueService interface {
 	ScheduleOpenExpiry(ctx context.Context, challengeID uuid.UUID, expiresAt time.Time) error
 	ScheduleAcceptedExpiry(ctx context.Context, challengeID uuid.UUID, expiresAt time.Time) error
+	CancelOpenExpiry(ctx context.Context, challengeID uuid.UUID) error
 	CancelChallengeJobs(ctx context.Context, challengeID uuid.UUID) error
 	HealthCheck(ctx context.Context) error
 	Start(ctx context.Context) error
@@ -114,8 +115,16 @@ func (s *Service) ScheduleAcceptedExpiry(ctx context.Context, challengeID uuid.U
 	})
 }
 
+func (s *Service) CancelOpenExpiry(ctx context.Context, challengeID uuid.UUID) error {
+	return s.cancelChallengeJobsByKinds(ctx, challengeID, "cancel_open_expiry", OpenChallengeExpiryJob{}.Kind())
+}
+
 func (s *Service) CancelChallengeJobs(ctx context.Context, challengeID uuid.UUID) error {
-	return s.runOperation(ctx, "cancel_challenge_jobs", func() error {
+	return s.cancelChallengeJobsByKinds(ctx, challengeID, "cancel_challenge_jobs")
+}
+
+func (s *Service) cancelChallengeJobsByKinds(ctx context.Context, challengeID uuid.UUID, operation string, kinds ...string) error {
+	return s.runOperation(ctx, operation, func() error {
 		// river_job is River's internal table (https://riverqueue.com/docs/job-cancellation).
 		// River does not expose a bulk-cancel-by-metadata API, so we query the table directly
 		// using the JSON args field. If River changes its schema this query must be updated.
@@ -123,14 +132,17 @@ func (s *Service) CancelChallengeJobs(ctx context.Context, challengeID uuid.UUID
 			ID int64 `bun:"id"`
 		}
 
-		var jobs []RiverJobRow
-		err := s.db.NewSelect().
+		query := s.db.NewSelect().
 			Table("river_job").
 			Column("id").
 			Where("args->>'challenge_id' = ?", challengeID.String()).
-			Where("state IN ('available', 'scheduled')").
-			Scan(ctx, &jobs)
-		if err != nil {
+			Where("state IN ('available', 'scheduled')")
+		if len(kinds) > 0 {
+			query = query.Where("kind IN (?)", bun.In(kinds))
+		}
+
+		var jobs []RiverJobRow
+		if err := query.Scan(ctx, &jobs); err != nil {
 			return err
 		}
 

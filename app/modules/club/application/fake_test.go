@@ -256,6 +256,7 @@ var _ clubdb.Repository = (*FakeClubRepo)(nil)
 type FakeChallengeQueueService struct {
 	ScheduleOpenExpiryFunc     func(ctx context.Context, challengeID uuid.UUID, expiresAt time.Time) error
 	ScheduleAcceptedExpiryFunc func(ctx context.Context, challengeID uuid.UUID, expiresAt time.Time) error
+	CancelOpenExpiryFunc       func(ctx context.Context, challengeID uuid.UUID) error
 	CancelChallengeJobsFunc    func(ctx context.Context, challengeID uuid.UUID) error
 	HealthCheckFunc            func(ctx context.Context) error
 	StartFunc                  func(ctx context.Context) error
@@ -272,6 +273,13 @@ func (f *FakeChallengeQueueService) ScheduleOpenExpiry(ctx context.Context, chal
 func (f *FakeChallengeQueueService) ScheduleAcceptedExpiry(ctx context.Context, challengeID uuid.UUID, expiresAt time.Time) error {
 	if f.ScheduleAcceptedExpiryFunc != nil {
 		return f.ScheduleAcceptedExpiryFunc(ctx, challengeID, expiresAt)
+	}
+	return nil
+}
+
+func (f *FakeChallengeQueueService) CancelOpenExpiry(ctx context.Context, challengeID uuid.UUID) error {
+	if f.CancelOpenExpiryFunc != nil {
+		return f.CancelOpenExpiryFunc(ctx, challengeID)
 	}
 	return nil
 }

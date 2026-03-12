@@ -341,7 +341,7 @@ func (s *ClubService) RespondToChallenge(ctx context.Context, req ChallengeRespo
 			return nil, err
 		}
 
-		s.cancelChallengeJobs(ctx, detail.ID)
+		s.cancelChallengeOpenExpiry(ctx, detail.ID)
 		if response == ChallengeResponseAccept {
 			if s.metrics != nil {
 				s.metrics.RecordChallengeAccepted(ctx)
@@ -963,19 +963,6 @@ func (s *ClubService) validateRoundForChallenge(ctx context.Context, db bun.IDB,
 		return fmt.Errorf("round reader unavailable")
 	}
 
-	membershipMap, err := s.loadChallengeMemberships(ctx, db, club.UUID, challenge.ChallengerUserUUID, challenge.DefenderUserUUID)
-	if err != nil {
-		return err
-	}
-	challengerMembership, ok := membershipMap[challenge.ChallengerUserUUID]
-	if !ok || challengerMembership.ExternalID == nil || *challengerMembership.ExternalID == "" {
-		return fmt.Errorf("challenge participants must have linked Discord identities to link a round")
-	}
-	defenderMembership, ok := membershipMap[challenge.DefenderUserUUID]
-	if !ok || defenderMembership.ExternalID == nil || *defenderMembership.ExternalID == "" {
-		return fmt.Errorf("challenge participants must have linked Discord identities to link a round")
-	}
-
 	guildID := s.challengeGuildID(club)
 	result, err := s.roundReader.GetRound(ctx, guildID, sharedtypes.RoundID(roundID))
 	if err != nil {
@@ -987,15 +974,6 @@ func (s *ClubService) validateRoundForChallenge(ctx context.Context, db bun.IDB,
 	round := *result.Success
 	if round.State == roundtypes.RoundStateDeleted || round.State == roundtypes.RoundStateFinalized {
 		return fmt.Errorf("only upcoming or in-progress rounds can be linked")
-	}
-	participantIDs := roundParticipantIDs(round)
-	challengerExternalID := sharedtypes.DiscordID(*challengerMembership.ExternalID)
-	defenderExternalID := sharedtypes.DiscordID(*defenderMembership.ExternalID)
-	if _, ok := participantIDs[challengerExternalID]; !ok {
-		return fmt.Errorf("linked round must include both challenge participants")
-	}
-	if _, ok := participantIDs[defenderExternalID]; !ok {
-		return fmt.Errorf("linked round must include both challenge participants")
 	}
 	return nil
 }
@@ -1241,6 +1219,19 @@ func (s *ClubService) cancelChallengeJobs(ctx context.Context, challengeID strin
 	}
 	if err := s.queueService.CancelChallengeJobs(ctx, id); err != nil {
 		s.logger.WarnContext(ctx, "failed to cancel challenge jobs", slog.String("challenge_id", challengeID), slog.String("error", err.Error()))
+	}
+}
+
+func (s *ClubService) cancelChallengeOpenExpiry(ctx context.Context, challengeID string) {
+	if s.queueService == nil {
+		return
+	}
+	id, err := uuid.Parse(challengeID)
+	if err != nil {
+		return
+	}
+	if err := s.queueService.CancelOpenExpiry(ctx, id); err != nil {
+		s.logger.WarnContext(ctx, "failed to cancel open challenge expiry", slog.String("challenge_id", challengeID), slog.String("error", err.Error()))
 	}
 }
 

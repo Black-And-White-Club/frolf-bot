@@ -202,6 +202,96 @@ func TestRoundHandlers_HandleCreateRoundRequest(t *testing.T) {
 			},
 		},
 		{
+			name: "Challenge-linked create falls back to club uuid when discord guild mapping is absent",
+			fakeSetup: func(fake *FakeService, users *FakeUserService, lookup *FakeChallengeLookup) {
+				challengeID := uuid.MustParse("12111111-1111-1111-1111-111111111111")
+				clubID := uuid.MustParse("23222222-2222-2222-2222-222222222222")
+				challengerID := uuid.MustParse("34333333-3333-3333-3333-333333333333")
+				defenderID := uuid.MustParse("45444444-4444-4444-4444-444444444444")
+
+				lookup.GetChallengeByUUIDFunc = func(ctx context.Context, db bun.IDB, gotChallengeID uuid.UUID) (*clubdb.ClubChallenge, error) {
+					if gotChallengeID != challengeID {
+						t.Fatalf("expected challenge id %s, got %s", challengeID, gotChallengeID)
+					}
+					return &clubdb.ClubChallenge{
+						UUID:               challengeID,
+						ClubUUID:           clubID,
+						Status:             clubtypes.ChallengeStatusAccepted,
+						ChallengerUserUUID: challengerID,
+						DefenderUserUUID:   defenderID,
+					}, nil
+				}
+				lookup.GetByUUIDFunc = func(ctx context.Context, db bun.IDB, gotClubID uuid.UUID) (*clubdb.Club, error) {
+					if gotClubID != clubID {
+						t.Fatalf("expected club id %s, got %s", clubID, gotClubID)
+					}
+					return &clubdb.Club{UUID: clubID}, nil
+				}
+				users.GetDiscordIDByUUIDFunc = func(ctx context.Context, userUUID uuid.UUID) (sharedtypes.DiscordID, error) {
+					switch userUUID {
+					case challengerID:
+						return sharedtypes.DiscordID("challenger-discord"), nil
+					case defenderID:
+						return sharedtypes.DiscordID("defender-discord"), nil
+					default:
+						t.Fatalf("unexpected user uuid %s", userUUID)
+						return "", nil
+					}
+				}
+				users.GetUUIDByDiscordIDFunc = func(ctx context.Context, discordID sharedtypes.DiscordID) (uuid.UUID, error) {
+					if discordID != testUserID {
+						t.Fatalf("expected actor discord id %q, got %q", testUserID, discordID)
+					}
+					return challengerID, nil
+				}
+				users.GetUserRoleFunc = func(ctx context.Context, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) (userservice.UserRoleResult, error) {
+					t.Fatalf("expected participant scheduling to bypass role lookup, got guild %q user %q", guildID, userID)
+					return userservice.UserRoleResult{}, nil
+				}
+				fake.ValidateRoundCreationWithClockFunc = func(ctx context.Context, req *roundtypes.CreateRoundInput, timeParser roundtime.TimeParserInterface, clock roundutil.Clock) (roundservice.CreateRoundResult, error) {
+					if req.GuildID != sharedtypes.GuildID(clubID.String()) {
+						t.Fatalf("expected club uuid scope %q, got %q", clubID.String(), req.GuildID)
+					}
+					return results.SuccessResult[*roundtypes.CreateRoundResult, error](&roundtypes.CreateRoundResult{
+						Round: &roundtypes.Round{
+							ID:          testCreateRoundID,
+							Title:       testTitle,
+							Description: testDescription,
+							Location:    testLocation,
+							StartTime:   &testStartTime,
+							CreatedBy:   testUserID,
+						},
+						ChannelID: "test-channel-id",
+					}), nil
+				}
+			},
+			payload: &roundevents.CreateRoundRequestedPayloadV1{
+				GuildID:     "club-uuid-from-pwa",
+				Title:       testTitle,
+				Description: &testDescription,
+				Location:    testLocation,
+				StartTime:   testStartTimeString,
+				UserID:      testUserID,
+				ChallengeID: func() *string { v := "12111111-1111-1111-1111-111111111111"; return &v }(),
+			},
+			wantErr:         false,
+			wantResultLen:   1,
+			wantResultTopic: roundevents.RoundEntityCreatedV1,
+			assertPayload: func(t *testing.T, payload *roundevents.RoundEntityCreatedPayloadV1) {
+				t.Helper()
+				expectedGuildID := sharedtypes.GuildID("23222222-2222-2222-2222-222222222222")
+				if payload.GuildID != expectedGuildID {
+					t.Fatalf("expected fallback guild id %q, got %q", expectedGuildID, payload.GuildID)
+				}
+				if payload.Round.GuildID != expectedGuildID {
+					t.Fatalf("expected round guild id to use club uuid scope, got %q", payload.Round.GuildID)
+				}
+				if len(payload.Round.Participants) != 2 {
+					t.Fatalf("expected seeded challenge participants, got %d", len(payload.Round.Participants))
+				}
+			},
+		},
+		{
 			name: "Challenge-linked create rejects non-participant actors before storing",
 			fakeSetup: func(fake *FakeService, users *FakeUserService, lookup *FakeChallengeLookup) {
 				challengeID := uuid.MustParse("55555555-5555-5555-5555-555555555555")

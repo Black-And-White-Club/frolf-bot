@@ -228,7 +228,7 @@ func TestClubService_RespondToChallenge(t *testing.T) {
 					return nil, clubdb.ErrNotFound
 				}
 
-				queue.CancelChallengeJobsFunc = func(ctx context.Context, challengeID uuid.UUID) error {
+				queue.CancelOpenExpiryFunc = func(ctx context.Context, challengeID uuid.UUID) error {
 					cancelID = challengeID
 					return nil
 				}
@@ -289,7 +289,7 @@ func TestClubService_RespondToChallenge(t *testing.T) {
 					return nil, clubdb.ErrNotFound
 				}
 
-				queue.CancelChallengeJobsFunc = func(ctx context.Context, challengeID uuid.UUID) error {
+				queue.CancelOpenExpiryFunc = func(ctx context.Context, challengeID uuid.UUID) error {
 					cancelID = challengeID
 					return nil
 				}
@@ -655,19 +655,21 @@ func TestClubService_LinkChallengeRound(t *testing.T) {
 			},
 		},
 		{
-			name: "rejects round that does not include both challenge participants",
+			name: "links accepted challenge before both participants have joined the round",
 			setup: func(t *testing.T) (*ClubService, ChallengeRoundLinkRequest, func(*testing.T, *clubtypes.ChallengeDetail, error)) {
 				t.Helper()
 
 				fx := newChallengeFixture()
 				repo := NewFakeClubRepo()
+				queue := &FakeChallengeQueueService{}
 				challenge := cloneChallengeModel(fx.challenge)
 				now := time.Now().UTC()
 				challenge.Status = clubtypes.ChallengeStatusAccepted
 				challenge.AcceptedAt = &now
 				challenge.AcceptedExpiresAt = ptrTime(now.Add(24 * time.Hour))
-				var createCalled bool
-				var updateCalled bool
+				var activeLink *clubdb.ClubChallengeRoundLink
+				var updated *clubdb.ClubChallenge
+				var cancelledID uuid.UUID
 
 				repo.GetByUUIDFunc = func(ctx context.Context, db bun.IDB, clubUUID uuid.UUID) (*clubdb.Club, error) {
 					return fx.club, nil
@@ -678,12 +680,22 @@ func TestClubService_LinkChallengeRound(t *testing.T) {
 				repo.GetChallengeByActiveRoundFunc = func(ctx context.Context, db bun.IDB, roundID uuid.UUID) (*clubdb.ClubChallenge, error) {
 					return nil, clubdb.ErrNotFound
 				}
+				repo.GetActiveChallengeRoundLinkFunc = func(ctx context.Context, db bun.IDB, challengeUUID uuid.UUID) (*clubdb.ClubChallengeRoundLink, error) {
+					if activeLink == nil {
+						return nil, clubdb.ErrNotFound
+					}
+					return cloneChallengeRoundLink(activeLink), nil
+				}
 				repo.CreateChallengeRoundLinkFunc = func(ctx context.Context, db bun.IDB, link *clubdb.ClubChallengeRoundLink) error {
-					createCalled = true
+					activeLink = cloneChallengeRoundLink(link)
 					return nil
 				}
 				repo.UpdateChallengeFunc = func(ctx context.Context, db bun.IDB, challenge *clubdb.ClubChallenge) error {
-					updateCalled = true
+					updated = cloneChallengeModel(challenge)
+					return nil
+				}
+				queue.CancelChallengeJobsFunc = func(ctx context.Context, challengeID uuid.UUID) error {
+					cancelledID = challengeID
 					return nil
 				}
 
@@ -704,14 +716,17 @@ func TestClubService_LinkChallengeRound(t *testing.T) {
 					RoundID:     fx.roundID,
 				}
 
-				service := newChallengeTestService(t, repo, newChallengeUserRepo(fx), &FakeChallengeQueueService{}, newChallengeTagReader(fx, 18, 7), roundReader)
+				service := newChallengeTestService(t, repo, newChallengeUserRepo(fx), queue, newChallengeTagReader(fx, 18, 7), roundReader)
 				assertions := func(t *testing.T, detail *clubtypes.ChallengeDetail, err error) {
 					t.Helper()
-					require.Error(t, err)
-					assert.Nil(t, detail)
-					assert.ErrorContains(t, err, "linked round must include both challenge participants")
-					assert.False(t, createCalled)
-					assert.False(t, updateCalled)
+					require.NoError(t, err)
+					require.NotNil(t, detail)
+					require.NotNil(t, activeLink)
+					require.NotNil(t, updated)
+					assert.Equal(t, fx.challenge.UUID, cancelledID)
+					require.NotNil(t, detail.LinkedRound)
+					assert.Equal(t, fx.roundID.String(), detail.LinkedRound.RoundID)
+					assert.Nil(t, updated.AcceptedExpiresAt)
 				}
 				return service, req, assertions
 			},
