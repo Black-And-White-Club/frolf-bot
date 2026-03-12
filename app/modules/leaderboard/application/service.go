@@ -134,9 +134,10 @@ func (s *LeaderboardService) EnsureGuildLeaderboard(ctx context.Context, guildID
 }
 
 // ensureGuildLeaderboardLogic contains the core logic.
-func (s *LeaderboardService) ensureGuildLeaderboardLogic(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (results.OperationResult[bool, error], error) {
+func (s *LeaderboardService) ensureGuildLeaderboardLogic(ctx context.Context, _ bun.IDB, guildID sharedtypes.GuildID) (results.OperationResult[bool, error], error) {
 	s.logger.InfoContext(ctx, "Guild leaderboard initialization is a no-op in normalized mode", attr.String("guild_id", string(guildID)))
-	return results.SuccessResult[bool, error](false), nil
+	success := false
+	return results.OperationResult[bool, error]{Success: &success}, nil
 }
 
 // -----------------------------------------------------------------------------

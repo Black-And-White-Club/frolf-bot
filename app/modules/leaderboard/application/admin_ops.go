@@ -63,7 +63,7 @@ func (s *LeaderboardService) AdjustPoints(
 			return results.OperationResult[bool, error]{}, fmt.Errorf("failed to get active season: %w", err)
 		}
 		if season == nil {
-			return results.FailureResult[bool, error](fmt.Errorf("no active season found")), nil
+			return results.FailureResult[bool](fmt.Errorf("no active season found")), nil
 		}
 
 		// 1. Save a PointHistory record with the adjustment reason

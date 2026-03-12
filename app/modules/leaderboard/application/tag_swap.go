@@ -28,7 +28,7 @@ func (s *LeaderboardService) TagSwapRequested(
 			return results.OperationResult[leaderboardtypes.LeaderboardData, error]{}, err
 		}
 		if requestorTagResult.IsFailure() {
-			return results.FailureResult[leaderboardtypes.LeaderboardData, error](fmt.Errorf("requesting user not on leaderboard")), nil
+			return results.FailureResult[leaderboardtypes.LeaderboardData](fmt.Errorf("requesting user not on leaderboard")), nil
 		}
 		requestorTag := *requestorTagResult.Success
 
@@ -37,7 +37,7 @@ func (s *LeaderboardService) TagSwapRequested(
 			return results.OperationResult[leaderboardtypes.LeaderboardData, error]{}, err
 		}
 		if leaderboardResult.IsFailure() {
-			return results.FailureResult[leaderboardtypes.LeaderboardData, error](fmt.Errorf("leaderboard unavailable")), nil
+			return results.FailureResult[leaderboardtypes.LeaderboardData](fmt.Errorf("leaderboard unavailable")), nil
 		}
 
 		var targetUserID sharedtypes.DiscordID
@@ -50,10 +50,10 @@ func (s *LeaderboardService) TagSwapRequested(
 			}
 		}
 		if !targetFound {
-			return results.FailureResult[leaderboardtypes.LeaderboardData, error](fmt.Errorf("target tag not currently assigned")), nil
+			return results.FailureResult[leaderboardtypes.LeaderboardData](fmt.Errorf("target tag not currently assigned")), nil
 		}
 		if targetUserID == userID {
-			return results.FailureResult[leaderboardtypes.LeaderboardData, error](fmt.Errorf("cannot swap tag with self")), nil
+			return results.FailureResult[leaderboardtypes.LeaderboardData](fmt.Errorf("cannot swap tag with self")), nil
 		}
 
 		assignments := []sharedtypes.TagAssignmentRequest{

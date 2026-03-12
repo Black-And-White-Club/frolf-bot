@@ -87,7 +87,7 @@ func Test_withTelemetry(t *testing.T) {
 			operation: "test_domain_failure",
 			guildID:   "guild-1",
 			op: func(ctx context.Context) (results.OperationResult[SuccessPayload, FailurePayload], error) {
-				return results.FailureResult[SuccessPayload, FailurePayload](FailurePayload{Reason: "denied"}), nil
+				return results.FailureResult[SuccessPayload](FailurePayload{Reason: "denied"}), nil
 			},
 			checkResult: func(t *testing.T, res results.OperationResult[SuccessPayload, FailurePayload]) {
 				if !res.IsFailure() || res.Failure.Reason != "denied" {
