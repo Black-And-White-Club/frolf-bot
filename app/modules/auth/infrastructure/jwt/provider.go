@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	authdomain "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/domain"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -13,13 +14,14 @@ import (
 // pwaClaims represents the JWT claims structure.
 type pwaClaims struct {
 	jwt.RegisteredClaims
-	UserUUID         string                `json:"user_uuid,omitempty"`
-	ActiveClubUUID   string                `json:"active_club_uuid,omitempty"`
-	Clubs            []authdomain.ClubRole `json:"clubs,omitempty"`
-	LinkedProviders  []string              `json:"linked_providers,omitempty"`
-	RefreshTokenHash string                `json:"rt_hash,omitempty"`
-	Guild            string                `json:"guild,omitempty"` // Legacy Discord Guild ID
-	Role             string                `json:"role,omitempty"`  // Legacy Role
+	UserUUID               string                              `json:"user_uuid,omitempty"`
+	ActiveClubUUID         string                              `json:"active_club_uuid,omitempty"`
+	ActiveClubEntitlements guildtypes.ResolvedClubEntitlements `json:"active_club_entitlements,omitempty"`
+	Clubs                  []authdomain.ClubRole               `json:"clubs,omitempty"`
+	LinkedProviders        []string                            `json:"linked_providers,omitempty"`
+	RefreshTokenHash       string                              `json:"rt_hash,omitempty"`
+	Guild                  string                              `json:"guild,omitempty"` // Legacy Discord Guild ID
+	Role                   string                              `json:"role,omitempty"`  // Legacy Role
 }
 
 // provider implements the Provider interface.
@@ -51,13 +53,14 @@ func (p *provider) GenerateToken(domainClaims *authdomain.Claims, ttl time.Durat
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),
 		},
-		UserUUID:         domainClaims.UserUUID.String(),
-		ActiveClubUUID:   domainClaims.ActiveClubUUID.String(),
-		Clubs:            domainClaims.Clubs,
-		LinkedProviders:  domainClaims.LinkedProviders,
-		RefreshTokenHash: domainClaims.RefreshTokenHash,
-		Guild:            domainClaims.GuildID,
-		Role:             string(domainClaims.Role),
+		UserUUID:               domainClaims.UserUUID.String(),
+		ActiveClubUUID:         domainClaims.ActiveClubUUID.String(),
+		ActiveClubEntitlements: domainClaims.ActiveClubEntitlements,
+		Clubs:                  domainClaims.Clubs,
+		LinkedProviders:        domainClaims.LinkedProviders,
+		RefreshTokenHash:       domainClaims.RefreshTokenHash,
+		Guild:                  domainClaims.GuildID,
+		Role:                   string(domainClaims.Role),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -106,12 +109,13 @@ func (p *provider) ValidateToken(tokenString string) (*authdomain.Claims, error)
 
 	// Convert to domain claims
 	domainClaims := &authdomain.Claims{
-		UserID:           claims.Subject,
-		RefreshTokenHash: claims.RefreshTokenHash,
-		GuildID:          claims.Guild,
-		Role:             authdomain.Role(claims.Role),
-		Clubs:            claims.Clubs,
-		LinkedProviders:  claims.LinkedProviders,
+		UserID:                 claims.Subject,
+		RefreshTokenHash:       claims.RefreshTokenHash,
+		GuildID:                claims.Guild,
+		Role:                   authdomain.Role(claims.Role),
+		ActiveClubEntitlements: claims.ActiveClubEntitlements,
+		Clubs:                  claims.Clubs,
+		LinkedProviders:        claims.LinkedProviders,
 	}
 
 	if claims.UserUUID != "" {

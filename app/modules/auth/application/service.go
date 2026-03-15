@@ -14,6 +14,7 @@ import (
 	authnats "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/nats"
 	authoauth "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/oauth"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/permissions"
+	guilddb "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/google/uuid"
 	"github.com/uptrace/bun"
@@ -29,6 +30,7 @@ type Config struct {
 // service implements the Service interface.
 type service struct {
 	repo              userdb.Repository
+	guildRepo         guilddb.Repository
 	jwtProvider       authjwt.Provider
 	userJWTBuilder    authnats.UserJWTBuilder
 	permissionBuilder *permissions.Builder
@@ -44,6 +46,7 @@ func NewService(
 	jwtProvider authjwt.Provider,
 	userJWTBuilder authnats.UserJWTBuilder,
 	repo userdb.Repository,
+	guildRepo guilddb.Repository,
 	config Config,
 	logger *slog.Logger,
 	tracer trace.Tracer,
@@ -52,6 +55,7 @@ func NewService(
 ) Service {
 	return &service{
 		repo:              repo,
+		guildRepo:         guildRepo,
 		jwtProvider:       jwtProvider,
 		userJWTBuilder:    userJWTBuilder,
 		permissionBuilder: permissions.NewBuilder(),

@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	bettingmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/betting/infrastructure/repositories/migrations"
 	clubmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/club/infrastructure/repositories/migrations"
 	guildmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories/migrations"
 	leaderboardmigrations "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories/migrations"
@@ -35,6 +36,7 @@ var dependencyOrderedModules = []ModuleConfig{
 	{Name: "round", TableName: "bun_migrations_round", Migrations: roundmigrations.Migrations},
 	{Name: "score", TableName: "bun_migrations_score", Migrations: scoremigrations.Migrations},
 	{Name: "leaderboard", TableName: "bun_migrations_leaderboard", Migrations: leaderboardmigrations.Migrations},
+	{Name: "betting", TableName: "bun_migrations_betting", Migrations: bettingmigrations.Migrations},
 }
 
 const sharedMigrationTableName = "bun_migrations"

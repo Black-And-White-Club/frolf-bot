@@ -40,6 +40,9 @@ func TestGuildService_UpdateGuildConfig(t *testing.T) {
 				f.UpdateConfigFunc = func(ctx context.Context, db bun.IDB, id sharedtypes.GuildID, updates *guilddb.UpdateFields) error {
 					return nil
 				}
+				f.GetConfigFunc = func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (*guildtypes.GuildConfig, error) {
+					return &guildtypes.GuildConfig{GuildID: guildID, SignupChannelID: "signup-chan"}, nil
+				}
 			},
 			expectInfraErr: false,
 			verify: func(t *testing.T, res GuildConfigResult, infraErr error, fake *FakeGuildRepository) {
@@ -52,8 +55,9 @@ func TestGuildService_UpdateGuildConfig(t *testing.T) {
 				if res.Success == nil || (*res.Success).GuildID != "guild-1" {
 					t.Errorf("expected success payload for guild-1, got %v", res.Success)
 				}
-				if fake.Trace()[0] != "UpdateConfig" {
-					t.Errorf("expected UpdateConfig to be called, got %v", fake.Trace())
+				trace := fake.Trace()
+				if len(trace) < 2 || trace[0] != "UpdateConfig" || trace[1] != "GetConfig" {
+					t.Errorf("expected UpdateConfig then GetConfig, got %v", trace)
 				}
 			},
 		},

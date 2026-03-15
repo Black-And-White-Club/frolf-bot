@@ -35,7 +35,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
-// replace github.com/Black-And-White-Club/frolf-bot-shared => ../frolf-bot-shared
+replace github.com/Black-And-White-Club/frolf-bot-shared => ../frolf-bot-shared
 
 require (
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect

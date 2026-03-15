@@ -30,6 +30,7 @@ func TestOrderedModuleNames(t *testing.T) {
 				"round":       nil,
 				"score":       nil,
 				"leaderboard": nil,
+				"betting":     nil,
 			}
 
 			t.Run("forward order", func(t *testing.T) {
@@ -49,7 +50,7 @@ func TestOrderedModuleNames(t *testing.T) {
 			t.Run("reverse order", func(t *testing.T) {
 				t.Parallel()
 
-				want := []string{"leaderboard", "score", "round", "club", "user", "guild"}
+				want := []string{"betting", "leaderboard", "score", "round", "club", "user", "guild"}
 
 				got, err := orderedModuleNames(migrators, true)
 				if err != nil {
@@ -146,6 +147,7 @@ func TestOrderedModuleNames_ValidationErrors(t *testing.T) {
 					"round":       nil,
 					"score":       nil,
 					"leaderboard": nil,
+					"betting":     nil,
 				}
 				delete(migrators, "score")
 
@@ -165,6 +167,7 @@ func TestOrderedModuleNames_ValidationErrors(t *testing.T) {
 					"round":       nil,
 					"score":       nil,
 					"leaderboard": nil,
+					"betting":     nil,
 					"weird":       nil,
 				}
 

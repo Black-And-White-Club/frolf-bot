@@ -75,6 +75,34 @@ type GuildConfig struct {
 	CustomLeaderboardsEnabled bool       `bun:"custom_leaderboards_enabled"`
 }
 
+type ClubFeatureOverride struct {
+	bun.BaseModel `bun:"table:club_feature_overrides,alias:cfo"`
+
+	ClubUUID   uuid.UUID  `bun:"club_uuid,pk,type:uuid,notnull"`
+	FeatureKey string     `bun:"feature_key,pk,type:varchar(64),notnull"`
+	State      string     `bun:"state,type:varchar(20),notnull"`
+	Reason     string     `bun:"reason,type:text,notnull,default:''"`
+	ExpiresAt  *time.Time `bun:"expires_at,nullzero"`
+	UpdatedBy  string     `bun:"updated_by,type:varchar(128),notnull,default:''"`
+	CreatedAt  time.Time  `bun:"created_at,nullzero,notnull,default:current_timestamp"`
+	UpdatedAt  time.Time  `bun:"updated_at,nullzero,notnull,default:current_timestamp"`
+}
+
+type ClubFeatureAccessAudit struct {
+	bun.BaseModel `bun:"table:club_feature_access_audit,alias:cfaa"`
+
+	ID         int64      `bun:"id,pk,autoincrement"`
+	ClubUUID   uuid.UUID  `bun:"club_uuid,type:uuid,notnull"`
+	GuildID    string     `bun:"guild_id,type:varchar(20),notnull"`
+	FeatureKey string     `bun:"feature_key,type:varchar(64),notnull"`
+	State      string     `bun:"state,type:varchar(20),notnull"`
+	Source     string     `bun:"source,type:varchar(32),notnull"`
+	Reason     string     `bun:"reason,type:text,notnull,default:''"`
+	UpdatedBy  string     `bun:"updated_by,type:varchar(128),notnull,default:''"`
+	ExpiresAt  *time.Time `bun:"expires_at,nullzero"`
+	CreatedAt  time.Time  `bun:"created_at,nullzero,notnull,default:current_timestamp"`
+}
+
 // ResourceState represents a snapshot of bot-created Discord resources.
 type ResourceState struct {
 	SignupChannelID      string                    `json:"signup_channel_id,omitempty"`

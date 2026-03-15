@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	bettingdb "github.com/Black-And-White-Club/frolf-bot/app/modules/betting/infrastructure/repositories"
 	clubdb "github.com/Black-And-White-Club/frolf-bot/app/modules/club/infrastructure/repositories"
 	guilddb "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories"
 	leaderboarddb "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/infrastructure/repositories"
@@ -77,7 +78,14 @@ func newDBServiceWithDB(db *bun.DB) (*DBService, error) {
 	db.RegisterModel(&leaderboarddb.TagHistoryEntry{})
 	db.RegisterModel(&leaderboarddb.RoundOutcome{})
 	db.RegisterModel(&guilddb.GuildConfig{})
+	db.RegisterModel(&guilddb.ClubFeatureOverride{})
+	db.RegisterModel(&guilddb.ClubFeatureAccessAudit{})
 	db.RegisterModel(&clubdb.Club{})
+	db.RegisterModel(&bettingdb.MemberSetting{})
+	db.RegisterModel(&bettingdb.WalletJournalEntry{})
+	db.RegisterModel(&bettingdb.Market{})
+	db.RegisterModel(&bettingdb.MarketOption{})
+	db.RegisterModel(&bettingdb.Bet{})
 	log.Println("newDBServiceWithDB - Models registered successfully")
 
 	dbService := &DBService{

@@ -91,9 +91,10 @@ func (h *ClubHandlers) HandleClubInfoRequest(ctx context.Context, payload *clube
 	return []handlerwrapper.Result{{
 		Topic: replyTopic,
 		Payload: &clubevents.ClubInfoResponsePayloadV1{
-			UUID:    info.UUID,
-			Name:    info.Name,
-			IconURL: info.IconURL,
+			UUID:         info.UUID,
+			Name:         info.Name,
+			IconURL:      info.IconURL,
+			Entitlements: info.Entitlements,
 		},
 	}}, nil
 }

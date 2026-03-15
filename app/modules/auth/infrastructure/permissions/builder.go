@@ -146,6 +146,9 @@ func subscribePatterns(clubUUID, guildID, userUUID, userID string) []string {
 			fmt.Sprintf("leaderboard.*.*.*.v2.%s", id),
 			fmt.Sprintf("guild.*.v1.%s", id),
 			fmt.Sprintf("guild.*.*.v1.%s", id),
+			// betting market lifecycle events (club-wide, non-sensitive)
+			fmt.Sprintf("betting.*.v1.%s", id),
+			fmt.Sprintf("betting.*.*.v1.%s", id),
 		)
 	}
 
@@ -200,6 +203,7 @@ func publishPatterns(clubUUID, guildID string, includeParticipant bool) []string
 			fmt.Sprintf("leaderboard.tag.graph.requested.v1.%s", id),
 			fmt.Sprintf("season.list.requested.v1.%s", id),
 			fmt.Sprintf("season.standings.requested.v1.%s", id),
+			fmt.Sprintf("betting.snapshot.request.v1.%s", id),
 		)
 	}
 

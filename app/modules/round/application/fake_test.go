@@ -103,6 +103,7 @@ type FakeRepo struct {
 	RoundHasGroupsFunc                 func(ctx context.Context, db bun.IDB, roundID sharedtypes.RoundID) (bool, error)
 	GetRoundsByGuildIDFunc             func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, states ...roundtypes.RoundState) ([]*roundtypes.Round, error)
 	GetFinalizedRoundsAfterFunc        func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, startTime time.Time) ([]*roundtypes.Round, error)
+	GetAllUpcomingRoundsInWindowFunc   func(ctx context.Context, db bun.IDB, lookahead time.Duration) ([]*roundtypes.Round, error)
 }
 
 func NewFakeRepo() *FakeRepo {
@@ -286,6 +287,14 @@ func (f *FakeRepo) GetUpcomingRoundsByParticipant(ctx context.Context, db bun.ID
 	f.record("GetUpcomingRoundsByParticipant")
 	if f.GetUpcomingRoundsByParticipantFunc != nil {
 		return f.GetUpcomingRoundsByParticipantFunc(ctx, db, g, uID)
+	}
+	return nil, nil
+}
+
+func (f *FakeRepo) GetAllUpcomingRoundsInWindow(ctx context.Context, db bun.IDB, lookahead time.Duration) ([]*roundtypes.Round, error) {
+	f.record("GetAllUpcomingRoundsInWindow")
+	if f.GetAllUpcomingRoundsInWindowFunc != nil {
+		return f.GetAllUpcomingRoundsInWindowFunc(ctx, db, lookahead)
 	}
 	return nil, nil
 }

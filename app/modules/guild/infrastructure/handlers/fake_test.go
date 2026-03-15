@@ -6,6 +6,7 @@ import (
 	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	guildservice "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/application"
+	"github.com/google/uuid"
 )
 
 // ------------------------
@@ -21,6 +22,13 @@ type FakeGuildService struct {
 	GetGuildConfigFunc    func(ctx context.Context, guildID sharedtypes.GuildID) (guildservice.GuildConfigResult, error)
 	UpdateGuildConfigFunc func(ctx context.Context, config *guildtypes.GuildConfig) (guildservice.GuildConfigResult, error)
 	DeleteGuildConfigFunc func(ctx context.Context, guildID sharedtypes.GuildID) (guildservice.GuildConfigResult, error)
+
+	ResolveClubEntitlementsFunc     func(ctx context.Context, clubUUID uuid.UUID) (guildtypes.ResolvedClubEntitlements, error)
+	ResolveClubFeatureFunc          func(ctx context.Context, clubUUID uuid.UUID, featureKey guildtypes.ClubFeatureKey) (guildtypes.ClubFeatureAccess, error)
+	ResolveClubFeatureByGuildIDFunc func(ctx context.Context, guildID sharedtypes.GuildID, featureKey guildtypes.ClubFeatureKey) (guildtypes.ClubFeatureAccess, error)
+	GrantFeatureAccessFunc          func(ctx context.Context, req guildservice.GrantAccessRequest) error
+	RevokeFeatureAccessFunc         func(ctx context.Context, req guildservice.RevokeAccessRequest) error
+	GetFeatureAccessAuditFunc       func(ctx context.Context, clubUUID uuid.UUID, featureKey guildtypes.ClubFeatureKey) ([]guildservice.FeatureAccessAuditRecord, error)
 }
 
 // NewFakeGuildService initializes a new FakeGuildService.
@@ -73,6 +81,54 @@ func (f *FakeGuildService) DeleteGuildConfig(ctx context.Context, guildID shared
 		return f.DeleteGuildConfigFunc(ctx, guildID)
 	}
 	return guildservice.GuildConfigResult{}, nil
+}
+
+func (f *FakeGuildService) ResolveClubEntitlements(ctx context.Context, clubUUID uuid.UUID) (guildtypes.ResolvedClubEntitlements, error) {
+	f.record("ResolveClubEntitlements")
+	if f.ResolveClubEntitlementsFunc != nil {
+		return f.ResolveClubEntitlementsFunc(ctx, clubUUID)
+	}
+	return guildtypes.ResolvedClubEntitlements{}, nil
+}
+
+func (f *FakeGuildService) ResolveClubFeature(ctx context.Context, clubUUID uuid.UUID, featureKey guildtypes.ClubFeatureKey) (guildtypes.ClubFeatureAccess, error) {
+	f.record("ResolveClubFeature")
+	if f.ResolveClubFeatureFunc != nil {
+		return f.ResolveClubFeatureFunc(ctx, clubUUID, featureKey)
+	}
+	return guildtypes.ClubFeatureAccess{}, nil
+}
+
+func (f *FakeGuildService) ResolveClubFeatureByGuildID(ctx context.Context, guildID sharedtypes.GuildID, featureKey guildtypes.ClubFeatureKey) (guildtypes.ClubFeatureAccess, error) {
+	f.record("ResolveClubFeatureByGuildID")
+	if f.ResolveClubFeatureByGuildIDFunc != nil {
+		return f.ResolveClubFeatureByGuildIDFunc(ctx, guildID, featureKey)
+	}
+	return guildtypes.ClubFeatureAccess{}, nil
+}
+
+func (f *FakeGuildService) GrantFeatureAccess(ctx context.Context, req guildservice.GrantAccessRequest) error {
+	f.record("GrantFeatureAccess")
+	if f.GrantFeatureAccessFunc != nil {
+		return f.GrantFeatureAccessFunc(ctx, req)
+	}
+	return nil
+}
+
+func (f *FakeGuildService) RevokeFeatureAccess(ctx context.Context, req guildservice.RevokeAccessRequest) error {
+	f.record("RevokeFeatureAccess")
+	if f.RevokeFeatureAccessFunc != nil {
+		return f.RevokeFeatureAccessFunc(ctx, req)
+	}
+	return nil
+}
+
+func (f *FakeGuildService) GetFeatureAccessAudit(ctx context.Context, clubUUID uuid.UUID, featureKey guildtypes.ClubFeatureKey) ([]guildservice.FeatureAccessAuditRecord, error) {
+	f.record("GetFeatureAccessAudit")
+	if f.GetFeatureAccessAuditFunc != nil {
+		return f.GetFeatureAccessAuditFunc(ctx, clubUUID, featureKey)
+	}
+	return nil, nil
 }
 
 // Ensure the fake satisfies the Service interface

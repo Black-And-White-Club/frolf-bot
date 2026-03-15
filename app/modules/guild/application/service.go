@@ -3,12 +3,15 @@ package guildservice
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
+	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	guildmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/guild"
+	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	guilddb "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories"
@@ -19,11 +22,12 @@ import (
 
 // GuildService implements the Service interface.
 type GuildService struct {
-	repo    guilddb.Repository
-	logger  *slog.Logger
-	metrics guildmetrics.GuildMetrics
-	tracer  trace.Tracer
-	db      *bun.DB
+	repo      guilddb.Repository
+	logger    *slog.Logger
+	metrics   guildmetrics.GuildMetrics
+	tracer    trace.Tracer
+	db        *bun.DB
+	publisher eventbus.EventBus
 }
 
 // NewGuildService creates a new GuildService.
@@ -33,13 +37,15 @@ func NewGuildService(
 	metrics guildmetrics.GuildMetrics,
 	tracer trace.Tracer,
 	db *bun.DB,
+	publisher eventbus.EventBus,
 ) *GuildService {
 	return &GuildService{
-		repo:    repo,
-		logger:  logger,
-		metrics: metrics,
-		tracer:  tracer,
-		db:      db,
+		repo:      repo,
+		logger:    logger,
+		metrics:   metrics,
+		tracer:    tracer,
+		db:        db,
+		publisher: publisher,
 	}
 }
 
@@ -172,4 +178,26 @@ func runInTx[S any, F any](
 	})
 
 	return result, err
+}
+
+func (s *GuildService) attachEntitlements(
+	ctx context.Context,
+	db bun.IDB,
+	config *guildtypes.GuildConfig,
+) (*guildtypes.GuildConfig, error) {
+	if config == nil {
+		return nil, nil
+	}
+
+	entitlements, err := s.repo.ResolveEntitlements(ctx, db, config.GuildID)
+	if err != nil {
+		if errors.Is(err, guilddb.ErrNotFound) {
+			return config, nil
+		}
+		return nil, fmt.Errorf("resolve entitlements: %w", err)
+	}
+
+	enriched := *config
+	enriched.Entitlements = entitlements
+	return &enriched, nil
 }

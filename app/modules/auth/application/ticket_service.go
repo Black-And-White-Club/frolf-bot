@@ -12,6 +12,7 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	authdomain "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/domain"
+	guilddb "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/google/uuid"
 	"github.com/uptrace/bun"
@@ -255,6 +256,18 @@ func (s *service) GetTicket(ctx context.Context, rawToken string, activeClubUUID
 			LinkedProviders:  linkedProviders,
 			RefreshTokenHash: newHashed,
 		}
+
+		if s.guildRepo != nil && activeUUID != uuid.Nil {
+			if entitlements, resolveErr := s.guildRepo.ResolveEntitlements(ctx, tx, sharedtypes.GuildID(activeUUID.String())); resolveErr == nil {
+				claims.ActiveClubEntitlements = entitlements
+			} else if !errors.Is(resolveErr, guilddb.ErrNotFound) {
+				s.logger.WarnContext(ctx, "Failed to resolve active club entitlements",
+					attr.String("club_uuid", activeUUID.String()),
+					attr.Error(resolveErr),
+				)
+			}
+		}
+
 		natsToken, err := s.jwtProvider.GenerateToken(claims, TicketTTL)
 		if err != nil {
 			return fmt.Errorf("failed to generate ticket: %w", err)

@@ -17,6 +17,7 @@ import (
 	tracingfrolfbot "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/tracing"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/auth"
+	"github.com/Black-And-White-Club/frolf-bot/app/modules/betting"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/club"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/guild"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard"
@@ -42,6 +43,7 @@ type App struct {
 	ScoreModule       *score.Module
 	GuildModule       *guild.Module
 	ClubModule        *club.Module
+	BettingModule     *betting.Module
 	AuthModule        *auth.Module
 	DB                *bundb.DBService
 	EventBus          eventbus.EventBus
@@ -204,7 +206,7 @@ func (app *App) initializeModules(ctx context.Context, routerRunCtx context.Cont
 		app.Observability.Provider.Logger.Error("Failed to initialize leaderboard module", attr.Error(err))
 		return fmt.Errorf("failed to initialize leaderboard module: %w", err)
 	}
-	if app.GuildModule, err = guild.NewGuildModule(ctx, app.Config, app.Observability, app.DB.GuildDB, app.EventBus, app.Router, app.Helpers, routerRunCtx, app.DB.GetDB()); err != nil {
+	if app.GuildModule, err = guild.NewGuildModule(ctx, app.Config, app.Observability, app.DB.GuildDB, app.EventBus, app.Router, app.Helpers, routerRunCtx, app.DB.GetDB(), app.HTTPRouter); err != nil {
 		app.Observability.Provider.Logger.Error("Failed to initialize guild module", attr.Error(err))
 		return fmt.Errorf("failed to initialize guild module: %w", err)
 	}
@@ -227,6 +229,22 @@ func (app *App) initializeModules(ctx context.Context, routerRunCtx context.Cont
 	}); err != nil {
 		app.Observability.Provider.Logger.Error("Failed to initialize club module", attr.Error(err))
 		return fmt.Errorf("failed to initialize club module: %w", err)
+	}
+	if app.BettingModule, err = betting.NewModule(ctx, betting.ModuleOptions{
+		Observability:   app.Observability,
+		EventBus:        app.EventBus,
+		Router:          app.Router,
+		Helpers:         app.Helpers,
+		RouterCtx:       routerRunCtx,
+		DB:              app.DB.GetDB(),
+		HTTPRouter:      app.HTTPRouter,
+		UserRepo:        app.DB.UserDB,
+		GuildRepo:       app.DB.GuildDB,
+		LeaderboardRepo: app.DB.LeaderboardDB,
+		RoundRepo:       app.DB.RoundDB,
+	}); err != nil {
+		app.Observability.Provider.Logger.Error("Failed to initialize betting module", attr.Error(err))
+		return fmt.Errorf("failed to initialize betting module: %w", err)
 	}
 
 	// Initialize auth module (handles magic links and auth callout)
@@ -370,6 +388,9 @@ func (app *App) close() error {
 	}
 	if app.ClubModule != nil {
 		app.ClubModule.Close()
+	}
+	if app.BettingModule != nil {
+		app.BettingModule.Close()
 	}
 	if app.AuthModule != nil {
 		app.AuthModule.Close()

@@ -50,5 +50,11 @@ func (s *GuildService) executeGetGuildConfig(
 		// Infra failure: DB is likely down
 		return GuildConfigResult{}, err
 	}
+
+	config, err = s.attachEntitlements(ctx, db, config)
+	if err != nil {
+		return GuildConfigResult{}, err
+	}
+
 	return results.SuccessResult[*guildtypes.GuildConfig, error](config), nil
 }
