@@ -380,24 +380,29 @@ func (s *BettingService) dispatchMarket(
 	}
 	switch marketType {
 	case winnerMarketType:
-		return s.ensureWinnerMarket(ctx, db, clubUUID, seasonID, guildID, round, participants)
+		m, opts, _, err := s.ensureWinnerMarket(ctx, db, clubUUID, seasonID, guildID, round, participants)
+		return m, opts, err
 	case placement2ndMarketType:
 		if len(participants) < 3 {
 			return nil, nil, ErrNoEligibleRound
 		}
-		return s.ensurePlacement2ndMarket(ctx, db, clubUUID, seasonID, guildID, round, participants)
+		m, opts, _, err := s.ensurePlacement2ndMarket(ctx, db, clubUUID, seasonID, guildID, round, participants)
+		return m, opts, err
 	case placement3rdMarketType:
 		if len(participants) < 4 {
 			return nil, nil, ErrNoEligibleRound
 		}
-		return s.ensurePlacement3rdMarket(ctx, db, clubUUID, seasonID, guildID, round, participants)
+		m, opts, _, err := s.ensurePlacement3rdMarket(ctx, db, clubUUID, seasonID, guildID, round, participants)
+		return m, opts, err
 	case placementLastMarketType:
 		if len(participants) < 3 {
 			return nil, nil, ErrNoEligibleRound
 		}
-		return s.ensurePlacementLastMarket(ctx, db, clubUUID, seasonID, guildID, round, participants)
+		m, opts, _, err := s.ensurePlacementLastMarket(ctx, db, clubUUID, seasonID, guildID, round, participants)
+		return m, opts, err
 	case overUnderMarketType:
-		return s.ensureOverUnderMarket(ctx, db, clubUUID, seasonID, guildID, round, participants)
+		m, opts, _, err := s.ensureOverUnderMarket(ctx, db, clubUUID, seasonID, guildID, round, participants)
+		return m, opts, err
 	default:
 		return nil, nil, ErrInvalidMarketType
 	}

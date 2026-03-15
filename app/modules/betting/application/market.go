@@ -148,9 +148,9 @@ func (s *BettingService) ensureAllMarketsForRound(
 	s.metrics.RecordEligibleParticipantCount(ctx, winnerMarketType, fieldSize)
 
 	// Winner market — always generated when field >= 2.
-	if market, _, err := s.ensureWinnerMarket(ctx, db, clubUUID, seasonID, guildID, round, participants); err != nil {
+	if market, _, created, err := s.ensureWinnerMarket(ctx, db, clubUUID, seasonID, guildID, round, participants); err != nil {
 		return nil, err
-	} else if market != nil {
+	} else if created && market != nil {
 		results = append(results, MarketGeneratedResult{
 			GuildID: guildID, ClubUUID: clubUUID.String(), RoundID: round.ID,
 			MarketID: market.ID, MarketType: winnerMarketType,
@@ -159,9 +159,9 @@ func (s *BettingService) ensureAllMarketsForRound(
 
 	// 2nd place — requires 3+ players.
 	if fieldSize >= 3 {
-		if market, _, err := s.ensurePlacement2ndMarket(ctx, db, clubUUID, seasonID, guildID, round, participants); err != nil {
+		if market, _, created, err := s.ensurePlacement2ndMarket(ctx, db, clubUUID, seasonID, guildID, round, participants); err != nil {
 			return nil, err
-		} else if market != nil {
+		} else if created && market != nil {
 			results = append(results, MarketGeneratedResult{
 				GuildID: guildID, ClubUUID: clubUUID.String(), RoundID: round.ID,
 				MarketID: market.ID, MarketType: placement2ndMarketType,
@@ -171,9 +171,9 @@ func (s *BettingService) ensureAllMarketsForRound(
 
 	// 3rd place — requires 4+ players.
 	if fieldSize >= 4 {
-		if market, _, err := s.ensurePlacement3rdMarket(ctx, db, clubUUID, seasonID, guildID, round, participants); err != nil {
+		if market, _, created, err := s.ensurePlacement3rdMarket(ctx, db, clubUUID, seasonID, guildID, round, participants); err != nil {
 			return nil, err
-		} else if market != nil {
+		} else if created && market != nil {
 			results = append(results, MarketGeneratedResult{
 				GuildID: guildID, ClubUUID: clubUUID.String(), RoundID: round.ID,
 				MarketID: market.ID, MarketType: placement3rdMarketType,
@@ -183,9 +183,9 @@ func (s *BettingService) ensureAllMarketsForRound(
 
 	// Last place — requires 3+ players (with 2, last = 2nd which is covered by winner market).
 	if fieldSize >= 3 {
-		if market, _, err := s.ensurePlacementLastMarket(ctx, db, clubUUID, seasonID, guildID, round, participants); err != nil {
+		if market, _, created, err := s.ensurePlacementLastMarket(ctx, db, clubUUID, seasonID, guildID, round, participants); err != nil {
 			return nil, err
-		} else if market != nil {
+		} else if created && market != nil {
 			results = append(results, MarketGeneratedResult{
 				GuildID: guildID, ClubUUID: clubUUID.String(), RoundID: round.ID,
 				MarketID: market.ID, MarketType: placementLastMarketType,
@@ -194,9 +194,9 @@ func (s *BettingService) ensureAllMarketsForRound(
 	}
 
 	// Over/Under — generated whenever field >= 2.
-	if market, _, err := s.ensureOverUnderMarket(ctx, db, clubUUID, seasonID, guildID, round, participants); err != nil {
+	if market, _, created, err := s.ensureOverUnderMarket(ctx, db, clubUUID, seasonID, guildID, round, participants); err != nil {
 		return nil, err
-	} else if market != nil {
+	} else if created && market != nil {
 		results = append(results, MarketGeneratedResult{
 			GuildID: guildID, ClubUUID: clubUUID.String(), RoundID: round.ID,
 			MarketID: market.ID, MarketType: overUnderMarketType,
@@ -333,7 +333,7 @@ func (s *BettingService) ensureWinnerMarket(
 	guildID sharedtypes.GuildID,
 	round *roundtypes.Round,
 	participants []targetParticipant,
-) (*bettingdb.Market, []pricedOption, error) {
+) (*bettingdb.Market, []pricedOption, bool, error) {
 	return s.ensureMarket(ctx, db, clubUUID, seasonID, guildID, round, winnerMarketType,
 		func() (*bettingdb.Market, []pricedOption, bool, error) {
 			return s.getOrBuildWinnerMarket(ctx, db, clubUUID, seasonID, guildID, round, participants)
@@ -348,7 +348,7 @@ func (s *BettingService) ensurePlacement2ndMarket(
 	guildID sharedtypes.GuildID,
 	round *roundtypes.Round,
 	participants []targetParticipant,
-) (*bettingdb.Market, []pricedOption, error) {
+) (*bettingdb.Market, []pricedOption, bool, error) {
 	return s.ensureMarket(ctx, db, clubUUID, seasonID, guildID, round, placement2ndMarketType,
 		func() (*bettingdb.Market, []pricedOption, bool, error) {
 			return s.getOrBuildPlacement2ndMarket(ctx, db, clubUUID, seasonID, guildID, round, participants)
@@ -363,7 +363,7 @@ func (s *BettingService) ensurePlacement3rdMarket(
 	guildID sharedtypes.GuildID,
 	round *roundtypes.Round,
 	participants []targetParticipant,
-) (*bettingdb.Market, []pricedOption, error) {
+) (*bettingdb.Market, []pricedOption, bool, error) {
 	return s.ensureMarket(ctx, db, clubUUID, seasonID, guildID, round, placement3rdMarketType,
 		func() (*bettingdb.Market, []pricedOption, bool, error) {
 			return s.getOrBuildPlacement3rdMarket(ctx, db, clubUUID, seasonID, guildID, round, participants)
@@ -378,7 +378,7 @@ func (s *BettingService) ensurePlacementLastMarket(
 	guildID sharedtypes.GuildID,
 	round *roundtypes.Round,
 	participants []targetParticipant,
-) (*bettingdb.Market, []pricedOption, error) {
+) (*bettingdb.Market, []pricedOption, bool, error) {
 	return s.ensureMarket(ctx, db, clubUUID, seasonID, guildID, round, placementLastMarketType,
 		func() (*bettingdb.Market, []pricedOption, bool, error) {
 			return s.getOrBuildPlacementLastMarket(ctx, db, clubUUID, seasonID, guildID, round, participants)
@@ -393,7 +393,7 @@ func (s *BettingService) ensureOverUnderMarket(
 	guildID sharedtypes.GuildID,
 	round *roundtypes.Round,
 	participants []targetParticipant,
-) (*bettingdb.Market, []pricedOption, error) {
+) (*bettingdb.Market, []pricedOption, bool, error) {
 	return s.ensureMarket(ctx, db, clubUUID, seasonID, guildID, round, overUnderMarketType,
 		func() (*bettingdb.Market, []pricedOption, bool, error) {
 			return s.getOrBuildOverUnderMarket(ctx, db, clubUUID, seasonID, guildID, round, participants)
@@ -410,14 +410,14 @@ func (s *BettingService) ensureMarket(
 	round *roundtypes.Round,
 	marketType string,
 	buildFn func() (*bettingdb.Market, []pricedOption, bool, error),
-) (*bettingdb.Market, []pricedOption, error) {
+) (*bettingdb.Market, []pricedOption, bool, error) {
 	_ = guildID // reserved for future use
 	market, options, ephemeral, err := buildFn()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
 	}
 	if !ephemeral {
-		return market, options, nil
+		return market, options, false, nil
 	}
 
 	if err := s.repo.CreateMarket(ctx, db, market); err != nil {
@@ -425,11 +425,12 @@ func (s *BettingService) ensureMarket(
 		if existing, getErr := s.repo.GetMarketByRound(ctx, db, clubUUID, seasonID, round.ID.UUID(), marketType); getErr == nil && existing != nil {
 			existingOptions, optErr := s.repo.ListMarketOptions(ctx, db, existing.ID)
 			if optErr != nil {
-				return nil, nil, fmt.Errorf("load existing market options after conflict: %w", optErr)
+				return nil, nil, false, fmt.Errorf("load existing market options after conflict: %w", optErr)
 			}
-			return existing, toPricedOptions(existingOptions), nil
+			// The market was just created by a concurrent worker — still emit the event.
+			return existing, toPricedOptions(existingOptions), true, nil
 		}
-		return nil, nil, fmt.Errorf("create betting market: %w", err)
+		return nil, nil, false, fmt.Errorf("create betting market: %w", err)
 	}
 
 	dbOptions := make([]bettingdb.MarketOption, 0, len(options))
@@ -446,7 +447,7 @@ func (s *BettingService) ensureMarket(
 		})
 	}
 	if err := s.repo.CreateMarketOptions(ctx, db, dbOptions); err != nil {
-		return nil, nil, fmt.Errorf("create betting market options: %w", err)
+		return nil, nil, false, fmt.Errorf("create betting market options: %w", err)
 	}
 
 	s.metrics.RecordMarketCreated(ctx, marketType)
@@ -465,7 +466,7 @@ func (s *BettingService) ensureMarket(
 		attr.Int("option_count", len(dbOptions)),
 	)
 
-	return market, options, nil
+	return market, options, true, nil
 }
 
 // LockDueMarkets finds all open markets whose locks_at has passed, updates
