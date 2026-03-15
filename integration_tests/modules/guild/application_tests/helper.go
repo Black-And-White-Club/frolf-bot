@@ -88,6 +88,7 @@ func SetupTestGuildService(t *testing.T) TestDeps {
 		noOpMetrics,
 		noOpTracer,
 		env.DB,
+		nil,
 	)
 	log.Printf("[%s] SetupTestGuildService: Service created", t.Name())
 

@@ -193,10 +193,12 @@ func SetupTestRoundHandler(t *testing.T) RoundHandlerTestDeps {
 			}
 		}()
 
-		// Wait for router to start
+		// Wait for router to start. The round router registers ~50 handlers (more than
+		// any other module), each creating a NATS JetStream consumer. In a loaded test
+		// environment this can take longer than other modules; 30 s gives ample headroom.
 		select {
 		case <-watermillRouter.Running():
-		case <-time.After(5 * time.Second):
+		case <-time.After(30 * time.Second):
 			log.Fatal("Router startup timed out")
 		}
 

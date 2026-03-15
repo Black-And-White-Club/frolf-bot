@@ -66,7 +66,7 @@ func TestOrderedModuleNames(t *testing.T) {
 		{
 			name:    "reverse order",
 			reverse: true,
-			want:    []string{"leaderboard", "score", "round", "club", "user", "guild"},
+			want:    []string{"betting", "leaderboard", "score", "round", "club", "user", "guild"},
 		},
 	}
 
@@ -165,6 +165,7 @@ func TestInitMigrateRollbackModules(t *testing.T) {
 				"init:round",
 				"init:score",
 				"init:leaderboard",
+				"init:betting",
 			},
 		},
 		{
@@ -200,6 +201,7 @@ func TestInitMigrateRollbackModules(t *testing.T) {
 				"migrate:round",
 				"migrate:score",
 				"migrate:leaderboard",
+				"migrate:betting",
 			},
 		},
 		{
@@ -231,6 +233,7 @@ func TestInitMigrateRollbackModules(t *testing.T) {
 				return err
 			},
 			wantOrder: []string{
+				"rollback:betting",
 				"rollback:leaderboard",
 				"rollback:score",
 				"rollback:round",
@@ -374,7 +377,7 @@ func TestOrderedModuleNamesFromConfig(t *testing.T) {
 	}{
 		{
 			name: "matches dependency module configs",
-			want: []string{"guild", "user", "club", "round", "score", "leaderboard"},
+			want: []string{"guild", "user", "club", "round", "score", "leaderboard", "betting"},
 		},
 	}
 
@@ -400,7 +403,7 @@ func TestOrderedModuleNames_ErrorFormatting(t *testing.T) {
 		{
 			name:      "missing and unknown sorted in error",
 			migrators: map[string]int{"guild": 1, "user": 1, "club": 1, "round": 1, "bogus": 1},
-			want:      []string{"missing=[leaderboard score]", "unknown=[bogus]"},
+			want:      []string{"missing=[betting leaderboard score]", "unknown=[bogus]"},
 		},
 	}
 

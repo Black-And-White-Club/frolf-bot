@@ -16,9 +16,11 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	clubmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/club"
 	clubtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/club"
+	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	clubdb "github.com/Black-And-White-Club/frolf-bot/app/modules/club/infrastructure/repositories"
+	guilddb "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/google/uuid"
 	"github.com/uptrace/bun"
@@ -49,6 +51,7 @@ func (g *discordGuild) hasManageGuild() bool {
 // ClubService implements the Service interface.
 type ClubService struct {
 	repo              clubdb.Repository
+	guildRepo         guilddb.Repository
 	userRepo          userdb.Repository
 	queueService      ChallengeQueueService
 	leaderboardReader ChallengeTagReader
@@ -62,6 +65,7 @@ type ClubService struct {
 // NewClubService creates a new ClubService.
 func NewClubService(
 	repo clubdb.Repository,
+	guildRepo guilddb.Repository,
 	userRepo userdb.Repository,
 	queueService ChallengeQueueService,
 	leaderboardReader ChallengeTagReader,
@@ -76,6 +80,7 @@ func NewClubService(
 	}
 	return &ClubService{
 		repo:              repo,
+		guildRepo:         guildRepo,
 		userRepo:          userRepo,
 		queueService:      queueService,
 		leaderboardReader: leaderboardReader,
@@ -116,10 +121,31 @@ func (s *ClubService) getClubLogic(ctx context.Context, db bun.IDB, clubUUID uui
 	}
 
 	return results.SuccessResult[*clubtypes.ClubInfo, error](&clubtypes.ClubInfo{
-		UUID:    club.UUID.String(),
-		Name:    club.Name,
-		IconURL: club.IconURL,
+		UUID:         club.UUID.String(),
+		Name:         club.Name,
+		IconURL:      club.IconURL,
+		Entitlements: s.resolveEntitlements(ctx, db, club.UUID),
 	}), nil
+}
+
+func (s *ClubService) resolveEntitlements(ctx context.Context, db bun.IDB, clubUUID uuid.UUID) guildtypes.ResolvedClubEntitlements {
+	if s.guildRepo == nil || clubUUID == uuid.Nil {
+		return guildtypes.ResolvedClubEntitlements{}
+	}
+
+	entitlements, err := s.guildRepo.ResolveEntitlements(ctx, db, sharedtypes.GuildID(clubUUID.String()))
+	if err != nil {
+		if errors.Is(err, guilddb.ErrNotFound) {
+			return guildtypes.ResolvedClubEntitlements{}
+		}
+		s.logger.WarnContext(ctx, "Failed to resolve club entitlements",
+			attr.String("club_uuid", clubUUID.String()),
+			attr.Error(err),
+		)
+		return guildtypes.ResolvedClubEntitlements{}
+	}
+
+	return entitlements
 }
 
 // UpsertClubFromDiscord creates or updates a club from Discord guild info.

@@ -31,12 +31,12 @@ func TestNewGuildService(t *testing.T) {
 			fakeRepo := NewFakeGuildRepository()
 			testHandler := loggerfrolfbot.NewTestHandler()
 			logger := slog.New(testHandler)
-			mockMetrics := &guildmetrics.NoOpMetrics{}
+			noOpMetrics := &guildmetrics.NoOpMetrics{}
 			tracer := noop.NewTracerProvider().Tracer("test")
 			// For testing NewGuildService, bun.DB can be nil or a shell
 			var db *bun.DB
 
-			service := NewGuildService(fakeRepo, logger, mockMetrics, tracer, db)
+			service := NewGuildService(fakeRepo, logger, noOpMetrics, tracer, db, nil)
 
 			if service == nil {
 				t.Fatal("NewGuildService returned nil")
@@ -47,7 +47,7 @@ func TestNewGuildService(t *testing.T) {
 			if service.logger != logger {
 				t.Error("logger not set correctly")
 			}
-			if service.metrics != mockMetrics {
+			if service.metrics != noOpMetrics {
 				t.Error("metrics not set correctly")
 			}
 		})

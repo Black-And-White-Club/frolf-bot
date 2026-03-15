@@ -18,6 +18,7 @@ import (
 	discordoauth "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/oauth/discord"
 	googleoauth "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/oauth/google"
 	authrouter "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/infrastructure/router"
+	guilddb "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
 	"github.com/Black-And-White-Club/frolf-bot/config"
 	"github.com/go-chi/chi/v5"
@@ -102,6 +103,7 @@ func NewModule(
 		jwtProvider,
 		userJWTBuilder,
 		userRepo,
+		guilddb.NewRepository(db),
 		serviceConfig,
 		logger,
 		tracer,

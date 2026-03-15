@@ -44,4 +44,8 @@ type Repository interface {
 	RoundHasGroups(ctx context.Context, db bun.IDB, roundID sharedtypes.RoundID) (bool, error)
 	GetRoundsByGuildID(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, states ...roundtypes.RoundState) ([]*roundtypes.Round, error)
 	GetFinalizedRoundsAfter(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, startTime time.Time) ([]*roundtypes.Round, error)
+	// GetAllUpcomingRoundsInWindow returns upcoming rounds across all guilds whose
+	// start_time falls within [now, now+lookahead]. Used by the betting market worker
+	// to enumerate clubs that need market generation without knowing guild IDs upfront.
+	GetAllUpcomingRoundsInWindow(ctx context.Context, db bun.IDB, lookahead time.Duration) ([]*roundtypes.Round, error)
 }

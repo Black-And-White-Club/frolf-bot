@@ -37,4 +37,28 @@ type Repository interface {
 	// Sets is_active=false, captures resource snapshot for cleanup.
 	// Idempotent: no error if already deleted or doesn't exist.
 	DeleteConfig(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) error
+
+	// ResolveEntitlements resolves current feature access for a guild or club UUID.
+	ResolveEntitlements(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (guildtypes.ResolvedClubEntitlements, error)
+
+	// UpsertFeatureOverride inserts or updates a feature override and creates an audit record.
+	UpsertFeatureOverride(ctx context.Context, db bun.IDB, override *ClubFeatureOverride, audit *ClubFeatureAccessAudit) error
+
+	// DeleteFeatureOverride deletes a feature override and creates an audit record.
+	DeleteFeatureOverride(ctx context.Context, db bun.IDB, clubUUID string, featureKey string, audit *ClubFeatureAccessAudit) error
+
+	// ListFeatureAccessAudit retrieves the audit history for a club's feature.
+	ListFeatureAccessAudit(ctx context.Context, db bun.IDB, clubUUID string, featureKey string) ([]ClubFeatureAccessAudit, error)
+
+	// InsertOutboxEvent inserts a pending outbox event within the current
+	// transaction. Must be called with a bun.Tx so the INSERT is atomic with
+	// the business mutation.
+	InsertOutboxEvent(ctx context.Context, db bun.IDB, topic string, payload []byte) error
+
+	// PollAndLockOutboxEvents returns up to limit unpublished outbox rows,
+	// locking them with SELECT … FOR UPDATE SKIP LOCKED.
+	PollAndLockOutboxEvents(ctx context.Context, db bun.IDB, limit int) ([]GuildOutboxEvent, error)
+
+	// MarkOutboxEventPublished sets published_at for the given row.
+	MarkOutboxEventPublished(ctx context.Context, db bun.IDB, id string) error
 }

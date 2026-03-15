@@ -48,7 +48,7 @@ func newTestRegistry(providers ...authoauth.Provider) *authoauth.Registry {
 func newOAuthService(repo *userdb.FakeRepository, registry *authoauth.Registry) Service {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	tracer := noop.NewTracerProvider().Tracer("test")
-	return NewService(&FakeJWTProvider{}, &FakeUserJWTBuilder{}, repo, Config{}, logger, tracer, nil, registry)
+	return NewService(&FakeJWTProvider{}, &FakeUserJWTBuilder{}, repo, nil, Config{}, logger, tracer, nil, registry)
 }
 
 // --- HandleOAuthCallback ---

@@ -15,6 +15,7 @@ import (
 	clubqueue "github.com/Black-And-White-Club/frolf-bot/app/modules/club/infrastructure/queue"
 	clubdb "github.com/Black-And-White-Club/frolf-bot/app/modules/club/infrastructure/repositories"
 	clubrouter "github.com/Black-And-White-Club/frolf-bot/app/modules/club/infrastructure/router"
+	guilddb "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories"
 	leaderboardservice "github.com/Black-And-White-Club/frolf-bot/app/modules/leaderboard/application"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
@@ -80,7 +81,7 @@ func NewClubModule(ctx context.Context, opts ClubModuleOptions) (*Module, error)
 	}
 
 	// 3. Initialize Service (now includes userRepo for cross-module queries)
-	service := clubservice.NewClubService(repo, userRepo, queueService, leaderboardReader, roundReader, logger, metrics, tracer, db)
+	service := clubservice.NewClubService(repo, guilddb.NewRepository(db), userRepo, queueService, leaderboardReader, roundReader, logger, metrics, tracer, db)
 
 	// 4. Initialize NATS event Handlers
 	handlers := clubhandlers.NewClubHandlers(service, logger, tracer)
@@ -113,6 +114,7 @@ func NewClubModule(ctx context.Context, opts ClubModuleOptions) (*Module, error)
 			r.Post("/join", httpHandlers.HandleJoinClub)
 			r.Post("/join-by-code", httpHandlers.HandleJoinByCode)
 			r.Route("/{uuid}", func(r chi.Router) {
+				r.Get("/", httpHandlers.HandleGetClub)
 				r.Get("/invites", httpHandlers.HandleListInvites)
 				r.Post("/invites", httpHandlers.HandleCreateInvite)
 				r.Delete("/invites/{code}", httpHandlers.HandleRevokeInvite)

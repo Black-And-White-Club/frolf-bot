@@ -65,6 +65,13 @@ var appTables = []string{
 	"leaderboard_point_history",
 	"leaderboard_season_standings",
 	"leaderboard_seasons",
+	// betting tables
+	"betting_audit_log",
+	"betting_bets",
+	"betting_market_options",
+	"betting_markets",
+	"betting_wallet_journal",
+	"betting_member_settings",
 }
 
 // CleanupRiverJobs deletes all jobs from the River queue
@@ -148,6 +155,18 @@ func CleanLeaderboardIntegrationTables(ctx context.Context, db *bun.DB) error {
 func CleanRoundIntegrationTables(ctx context.Context, db *bun.DB) error {
 	// Order matters due to foreign keys - participants first, then rounds
 	return TruncateTables(ctx, db, "rounds")
+}
+
+// CleanBettingIntegrationTables truncates all betting-related tables
+func CleanBettingIntegrationTables(ctx context.Context, db *bun.DB) error {
+	return TruncateTables(ctx, db,
+		"betting_audit_log",
+		"betting_bets",
+		"betting_market_options",
+		"betting_markets",
+		"betting_wallet_journal",
+		"betting_member_settings",
+	)
 }
 
 // CleanAllIntegrationTables truncates all tables for complete isolation between tests

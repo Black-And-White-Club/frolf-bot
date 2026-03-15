@@ -14,6 +14,7 @@ import (
 	guildrouter "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/router"
 	"github.com/Black-And-White-Club/frolf-bot/config"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/go-chi/chi/v5"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/uptrace/bun"
 )
@@ -28,6 +29,7 @@ type Module struct {
 	Helper             utils.Helpers
 	observability      observability.Observability
 	prometheusRegistry *prometheus.Registry
+	outboxForwarder    *guildservice.OutboxForwarder
 }
 
 // NewGuildModule creates and initializes a new guild module.
@@ -41,6 +43,7 @@ func NewGuildModule(
 	helpers utils.Helpers,
 	routerCtx context.Context,
 	db *bun.DB,
+	httpRouter chi.Router,
 ) (*Module, error) {
 	logger := obs.Provider.Logger
 	metrics := obs.Registry.GuildMetrics
@@ -49,10 +52,14 @@ func NewGuildModule(
 	logger.InfoContext(ctx, "guild.NewGuildModule initializing")
 
 	// 1. Initialize Service
-	service := guildservice.NewGuildService(guildRepo, logger, metrics, tracer, db)
+	service := guildservice.NewGuildService(guildRepo, logger, metrics, tracer, db, eventBus)
+
+	// 2. Initialize outbox forwarder (publishes guild.feature_access.updated.v1 reliably)
+	outboxForwarder := guildservice.NewOutboxForwarder(db, guildRepo, eventBus, logger)
 
 	// 2. Initialize Handlers
 	handlers := guildhandlers.NewGuildHandlers(service, logger, tracer, helpers, metrics)
+	httpHandlers := guildhandlers.NewHTTPHandlers(service, logger, tracer)
 
 	// 3. Initialize Router
 	prometheusRegistry := prometheus.NewRegistry()
@@ -72,6 +79,18 @@ func NewGuildModule(
 		return nil, fmt.Errorf("failed to configure guild router: %w", err)
 	}
 
+	if httpRouter != nil {
+		httpRouter.Route("/api/guilds", func(r chi.Router) {
+			r.Get("/{club_uuid}/entitlements", httpHandlers.HandleGetEntitlements)
+		})
+		httpRouter.Route("/api/admin/guilds", func(r chi.Router) {
+			// Ensure you have auth/admin middleware applied to /api/admin globally in main router
+			r.Post("/{club_uuid}/features/{feature_key}/grant", httpHandlers.HandleGrantFeatureAccess)
+			r.Post("/{club_uuid}/features/{feature_key}/revoke", httpHandlers.HandleRevokeFeatureAccess)
+			r.Get("/{club_uuid}/features/{feature_key}/audit", httpHandlers.HandleGetFeatureAccessAudit)
+		})
+	}
+
 	return &Module{
 		EventBus:           eventBus,
 		GuildService:       service,
@@ -80,6 +99,7 @@ func NewGuildModule(
 		Helper:             helpers,
 		observability:      obs,
 		prometheusRegistry: prometheusRegistry,
+		outboxForwarder:    outboxForwarder,
 	}, nil
 }
 
@@ -92,6 +112,13 @@ func (m *Module) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if wg != nil {
 		wg.Add(1)
 		defer wg.Done()
+	}
+
+	// Start the outbox forwarder in a background goroutine so that
+	// guild.feature_access.updated.v1 events are published reliably after
+	// the DB transaction commits.
+	if m.outboxForwarder != nil {
+		go m.outboxForwarder.Run(ctx)
 	}
 
 	<-ctx.Done()

@@ -1336,6 +1336,7 @@ func newChallengeTestService(
 
 	return NewClubService(
 		repo,
+		nil,
 		userRepo,
 		queuePort,
 		tagReaderPort,

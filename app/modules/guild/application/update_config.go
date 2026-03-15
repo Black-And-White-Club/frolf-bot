@@ -70,5 +70,15 @@ func (s *GuildService) executeUpdateGuildConfig(
 		return GuildConfigResult{}, fmt.Errorf("failed to update config in DB: %w", err)
 	}
 
+	config, err := s.repo.GetConfig(ctx, db, config.GuildID)
+	if err != nil {
+		return GuildConfigResult{}, fmt.Errorf("failed to fetch updated config: %w", err)
+	}
+
+	config, err = s.attachEntitlements(ctx, db, config)
+	if err != nil {
+		return GuildConfigResult{}, err
+	}
+
 	return results.SuccessResult[*guildtypes.GuildConfig, error](config), nil
 }

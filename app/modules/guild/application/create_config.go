@@ -72,6 +72,10 @@ func (s *GuildService) executeCreateGuildConfig(
 			existing.LeaderboardChannelID == config.LeaderboardChannelID &&
 			existing.UserRoleID == config.UserRoleID &&
 			existing.SignupEmoji == config.SignupEmoji {
+			existing, err = s.attachEntitlements(ctx, db, existing)
+			if err != nil {
+				return GuildConfigResult{}, err
+			}
 			return results.SuccessResult[*guildtypes.GuildConfig, error](existing), nil
 		}
 		return results.FailureResult[*guildtypes.GuildConfig, error](ErrGuildConfigConflict), nil
@@ -79,6 +83,11 @@ func (s *GuildService) executeCreateGuildConfig(
 
 	if err := s.repo.SaveConfig(ctx, db, config); err != nil {
 		return GuildConfigResult{}, fmt.Errorf("failed to save guild config for %s: %w", config.GuildID, err)
+	}
+
+	config, err = s.attachEntitlements(ctx, db, config)
+	if err != nil {
+		return GuildConfigResult{}, err
 	}
 
 	return results.SuccessResult[*guildtypes.GuildConfig, error](config), nil

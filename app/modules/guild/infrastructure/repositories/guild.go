@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
@@ -74,33 +75,22 @@ func (r *Impl) GetConfig(ctx context.Context, db bun.IDB, guildID sharedtypes.Gu
 		db = r.db
 	}
 
-	// guildID may be a club UUID (from the PWA) rather than a Discord guild snowflake.
-	// If so, resolve it to the Discord guild ID stored in guild_configs.
-	resolvedGuildID := guildID
-	if _, err := uuid.Parse(string(guildID)); err == nil {
-		var discordGuildID string
-		if err := db.NewSelect().
-			TableExpr("clubs").
-			ColumnExpr("discord_guild_id").
-			Where("uuid = ?", guildID).
-			Scan(ctx, &discordGuildID); err == nil && discordGuildID != "" {
-			resolvedGuildID = sharedtypes.GuildID(discordGuildID)
-		}
-	}
-
-	model := new(GuildConfig)
-	err := db.NewSelect().
-		Model(model).
-		Where("guild_id = ? AND is_active = true", resolvedGuildID).
-		Scan(ctx)
-
+	model, err := r.selectConfigModel(ctx, db, guildID, false)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("guilddb.GetConfig: %w", err)
 	}
-	return toSharedModel(model), nil
+
+	config := toSharedModel(model)
+	entitlements, err := r.ResolveEntitlements(ctx, db, guildID)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return nil, err
+	}
+	config.Entitlements = entitlements
+
+	return config, nil
 }
 
 // GetConfigIncludeDeleted retrieves a guild configuration by ID, including inactive ones.
@@ -109,19 +99,52 @@ func (r *Impl) GetConfigIncludeDeleted(ctx context.Context, db bun.IDB, guildID 
 		db = r.db
 	}
 
-	model := new(GuildConfig)
-	err := db.NewSelect().
-		Model(model).
-		Where("guild_id = ?", guildID).
-		Scan(ctx)
-
+	model, err := r.selectConfigModel(ctx, db, guildID, true)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("guilddb.GetConfigIncludeDeleted: %w", err)
 	}
-	return toSharedModel(model), nil
+
+	config := toSharedModel(model)
+	entitlements, err := r.ResolveEntitlements(ctx, db, guildID)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return nil, err
+	}
+	config.Entitlements = entitlements
+
+	return config, nil
+}
+
+// ResolveEntitlements resolves club-level entitlements from subscription/trial state plus manual overrides.
+func (r *Impl) ResolveEntitlements(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (guildtypes.ResolvedClubEntitlements, error) {
+	if db == nil {
+		db = r.db
+	}
+
+	resolvedGuildID, clubUUID, err := r.resolveLookupIdentifiers(ctx, db, guildID)
+	if err != nil {
+		return guildtypes.ResolvedClubEntitlements{}, fmt.Errorf("guilddb.ResolveEntitlements: %w", err)
+	}
+
+	model, err := r.selectConfigModel(ctx, db, resolvedGuildID, false)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return guildtypes.ResolvedClubEntitlements{}, ErrNotFound
+		}
+		return guildtypes.ResolvedClubEntitlements{}, fmt.Errorf("guilddb.ResolveEntitlements: %w", err)
+	}
+
+	now := time.Now().UTC()
+	entitlements := guildtypes.ResolvedClubEntitlements{
+		Features: map[guildtypes.ClubFeatureKey]guildtypes.ClubFeatureAccess{
+			guildtypes.ClubFeatureBetting: r.resolveBettingAccess(ctx, db, model, clubUUID, now),
+		},
+		ResolvedAt: &now,
+	}
+
+	return entitlements, nil
 }
 
 // --- WRITE METHODS ---
@@ -255,6 +278,193 @@ func (r *Impl) DeleteConfig(ctx context.Context, db bun.IDB, guildID sharedtypes
 	return nil
 }
 
+func (r *Impl) selectConfigModel(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, includeDeleted bool) (*GuildConfig, error) {
+	resolvedGuildID, _, err := r.resolveLookupIdentifiers(ctx, db, guildID)
+	if err != nil {
+		return nil, err
+	}
+
+	model := new(GuildConfig)
+	query := db.NewSelect().Model(model).Where("guild_id = ?", resolvedGuildID)
+
+	if !includeDeleted {
+		query = query.Where("is_active = true")
+	}
+
+	if err := query.Scan(ctx); err != nil {
+		return nil, err
+	}
+
+	return model, nil
+}
+
+func (r *Impl) resolveLookupIdentifiers(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (sharedtypes.GuildID, uuid.UUID, error) {
+	resolvedGuildID := guildID
+	var clubUUID uuid.UUID
+
+	if parsedUUID, err := uuid.Parse(string(guildID)); err == nil {
+		clubUUID = parsedUUID
+
+		var discordGuildID string
+		if err := db.NewSelect().
+			TableExpr("clubs").
+			ColumnExpr("discord_guild_id").
+			Where("uuid = ?", parsedUUID).
+			Scan(ctx, &discordGuildID); err == nil && discordGuildID != "" {
+			resolvedGuildID = sharedtypes.GuildID(discordGuildID)
+		} else if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return "", uuid.Nil, err
+		}
+	}
+
+	if clubUUID == uuid.Nil && resolvedGuildID != "" {
+		if err := db.NewSelect().
+			TableExpr("clubs").
+			ColumnExpr("uuid").
+			Where("discord_guild_id = ?", resolvedGuildID).
+			Scan(ctx, &clubUUID); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return "", uuid.Nil, err
+		}
+	}
+
+	return resolvedGuildID, clubUUID, nil
+}
+
+func (r *Impl) resolveBettingAccess(
+	ctx context.Context,
+	db bun.IDB,
+	model *GuildConfig,
+	clubUUID uuid.UUID,
+	now time.Time,
+) guildtypes.ClubFeatureAccess {
+	access := guildtypes.ClubFeatureAccess{
+		Key:    guildtypes.ClubFeatureBetting,
+		State:  guildtypes.FeatureAccessStateDisabled,
+		Source: guildtypes.FeatureAccessSourceNone,
+		Reason: "premium subscription required",
+	}
+
+	if model == nil {
+		return access
+	}
+
+	// Manual overrides have highest precedence: manual_deny > manual_allow > subscription/trial.
+	// Filter expired overrides at the query level to avoid stale in-memory comparisons.
+	if clubUUID != uuid.Nil {
+		override := new(ClubFeatureOverride)
+		if err := db.NewSelect().
+			Model(override).
+			Where("club_uuid = ? AND feature_key = ?", clubUUID, string(guildtypes.ClubFeatureBetting)).
+			Where("expires_at IS NULL OR expires_at > ?", now).
+			Scan(ctx); err == nil {
+			access.Reason = override.Reason
+			access.ExpiresAt = override.ExpiresAt
+			switch {
+			case strings.EqualFold(override.State, string(guildtypes.FeatureAccessStateEnabled)):
+				access.State = guildtypes.FeatureAccessStateEnabled
+				access.Source = guildtypes.FeatureAccessSourceManualAllow
+			case strings.EqualFold(override.State, string(guildtypes.FeatureAccessStateFrozen)):
+				access.State = guildtypes.FeatureAccessStateFrozen
+				access.Source = guildtypes.FeatureAccessSourceManualDeny
+			default:
+				access.State = guildtypes.FeatureAccessStateDisabled
+				access.Source = guildtypes.FeatureAccessSourceManualDeny
+			}
+			// Active manual override — no need to evaluate subscription or trial.
+			return access
+		}
+	}
+
+	// Evaluate trial and subscription access independently, then pick the best.
+	// Precedence (already handled above): manual_deny > manual_allow > subscription/trial > disabled.
+	// Within subscription/trial: enabled > frozen > disabled; ties broken by latest ExpiresAt.
+	var trialAccess, subAccess *guildtypes.ClubFeatureAccess
+
+	if model.IsTrial {
+		a := guildtypes.ClubFeatureAccess{Key: guildtypes.ClubFeatureBetting}
+		if model.TrialExpiresAt == nil || model.TrialExpiresAt.After(now) {
+			a.State = guildtypes.FeatureAccessStateEnabled
+			a.Source = guildtypes.FeatureAccessSourceTrial
+			a.Reason = "trial active"
+		} else {
+			a.State = guildtypes.FeatureAccessStateFrozen
+			a.Source = guildtypes.FeatureAccessSourceTrial
+			a.Reason = "trial expired; feature is read-only until access is restored"
+		}
+		a.ExpiresAt = model.TrialExpiresAt
+		trialAccess = &a
+	}
+
+	if isPremiumSubscriptionTier(model.SubscriptionTier) {
+		a := guildtypes.ClubFeatureAccess{Key: guildtypes.ClubFeatureBetting}
+		if model.SubscriptionExpiresAt == nil || model.SubscriptionExpiresAt.After(now) {
+			a.State = guildtypes.FeatureAccessStateEnabled
+			a.Source = guildtypes.FeatureAccessSourceSubscription
+			a.Reason = fmt.Sprintf("subscription tier %s active", model.SubscriptionTier)
+		} else {
+			a.State = guildtypes.FeatureAccessStateFrozen
+			a.Source = guildtypes.FeatureAccessSourceSubscription
+			a.Reason = fmt.Sprintf("subscription tier %s expired; feature is read-only until access is restored", model.SubscriptionTier)
+		}
+		a.ExpiresAt = model.SubscriptionExpiresAt
+		subAccess = &a
+	}
+
+	if best := pickBestAccess(trialAccess, subAccess); best != nil {
+		access = *best
+	}
+
+	return access
+}
+
+// pickBestAccess returns the most permissive of two optional feature accesses.
+// Rules: enabled > frozen > disabled; ties broken by latest ExpiresAt (nil = indefinite = best).
+func pickBestAccess(a, b *guildtypes.ClubFeatureAccess) *guildtypes.ClubFeatureAccess {
+	if a == nil {
+		return b
+	}
+	if b == nil {
+		return a
+	}
+	rankState := func(s guildtypes.FeatureAccessState) int {
+		switch s {
+		case guildtypes.FeatureAccessStateEnabled:
+			return 2
+		case guildtypes.FeatureAccessStateFrozen:
+			return 1
+		default:
+			return 0
+		}
+	}
+	ra, rb := rankState(a.State), rankState(b.State)
+	if ra != rb {
+		if ra > rb {
+			return a
+		}
+		return b
+	}
+	// Same state: prefer the one with a later (or nil) expiry.
+	if a.ExpiresAt == nil {
+		return a
+	}
+	if b.ExpiresAt == nil {
+		return b
+	}
+	if a.ExpiresAt.After(*b.ExpiresAt) {
+		return a
+	}
+	return b
+}
+
+func isPremiumSubscriptionTier(tier string) bool {
+	switch strings.ToLower(strings.TrimSpace(tier)) {
+	case "premium", "pro", "enterprise", "paid":
+		return true
+	default:
+		return false
+	}
+}
+
 // =============================================================================
 // Model Conversion Helpers
 // =============================================================================
@@ -358,4 +568,125 @@ func unixNanoToTime(nano int64) *time.Time {
 	}
 	t := time.Unix(0, nano).UTC()
 	return &t
+}
+
+// UpsertFeatureOverride inserts or updates a feature override and creates an audit record.
+func (r *Impl) UpsertFeatureOverride(ctx context.Context, db bun.IDB, override *ClubFeatureOverride, audit *ClubFeatureAccessAudit) error {
+	return db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		if _, err := tx.NewInsert().
+			Model(override).
+			On("CONFLICT (club_uuid, feature_key) DO UPDATE").
+			Set("state = EXCLUDED.state").
+			Set("reason = EXCLUDED.reason").
+			Set("expires_at = EXCLUDED.expires_at").
+			Set("updated_by = EXCLUDED.updated_by").
+			Set("updated_at = current_timestamp").
+			Exec(ctx); err != nil {
+			return fmt.Errorf("upsert feature override: %w", err)
+		}
+
+		if _, err := tx.NewInsert().Model(audit).Exec(ctx); err != nil {
+			return fmt.Errorf("insert feature access audit: %w", err)
+		}
+
+		return nil
+	})
+}
+
+// DeleteFeatureOverride deletes a feature override and creates an audit record.
+func (r *Impl) DeleteFeatureOverride(ctx context.Context, db bun.IDB, clubUUID string, featureKey string, audit *ClubFeatureAccessAudit) error {
+	return db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		if _, err := tx.NewDelete().
+			Model((*ClubFeatureOverride)(nil)).
+			Where("club_uuid = ? AND feature_key = ?", clubUUID, featureKey).
+			Exec(ctx); err != nil {
+			return fmt.Errorf("delete feature override: %w", err)
+		}
+
+		if _, err := tx.NewInsert().Model(audit).Exec(ctx); err != nil {
+			return fmt.Errorf("insert feature access audit: %w", err)
+		}
+
+		return nil
+	})
+}
+
+// ListFeatureAccessAudit retrieves the audit history for a club's feature.
+func (r *Impl) ListFeatureAccessAudit(ctx context.Context, db bun.IDB, clubUUID string, featureKey string) ([]ClubFeatureAccessAudit, error) {
+	var audits []ClubFeatureAccessAudit
+	if err := db.NewSelect().
+		Model(&audits).
+		Where("club_uuid = ? AND feature_key = ?", clubUUID, featureKey).
+		Order("created_at DESC").
+		Scan(ctx); err != nil {
+		return nil, fmt.Errorf("list feature access audit: %w", err)
+	}
+	return audits, nil
+}
+
+// GuildOutboxEvent is a transactional outbox row used to reliably deliver
+// domain events after the business mutation commits.
+type GuildOutboxEvent struct {
+	bun.BaseModel `bun:"table:guild_outbox,alias:o"`
+
+	ID          string     `bun:"id,pk,default:gen_random_uuid()"`
+	Topic       string     `bun:"topic,notnull"`
+	Payload     []byte     `bun:"payload,notnull,type:jsonb"`
+	PublishedAt *time.Time `bun:"published_at"`
+	CreatedAt   time.Time  `bun:"created_at,notnull,default:current_timestamp"`
+}
+
+// InsertOutboxEvent inserts a pending outbox event.
+// Must be called with a bun.Tx to be atomic with the associated business mutation.
+func (r *Impl) InsertOutboxEvent(ctx context.Context, db bun.IDB, topic string, payload []byte) error {
+	if db == nil {
+		db = r.db
+	}
+	event := &GuildOutboxEvent{
+		Topic:   topic,
+		Payload: payload,
+	}
+	if _, err := db.NewInsert().Model(event).Exec(ctx); err != nil {
+		return fmt.Errorf("guilddb.InsertOutboxEvent: %w", err)
+	}
+	return nil
+}
+
+// PollAndLockOutboxEvents returns up to limit unpublished outbox rows,
+// acquiring a row-level lock via SELECT … FOR UPDATE SKIP LOCKED so that
+// multiple forwarder instances do not double-publish the same event.
+func (r *Impl) PollAndLockOutboxEvents(ctx context.Context, db bun.IDB, limit int) ([]GuildOutboxEvent, error) {
+	if db == nil {
+		db = r.db
+	}
+	var events []GuildOutboxEvent
+	if err := db.NewRaw(
+		`SELECT id, topic, payload, published_at, created_at
+ FROM guild_outbox
+ WHERE published_at IS NULL
+ ORDER BY created_at
+ LIMIT ?
+ FOR UPDATE SKIP LOCKED`,
+		limit,
+	).Scan(ctx, &events); err != nil {
+		return nil, fmt.Errorf("guilddb.PollAndLockOutboxEvents: %w", err)
+	}
+	return events, nil
+}
+
+// MarkOutboxEventPublished sets published_at = NOW() for the given row,
+// confirming the event was delivered to the message bus.
+func (r *Impl) MarkOutboxEventPublished(ctx context.Context, db bun.IDB, id string) error {
+	if db == nil {
+		db = r.db
+	}
+	now := time.Now()
+	if _, err := db.NewUpdate().
+		TableExpr("guild_outbox").
+		Set("published_at = ?", now).
+		Where("id = ?", id).
+		Exec(ctx); err != nil {
+		return fmt.Errorf("guilddb.MarkOutboxEventPublished: %w", err)
+	}
+	return nil
 }

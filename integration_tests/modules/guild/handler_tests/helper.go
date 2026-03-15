@@ -136,6 +136,7 @@ func SetupTestGuildHandler(t *testing.T) HandlerTestDeps {
 		realHelpers,
 		routerRunCtx,
 		env.DB,
+		nil,
 	)
 	if err != nil {
 		eventBusImpl.Close()

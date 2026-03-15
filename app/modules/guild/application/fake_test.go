@@ -17,11 +17,18 @@ import (
 type FakeGuildRepository struct {
 	trace []string
 
-	GetConfigFunc               func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (*guildtypes.GuildConfig, error)
-	GetConfigIncludeDeletedFunc func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (*guildtypes.GuildConfig, error)
-	SaveConfigFunc              func(ctx context.Context, db bun.IDB, config *guildtypes.GuildConfig) error
-	UpdateConfigFunc            func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, updates *guilddb.UpdateFields) error
-	DeleteConfigFunc            func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) error
+	GetConfigFunc                func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (*guildtypes.GuildConfig, error)
+	GetConfigIncludeDeletedFunc  func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (*guildtypes.GuildConfig, error)
+	SaveConfigFunc               func(ctx context.Context, db bun.IDB, config *guildtypes.GuildConfig) error
+	UpdateConfigFunc             func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, updates *guilddb.UpdateFields) error
+	DeleteConfigFunc             func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) error
+	ResolveEntitlementsFunc      func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (guildtypes.ResolvedClubEntitlements, error)
+	UpsertFeatureOverrideFunc    func(ctx context.Context, db bun.IDB, override *guilddb.ClubFeatureOverride, audit *guilddb.ClubFeatureAccessAudit) error
+	DeleteFeatureOverrideFunc    func(ctx context.Context, db bun.IDB, clubUUID string, featureKey string, audit *guilddb.ClubFeatureAccessAudit) error
+	ListFeatureAccessAuditFunc   func(ctx context.Context, db bun.IDB, clubUUID string, featureKey string) ([]guilddb.ClubFeatureAccessAudit, error)
+	InsertOutboxEventFunc        func(ctx context.Context, db bun.IDB, topic string, payload []byte) error
+	PollAndLockOutboxEventsFunc  func(ctx context.Context, db bun.IDB, limit int) ([]guilddb.GuildOutboxEvent, error)
+	MarkOutboxEventPublishedFunc func(ctx context.Context, db bun.IDB, id string) error
 }
 
 // Trace returns the sequence of method calls made to the fake.
@@ -81,6 +88,62 @@ func (f *FakeGuildRepository) DeleteConfig(ctx context.Context, db bun.IDB, guil
 	f.record("DeleteConfig")
 	if f.DeleteConfigFunc != nil {
 		return f.DeleteConfigFunc(ctx, db, guildID)
+	}
+	return nil
+}
+
+func (f *FakeGuildRepository) ResolveEntitlements(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (guildtypes.ResolvedClubEntitlements, error) {
+	f.record("ResolveEntitlements")
+	if f.ResolveEntitlementsFunc != nil {
+		return f.ResolveEntitlementsFunc(ctx, db, guildID)
+	}
+	return guildtypes.ResolvedClubEntitlements{}, nil
+}
+
+func (f *FakeGuildRepository) UpsertFeatureOverride(ctx context.Context, db bun.IDB, override *guilddb.ClubFeatureOverride, audit *guilddb.ClubFeatureAccessAudit) error {
+	f.record("UpsertFeatureOverride")
+	if f.UpsertFeatureOverrideFunc != nil {
+		return f.UpsertFeatureOverrideFunc(ctx, db, override, audit)
+	}
+	return nil
+}
+
+func (f *FakeGuildRepository) DeleteFeatureOverride(ctx context.Context, db bun.IDB, clubUUID string, featureKey string, audit *guilddb.ClubFeatureAccessAudit) error {
+	f.record("DeleteFeatureOverride")
+	if f.DeleteFeatureOverrideFunc != nil {
+		return f.DeleteFeatureOverrideFunc(ctx, db, clubUUID, featureKey, audit)
+	}
+	return nil
+}
+
+func (f *FakeGuildRepository) ListFeatureAccessAudit(ctx context.Context, db bun.IDB, clubUUID string, featureKey string) ([]guilddb.ClubFeatureAccessAudit, error) {
+	f.record("ListFeatureAccessAudit")
+	if f.ListFeatureAccessAuditFunc != nil {
+		return f.ListFeatureAccessAuditFunc(ctx, db, clubUUID, featureKey)
+	}
+	return nil, nil
+}
+
+func (f *FakeGuildRepository) InsertOutboxEvent(ctx context.Context, db bun.IDB, topic string, payload []byte) error {
+	f.record("InsertOutboxEvent")
+	if f.InsertOutboxEventFunc != nil {
+		return f.InsertOutboxEventFunc(ctx, db, topic, payload)
+	}
+	return nil
+}
+
+func (f *FakeGuildRepository) PollAndLockOutboxEvents(ctx context.Context, db bun.IDB, limit int) ([]guilddb.GuildOutboxEvent, error) {
+	f.record("PollAndLockOutboxEvents")
+	if f.PollAndLockOutboxEventsFunc != nil {
+		return f.PollAndLockOutboxEventsFunc(ctx, db, limit)
+	}
+	return nil, nil
+}
+
+func (f *FakeGuildRepository) MarkOutboxEventPublished(ctx context.Context, db bun.IDB, id string) error {
+	f.record("MarkOutboxEventPublished")
+	if f.MarkOutboxEventPublishedFunc != nil {
+		return f.MarkOutboxEventPublishedFunc(ctx, db, id)
 	}
 	return nil
 }

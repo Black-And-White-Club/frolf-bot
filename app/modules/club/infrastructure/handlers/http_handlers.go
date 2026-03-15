@@ -75,6 +75,25 @@ func httpError(w http.ResponseWriter, status int, msg string) {
 	json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 
+// HandleGetClub returns club information by UUID.
+// GET /api/clubs/{uuid}
+func (h *HTTPHandlers) HandleGetClub(w http.ResponseWriter, r *http.Request) {
+	clubUUID, err := uuid.Parse(chi.URLParam(r, "uuid"))
+	if err != nil {
+		httpError(w, http.StatusBadRequest, "invalid club uuid")
+		return
+	}
+
+	info, err := h.service.GetClub(r.Context(), clubUUID)
+	if err != nil {
+		h.logger.WarnContext(r.Context(), "GetClub failed", slog.String("error", err.Error()))
+		httpError(w, http.StatusNotFound, "club not found")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, info)
+}
+
 // HandleGetSuggestions returns club suggestions based on the user's Discord guilds.
 // GET /api/clubs/suggestions
 func (h *HTTPHandlers) HandleGetSuggestions(w http.ResponseWriter, r *http.Request) {

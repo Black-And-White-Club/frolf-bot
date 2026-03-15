@@ -153,6 +153,7 @@ func SetupTestClubService(t *testing.T) ClubTestDeps {
 
 	service := clubservice.NewClubService(
 		clubRepo,
+		nil,
 		userRepo,
 		queueService,
 		tagReader,

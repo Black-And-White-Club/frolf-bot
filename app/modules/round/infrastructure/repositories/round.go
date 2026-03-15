@@ -602,6 +602,33 @@ func (r *Impl) GetFinalizedRoundsAfter(ctx context.Context, db bun.IDB, guildID 
 	return rounds, nil
 }
 
+// GetAllUpcomingRoundsInWindow returns upcoming rounds across ALL guilds whose
+// start_time falls within [now, now+lookahead]. This is used by the betting
+// market worker to discover which clubs need market generation without requiring
+// an explicit guild-ID enumeration.
+func (r *Impl) GetAllUpcomingRoundsInWindow(ctx context.Context, db bun.IDB, lookahead time.Duration) ([]*roundtypes.Round, error) {
+	if db == nil {
+		db = r.db
+	}
+	now := time.Now()
+	until := now.Add(lookahead)
+	var localRounds []*Round
+	err := db.NewSelect().
+		Model(&localRounds).
+		ExcludeColumn("file_data").
+		Where("state = ? AND start_time >= ? AND start_time <= ?", roundtypes.RoundStateUpcoming, now, until).
+		OrderExpr("start_time ASC").
+		Scan(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query upcoming rounds in window: %w", err)
+	}
+	rounds := make([]*roundtypes.Round, len(localRounds))
+	for i, lr := range localRounds {
+		rounds[i] = toSharedRound(lr)
+	}
+	return rounds, nil
+}
+
 // GetUpcomingRoundsByParticipant retrieves upcoming rounds that contain a specific participant
 func (r *Impl) GetUpcomingRoundsByParticipant(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, userID sharedtypes.DiscordID) ([]*roundtypes.Round, error) {
 	if db == nil {
