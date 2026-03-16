@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	bettingmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/betting"
 	bettingservice "github.com/Black-And-White-Club/frolf-bot/app/modules/betting/application"
@@ -30,7 +31,7 @@ func newHTTPHandlers(svc bettingservice.Service, userRepo userdb.Repository) *HT
 func validSession(userUUID uuid.UUID) *userdb.FakeRepository {
 	repo := &userdb.FakeRepository{}
 	repo.GetRefreshTokenFn = func(_ context.Context, _ bun.IDB, _ string) (*userdb.RefreshToken, error) {
-		return &userdb.RefreshToken{UserUUID: userUUID}, nil
+		return &userdb.RefreshToken{UserUUID: userUUID, ExpiresAt: time.Now().Add(time.Hour)}, nil
 	}
 	return repo
 }

@@ -57,7 +57,7 @@ func (h *AuthHandlers) HandleHTTPLogin(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "user_uuid": resp.UserUUID})
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "user_uuid": resp.UserUUID})
 }
 
 type loginRequest struct {
@@ -88,30 +88,33 @@ func readMagicLinkToken(w http.ResponseWriter, r *http.Request) (string, error) 
 
 func (h *AuthHandlers) HandleHTTPTicket(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	cookie, err := r.Cookie(RefreshTokenCookie)
-	if err != nil {
-		h.httpError(w, r, "unauthorized", http.StatusUnauthorized, err)
+
+	rawToken, fromHeader := extractRefreshToken(r)
+	if rawToken == "" {
+		h.httpError(w, r, "unauthorized", http.StatusUnauthorized, nil)
 		return
 	}
 
 	activeClubUUID := r.URL.Query().Get("active_club")
 
-	resp, err := h.service.GetTicket(ctx, cookie.Value, activeClubUUID)
+	resp, err := h.service.GetTicket(ctx, rawToken, activeClubUUID)
 	if err != nil {
 		h.httpError(w, r, "unauthorized", http.StatusUnauthorized, err)
 		return
 	}
 
-	// Update cookie with rotated token
-	http.SetCookie(w, &http.Cookie{
-		Name:     RefreshTokenCookie,
-		Value:    resp.RefreshToken,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   h.secureCookies,
-		SameSite: http.SameSiteLaxMode,
-		Expires:  time.Now().Add(authservice.RefreshTokenExpiry),
-	})
+	// For cookie-based callers (PWA), rotate the cookie as before.
+	if !fromHeader {
+		http.SetCookie(w, &http.Cookie{
+			Name:     RefreshTokenCookie,
+			Value:    resp.RefreshToken,
+			Path:     "/",
+			HttpOnly: true,
+			Secure:   h.secureCookies,
+			SameSite: http.SameSiteLaxMode,
+			Expires:  time.Now().Add(authservice.RefreshTokenExpiry),
+		})
+	}
 
 	// Dispatch profile/role sync requests (non-blocking, best-effort).
 	for _, sr := range resp.SyncRequests {
@@ -137,20 +140,42 @@ func (h *AuthHandlers) HandleHTTPTicket(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
+	// For bearer callers (Activity), include the rotated refresh_token in the
+	// response body so the client can update its in-memory token.
+	response := map[string]string{"ticket": resp.NATSToken}
+	if fromHeader {
+		response["refresh_token"] = resp.RefreshToken
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
-		"ticket": resp.NATSToken,
-	})
+	_ = json.NewEncoder(w).Encode(response)
+}
+
+// extractRefreshToken returns the raw refresh token and whether it came from
+// an Authorization header (true) or a cookie (false).
+func extractRefreshToken(r *http.Request) (token string, fromHeader bool) {
+	if cookie, err := r.Cookie(RefreshTokenCookie); err == nil && cookie.Value != "" {
+		if isValidTokenFormat(cookie.Value) {
+			return cookie.Value, false
+		}
+	}
+	if auth := r.Header.Get("Authorization"); len(auth) > 7 && auth[:7] == "Bearer " {
+		t := auth[7:]
+		if isValidTokenFormat(t) {
+			return t, true
+		}
+	}
+	return "", false
 }
 
 func (h *AuthHandlers) HandleHTTPLogout(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	cookie, _ := r.Cookie(RefreshTokenCookie)
-	if cookie != nil {
-		_ = h.service.LogoutUser(ctx, cookie.Value)
+	rawToken, _ := extractRefreshToken(r)
+	if rawToken != "" {
+		_ = h.service.LogoutUser(ctx, rawToken)
 	}
 
-	// Clear cookie
+	// Clear cookie (no-op for bearer-only callers, harmless to send).
 	http.SetCookie(w, &http.Cookie{
 		Name:     RefreshTokenCookie,
 		Value:    "",

@@ -80,18 +80,51 @@ func NewHTTPHandlers(
 	}
 }
 
+// isValidTokenFormat checks that a refresh token has the expected format:
+// exactly 64 lowercase hex characters (hex-encoded 32 random bytes).
+func isValidTokenFormat(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	for _, c := range s {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+			return false
+		}
+	}
+	return true
+}
+
 func (h *HTTPHandlers) resolveUserUUID(r *http.Request) (uuid.UUID, error) {
-	cookie, err := r.Cookie(refreshTokenCookie)
-	if err != nil || cookie.Value == "" {
+	raw := ""
+	// Try cookie first; validate format before accepting (stale/invalid cookie
+	// must not silently block a valid Bearer header).
+	if cookie, err := r.Cookie(refreshTokenCookie); err == nil && cookie.Value != "" {
+		if isValidTokenFormat(cookie.Value) {
+			raw = cookie.Value
+		}
+	}
+	// Fall through to Bearer header if cookie was absent or had bad format.
+	if raw == "" {
+		if auth := r.Header.Get("Authorization"); len(auth) > 7 && auth[:7] == "Bearer " {
+			t := auth[7:]
+			if isValidTokenFormat(t) {
+				raw = t
+			}
+		}
+	}
+	if raw == "" {
 		return uuid.Nil, fmt.Errorf("missing session")
 	}
-	hash := sha256hex(cookie.Value)
+	hash := sha256hex(raw)
 	token, err := h.userRepo.GetRefreshToken(r.Context(), nil, hash)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("invalid session")
 	}
 	if token.Revoked {
 		return uuid.Nil, fmt.Errorf("session revoked")
+	}
+	if time.Now().After(token.ExpiresAt) {
+		return uuid.Nil, fmt.Errorf("session expired")
 	}
 	return token.UserUUID, nil
 }
@@ -215,6 +248,7 @@ func (h *HTTPHandlers) HandleUpdateSettings(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, 4096)
 	var req bettingservice.UpdateSettingsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.metrics.RecordHandlerFailure(r.Context(), "HandleUpdateSettings")
@@ -246,6 +280,7 @@ func (h *HTTPHandlers) HandleAdjustWallet(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, 4096)
 	var req bettingservice.AdjustWalletRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.metrics.RecordHandlerFailure(r.Context(), "HandleAdjustWallet")
@@ -277,6 +312,7 @@ func (h *HTTPHandlers) HandlePlaceBet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, 4096)
 	var req bettingservice.PlaceBetRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.metrics.RecordHandlerFailure(r.Context(), "HandlePlaceBet")
@@ -315,6 +351,7 @@ func (h *HTTPHandlers) HandleAdminMarketAction(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, 4096)
 	var req bettingservice.AdminMarketActionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.metrics.RecordHandlerFailure(r.Context(), "HandleAdminMarketAction")

@@ -96,12 +96,13 @@ func CORSMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 				if _, ok := origins[origin]; ok {
 					w.Header().Set("Access-Control-Allow-Origin", origin)
 					w.Header().Set("Access-Control-Allow-Credentials", "true")
-					w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+					w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
 					w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 				}
 			}
 
 			if r.Method == "OPTIONS" {
+				w.Header().Set("Access-Control-Max-Age", "3600")
 				w.WriteHeader(http.StatusOK)
 				return
 			}
@@ -125,18 +126,26 @@ func isValidTokenFormat(s string) bool {
 	return true
 }
 
-// AuthMiddleware ensures a valid refresh token cookie is present.
+// AuthMiddleware ensures a valid session is present.
+// It accepts either a refresh_token cookie (PWA flow) or an
+// Authorization: Bearer header (Discord Activity flow).
 func AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		cookie, err := r.Cookie("refresh_token")
-		if err != nil || cookie.Value == "" {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
+		// Try cookie first (PWA flow).
+		if cookie, err := r.Cookie("refresh_token"); err == nil && cookie.Value != "" {
+			if isValidTokenFormat(cookie.Value) {
+				next.ServeHTTP(w, r)
+				return
+			}
 		}
-		if !isValidTokenFormat(cookie.Value) {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
+		// Fallback: Authorization header (Activity flow).
+		if auth := r.Header.Get("Authorization"); len(auth) > 7 && auth[:7] == "Bearer " {
+			token := auth[7:]
+			if isValidTokenFormat(token) {
+				next.ServeHTTP(w, r)
+				return
+			}
 		}
-		next.ServeHTTP(w, r)
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 	})
 }

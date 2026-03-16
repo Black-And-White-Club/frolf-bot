@@ -90,10 +90,13 @@ type PWAConfig struct {
 
 // DiscordOAuthConfig holds Discord OAuth2 application credentials.
 // Leave ClientID/ClientSecret empty to disable Discord OAuth login.
+// ActivityRedirectURL is the redirect URI used by the Discord Activity embedded
+// app SDK's token exchange — it differs from the PWA redirect URI and is optional.
 type DiscordOAuthConfig struct {
-	ClientID     string `yaml:"client_id"     env:"DISCORD_OAUTH_CLIENT_ID"`
-	ClientSecret string `yaml:"client_secret" env:"DISCORD_OAUTH_CLIENT_SECRET"`
-	RedirectURL  string `yaml:"redirect_url"  env:"DISCORD_OAUTH_REDIRECT_URL"`
+	ClientID            string `yaml:"client_id"              env:"DISCORD_OAUTH_CLIENT_ID"`
+	ClientSecret        string `yaml:"client_secret"          env:"DISCORD_OAUTH_CLIENT_SECRET"`
+	RedirectURL         string `yaml:"redirect_url"           env:"DISCORD_OAUTH_REDIRECT_URL"`
+	ActivityRedirectURL string `yaml:"activity_redirect_url"  env:"DISCORD_OAUTH_ACTIVITY_REDIRECT_URL"`
 }
 
 // GoogleOAuthConfig holds Google OAuth2 application credentials.
@@ -264,6 +267,9 @@ func LoadConfig(filename string) (*Config, error) {
 	if v := os.Getenv("DISCORD_OAUTH_REDIRECT_URL"); v != "" {
 		cfg.DiscordOAuth.RedirectURL = v
 	}
+	if v := os.Getenv("DISCORD_OAUTH_ACTIVITY_REDIRECT_URL"); v != "" {
+		cfg.DiscordOAuth.ActivityRedirectURL = v
+	}
 	if v := os.Getenv("GOOGLE_OAUTH_CLIENT_ID"); v != "" {
 		cfg.GoogleOAuth.ClientID = v
 	}
@@ -424,6 +430,7 @@ func loadConfigFromEnv() (*Config, error) {
 	cfg.DiscordOAuth.ClientID = os.Getenv("DISCORD_OAUTH_CLIENT_ID")
 	cfg.DiscordOAuth.ClientSecret = os.Getenv("DISCORD_OAUTH_CLIENT_SECRET")
 	cfg.DiscordOAuth.RedirectURL = os.Getenv("DISCORD_OAUTH_REDIRECT_URL")
+	cfg.DiscordOAuth.ActivityRedirectURL = os.Getenv("DISCORD_OAUTH_ACTIVITY_REDIRECT_URL")
 
 	cfg.GoogleOAuth.ClientID = os.Getenv("GOOGLE_OAUTH_CLIENT_ID")
 	cfg.GoogleOAuth.ClientSecret = os.Getenv("GOOGLE_OAUTH_CLIENT_SECRET")

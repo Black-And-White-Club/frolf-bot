@@ -87,6 +87,19 @@ func NewModule(
 		})
 		oauthRegistry.Register(discordProvider)
 		logger.InfoContext(ctx, "Registered Discord OAuth2 provider")
+
+		// Register a second Discord provider for the Activity embedded-app SDK.
+		// It uses a separate redirect URL (the Activity origin) as required by
+		// Discord's token exchange for embedded apps.
+		if cfg.DiscordOAuth.ActivityRedirectURL != "" {
+			activityProvider := discordoauth.NewProvider(discordoauth.Config{
+				ClientID:     cfg.DiscordOAuth.ClientID,
+				ClientSecret: cfg.DiscordOAuth.ClientSecret,
+				RedirectURL:  cfg.DiscordOAuth.ActivityRedirectURL,
+			})
+			oauthRegistry.RegisterAs("discord-activity", activityProvider)
+			logger.InfoContext(ctx, "Registered Discord OAuth2 Activity provider")
+		}
 	}
 	if cfg.GoogleOAuth.ClientID != "" && cfg.GoogleOAuth.ClientSecret != "" {
 		googleProvider := googleoauth.NewProvider(googleoauth.Config{
@@ -131,22 +144,32 @@ func NewModule(
 		limiter := authhandlers.NewIPRateLimiter(5, 10)
 		httpRouter.Route("/api/auth", func(r chi.Router) {
 			r.Use(authhandlers.CORSMiddleware(cfg.HTTP.AllowedOrigins))
-			r.Use(authhandlers.RateLimitMiddleware(limiter))
 
-			// Public routes — magic link
-			r.Post("/callback", handlers.HandleHTTPLogin)
+			// Activity token exchange is exempt from IP rate limiting because:
+			// 1. Discord's proxy makes all users share one IP bucket
+			// 2. The endpoint requires a valid single-use Discord OAuth code
+			// 3. Discord's API rate-limits code generation (~50/s globally)
+			r.Post("/discord-activity/token-exchange", handlers.HandleActivityTokenExchange)
 
-			// Public routes — OAuth2 login
-			r.Get("/{provider}/login", handlers.HandleHTTPOAuthLogin)
-			r.Get("/{provider}/callback", handlers.HandleHTTPOAuthCallback)
-			r.Get("/{provider}/link", handlers.HandleHTTPOAuthLinkInitiate)
-			r.Delete("/{provider}/unlink", handlers.HandleHTTPOAuthUnlink)
-
-			// Protected routes
+			// All other auth routes use the IP rate limiter
 			r.Group(func(r chi.Router) {
-				r.Use(authhandlers.AuthMiddleware)
-				r.Post("/ticket", handlers.HandleHTTPTicket)
-				r.Post("/logout", handlers.HandleHTTPLogout)
+				r.Use(authhandlers.RateLimitMiddleware(limiter))
+
+				// Public routes — magic link
+				r.Post("/callback", handlers.HandleHTTPLogin)
+
+				// Public routes — OAuth2 login
+				r.Get("/{provider}/login", handlers.HandleHTTPOAuthLogin)
+				r.Get("/{provider}/callback", handlers.HandleHTTPOAuthCallback)
+				r.Get("/{provider}/link", handlers.HandleHTTPOAuthLinkInitiate)
+				r.Delete("/{provider}/unlink", handlers.HandleHTTPOAuthUnlink)
+
+				// Protected routes
+				r.Group(func(r chi.Router) {
+					r.Use(authhandlers.AuthMiddleware)
+					r.Post("/ticket", handlers.HandleHTTPTicket)
+					r.Post("/logout", handlers.HandleHTTPLogout)
+				})
 			})
 		})
 	}

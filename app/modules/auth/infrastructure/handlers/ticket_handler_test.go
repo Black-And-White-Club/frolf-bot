@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	authservice "github.com/Black-And-White-Club/frolf-bot/app/modules/auth/application"
@@ -146,6 +147,8 @@ func TestAuthHandlers_HandleHTTPTicket(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	tracer := noop.NewTracerProvider().Tracer("test")
 
+	validCookie := strings.Repeat("0123456789abcdef", 4) // 64-char hex
+
 	tests := []struct {
 		name         string
 		cookieValue  string
@@ -155,7 +158,7 @@ func TestAuthHandlers_HandleHTTPTicket(t *testing.T) {
 	}{
 		{
 			name:        "success without sync requests",
-			cookieValue: "old-token",
+			cookieValue: validCookie,
 			setupService: func(s *FakeService) {
 				s.GetTicketFunc = func(ctx context.Context, rt string, clubID string) (*authservice.TicketResponse, error) {
 					return &authservice.TicketResponse{NATSToken: "nats-jwt", RefreshToken: "rotated-token"}, nil
@@ -178,7 +181,7 @@ func TestAuthHandlers_HandleHTTPTicket(t *testing.T) {
 		},
 		{
 			name:        "dispatches sync requests on ticket",
-			cookieValue: "old-token",
+			cookieValue: validCookie,
 			setupService: func(s *FakeService) {
 				s.GetTicketFunc = func(ctx context.Context, rt string, clubID string) (*authservice.TicketResponse, error) {
 					return &authservice.TicketResponse{
@@ -215,7 +218,7 @@ func TestAuthHandlers_HandleHTTPTicket(t *testing.T) {
 		},
 		{
 			name:        "publish failure is tolerated (best-effort)",
-			cookieValue: "old-token",
+			cookieValue: validCookie,
 			setupService: func(s *FakeService) {
 				s.GetTicketFunc = func(ctx context.Context, rt string, clubID string) (*authservice.TicketResponse, error) {
 					return &authservice.TicketResponse{
@@ -274,6 +277,119 @@ func TestAuthHandlers_HandleHTTPTicket(t *testing.T) {
 	}
 }
 
+// TestAuthHandlers_HandleHTTPTicket_Bearer tests the bearer-token path introduced
+// for the Discord Activity flow. The bearer path differs from the cookie path in two ways:
+// (1) it does not rotate a cookie, and (2) it includes "refresh_token" in the JSON response.
+func TestAuthHandlers_HandleHTTPTicket_Bearer(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	tracer := noop.NewTracerProvider().Tracer("test")
+
+	validBearer := strings.Repeat("0123456789abcdef", 4) // 64-char hex
+
+	tests := []struct {
+		name         string
+		setupReq     func(r *http.Request)
+		setupService func(*FakeService)
+		wantStatus   int
+		verifyBody   func(t *testing.T, body map[string]interface{})
+	}{
+		{
+			name: "bearer_returns_refresh_token_in_json_body",
+			setupReq: func(r *http.Request) {
+				r.Header.Set("Authorization", "Bearer "+validBearer)
+			},
+			setupService: func(s *FakeService) {
+				s.GetTicketFunc = func(_ context.Context, _, _ string) (*authservice.TicketResponse, error) {
+					return &authservice.TicketResponse{NATSToken: "nats-jwt", RefreshToken: "rotated-rt"}, nil
+				}
+			},
+			wantStatus: http.StatusOK,
+			verifyBody: func(t *testing.T, body map[string]interface{}) {
+				t.Helper()
+				if body["refresh_token"] == nil || body["refresh_token"] == "" {
+					t.Error("expected refresh_token in JSON response for bearer caller")
+				}
+				if body["ticket"] == nil {
+					t.Error("expected ticket in JSON response")
+				}
+			},
+		},
+		{
+			name: "cookie_path_does_not_return_refresh_token_in_json",
+			setupReq: func(r *http.Request) {
+				r.AddCookie(&http.Cookie{Name: RefreshTokenCookie, Value: validBearer})
+			},
+			setupService: func(s *FakeService) {
+				s.GetTicketFunc = func(_ context.Context, _, _ string) (*authservice.TicketResponse, error) {
+					return &authservice.TicketResponse{NATSToken: "nats-jwt", RefreshToken: "rotated-rt"}, nil
+				}
+			},
+			wantStatus: http.StatusOK,
+			verifyBody: func(t *testing.T, body map[string]interface{}) {
+				t.Helper()
+				if _, ok := body["refresh_token"]; ok {
+					t.Error("expected no refresh_token in JSON response for cookie caller")
+				}
+			},
+		},
+		{
+			name: "cookie_takes_precedence_when_both_present",
+			setupReq: func(r *http.Request) {
+				r.AddCookie(&http.Cookie{Name: RefreshTokenCookie, Value: validBearer})
+				r.Header.Set("Authorization", "Bearer "+strings.Repeat("fedcba9876543210", 4))
+			},
+			setupService: func(s *FakeService) {
+				s.GetTicketFunc = func(_ context.Context, rt, _ string) (*authservice.TicketResponse, error) {
+					if rt != validBearer {
+						return nil, errors.New("expected cookie token as refresh token, got: " + rt)
+					}
+					return &authservice.TicketResponse{NATSToken: "nats-jwt", RefreshToken: "rotated-rt"}, nil
+				}
+			},
+			wantStatus: http.StatusOK,
+			// Cookie path: no refresh_token in JSON
+			verifyBody: func(t *testing.T, body map[string]interface{}) {
+				if _, ok := body["refresh_token"]; ok {
+					t.Error("expected no refresh_token in JSON — cookie path was used")
+				}
+			},
+		},
+		{
+			name: "bearer_with_empty_value_after_prefix_returns_401",
+			setupReq: func(r *http.Request) {
+				r.Header.Set("Authorization", "Bearer ")
+			},
+			wantStatus: http.StatusUnauthorized,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &FakeService{}
+			if tt.setupService != nil {
+				tt.setupService(svc)
+			}
+			h := NewAuthHandlers(svc, &FakeEventBus{}, &FakeHelpers{}, logger, tracer, false, "", "")
+			req := httptest.NewRequest(http.MethodGet, "/api/auth/ticket", nil)
+			tt.setupReq(req)
+			rr := httptest.NewRecorder()
+			h.HandleHTTPTicket(rr, req)
+
+			if rr.Code != tt.wantStatus {
+				t.Errorf("status = %d, want %d (body: %s)", rr.Code, tt.wantStatus, rr.Body.String())
+			}
+
+			if tt.verifyBody != nil && rr.Code == http.StatusOK {
+				var result map[string]interface{}
+				if err := json.NewDecoder(rr.Body).Decode(&result); err != nil {
+					t.Fatalf("failed to decode response: %v", err)
+				}
+				tt.verifyBody(t, result)
+			}
+		})
+	}
+}
+
 func TestAuthHandlers_HandleHTTPLogout(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	tracer := noop.NewTracerProvider().Tracer("test")
@@ -286,7 +402,7 @@ func TestAuthHandlers_HandleHTTPLogout(t *testing.T) {
 	}{
 		{
 			name:        "success",
-			cookieValue: "token",
+			cookieValue: strings.Repeat("0123456789abcdef", 4),
 			setupService: func(s *FakeService) {
 				s.LogoutUserFunc = func(ctx context.Context, rt string) error { return nil }
 			},
