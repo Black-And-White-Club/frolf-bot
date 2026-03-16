@@ -24,4 +24,8 @@ type Handlers interface {
 	HandleHTTPOAuthCallback(w http.ResponseWriter, r *http.Request)
 	HandleHTTPOAuthLinkInitiate(w http.ResponseWriter, r *http.Request)
 	HandleHTTPOAuthUnlink(w http.ResponseWriter, r *http.Request)
+
+	// HandleActivityTokenExchange handles the Discord Activity OAuth code exchange.
+	// It is a public route — no AuthMiddleware, no cookie required.
+	HandleActivityTokenExchange(w http.ResponseWriter, r *http.Request)
 }
