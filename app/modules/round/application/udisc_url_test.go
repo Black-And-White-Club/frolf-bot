@@ -39,6 +39,21 @@ func TestNormalizeUDiscExportURL(t *testing.T) {
 			input:   "https://udisc.com:444/courses/abc/rounds/123/leaderboard",
 			wantErr: true,
 		},
+		{
+			name:  "strips /manage/ from event URL with query params",
+			input: "https://udisc.com/events/texas-chain-rattlers-tag-round-3-vM4vrK/manage/leaderboard?round=1&pool=event_pool_abc&division=all",
+			want:  "https://udisc.com/events/texas-chain-rattlers-tag-round-3-vM4vrK/leaderboard/export",
+		},
+		{
+			name:  "strips /manage/ from event URL already pointing at leaderboard/export",
+			input: "https://udisc.com/events/some-event-xYz123/manage/leaderboard/export",
+			want:  "https://udisc.com/events/some-event-xYz123/leaderboard/export",
+		},
+		{
+			name:  "event URL without /manage/ works fine",
+			input: "https://udisc.com/events/some-event-xYz123/leaderboard",
+			want:  "https://udisc.com/events/some-event-xYz123/leaderboard/export",
+		},
 	}
 
 	for _, tt := range tests {

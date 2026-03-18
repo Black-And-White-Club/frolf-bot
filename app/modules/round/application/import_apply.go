@@ -332,12 +332,13 @@ func (s *RoundService) applyTeamScores(
 		for i, sc := range req.Scores {
 			score := sharedtypes.Score(sc.Score)
 			participantsToGroup[i] = roundtypes.Participant{
-				UserID:   sc.UserID,
-				Score:    &score,
-				Response: roundtypes.ResponseAccept,
-				TeamID:   sc.TeamID,
-				RawName:  sc.RawName,
-				IsDNF:    sc.IsDNF,
+				UserID:     sc.UserID,
+				Score:      &score,
+				Response:   roundtypes.ResponseAccept,
+				TeamID:     sc.TeamID,
+				RawName:    sc.RawName,
+				IsDNF:      sc.IsDNF,
+				HoleScores: sc.HoleScores,
 			}
 		}
 
@@ -358,12 +359,13 @@ func (s *RoundService) applyTeamScores(
 		if sc.UserID == "" {
 			score := sharedtypes.Score(sc.Score)
 			existingParticipants = append(existingParticipants, roundtypes.Participant{
-				UserID:   "",
-				Score:    &score,
-				Response: roundtypes.ResponseAccept,
-				TeamID:   sc.TeamID,
-				RawName:  sc.RawName,
-				IsDNF:    sc.IsDNF,
+				UserID:     "",
+				Score:      &score,
+				Response:   roundtypes.ResponseAccept,
+				TeamID:     sc.TeamID,
+				RawName:    sc.RawName,
+				IsDNF:      sc.IsDNF,
+				HoleScores: sc.HoleScores,
 			})
 			continue
 		}
@@ -375,15 +377,17 @@ func (s *RoundService) applyTeamScores(
 			existingParticipants[idx].Response = roundtypes.ResponseAccept
 			existingParticipants[idx].TeamID = sc.TeamID
 			existingParticipants[idx].IsDNF = sc.IsDNF
+			existingParticipants[idx].HoleScores = sc.HoleScores
 		} else {
 			// Add new participant (user wasn't RSVP'd but is in the scorecard)
 			score := sharedtypes.Score(sc.Score)
 			existingParticipants = append(existingParticipants, roundtypes.Participant{
-				UserID:   sc.UserID,
-				Score:    &score,
-				Response: roundtypes.ResponseAccept,
-				TeamID:   sc.TeamID,
-				IsDNF:    sc.IsDNF,
+				UserID:     sc.UserID,
+				Score:      &score,
+				Response:   roundtypes.ResponseAccept,
+				TeamID:     sc.TeamID,
+				IsDNF:      sc.IsDNF,
+				HoleScores: sc.HoleScores,
 			})
 		}
 	}
@@ -395,6 +399,13 @@ func (s *RoundService) applyTeamScores(
 
 	if err := s.repo.UpdateRoundsAndParticipants(ctx, tx, req.GuildID, updates); err != nil {
 		return results.FailureResult[*roundtypes.ImportApplyScoresResult, error](fmt.Errorf("failed to update rounds and participants: %w", err)), nil
+	}
+
+	if len(req.ParScores) > 0 {
+		round.ParScores = req.ParScores
+		if _, err := s.repo.UpdateRound(ctx, tx, req.GuildID, req.RoundID, round); err != nil {
+			return results.FailureResult[*roundtypes.ImportApplyScoresResult, error](fmt.Errorf("failed to update round par scores: %w", err)), nil
+		}
 	}
 
 	return results.SuccessResult[*roundtypes.ImportApplyScoresResult, error](&roundtypes.ImportApplyScoresResult{

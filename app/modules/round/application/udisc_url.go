@@ -67,6 +67,13 @@ func normalizeUDiscExportURL(raw string) (string, error) {
 
 	path := strings.TrimSuffix(u.Path, "/")
 
+	// Strip /manage segments used in UDisc's event management UI
+	// e.g. /events/slug/manage/leaderboard → /events/slug/leaderboard
+	if idx := strings.Index(path, "/manage/"); idx != -1 {
+		path = path[:idx] + path[idx+len("/manage"):]
+	}
+	path = strings.TrimSuffix(path, "/manage")
+
 	switch {
 	case strings.HasSuffix(path, "/leaderboard/export"):
 		// already canonical

@@ -286,6 +286,184 @@ func TestRoundService_ApplyImportedScores_HoleScores(t *testing.T) {
 			},
 		},
 		{
+			name: "Teams - HoleScores set on updated participant",
+			input: roundtypes.ImportApplyScoresInput{
+				GuildID:  gID,
+				RoundID:  rID,
+				ImportID: importID,
+				Scores: []roundtypes.ImportScoreData{
+					{UserID: u1, Score: 33, HoleScores: holeScores9, TeamID: uuid.New()},
+				},
+			},
+			setupFake: func(r *FakeRepo) {
+				r.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{ID: rID, EventMessageID: "msg-1", Teams: []roundtypes.NormalizedTeam{{}}}, nil
+				}
+				r.GetParticipantsFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID) ([]roundtypes.Participant, error) {
+					return []roundtypes.Participant{
+						{UserID: u1, Score: ptrScore(40), Response: roundtypes.ResponseAccept},
+					}, nil
+				}
+				r.RoundHasGroupsFunc = func(ctx context.Context, db bun.IDB, roundID sharedtypes.RoundID) (bool, error) {
+					return true, nil
+				}
+				r.UpdateRoundsAndParticipantsFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, updates []roundtypes.RoundUpdate) error {
+					parts := updates[0].Participants
+					if len(parts[0].HoleScores) != 9 {
+						return errors.New("expected 9 hole scores on updated team participant")
+					}
+					if parts[0].HoleScores[1] != holeScores9[1] {
+						return errors.New("hole score value mismatch on updated team participant")
+					}
+					return nil
+				}
+			},
+			verify: func(t *testing.T, repo *FakeRepo, res ApplyImportedScoresResult, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if res.IsFailure() {
+					t.Fatalf("unexpected failure: %v", (*res.Failure).Error())
+				}
+				parts := (*res.Success).Participants
+				if len(parts[0].HoleScores) != 9 {
+					t.Errorf("expected 9 hole scores on team result participant, got %d", len(parts[0].HoleScores))
+				}
+			},
+		},
+		{
+			name: "Teams - HoleScores set on newly added participant",
+			input: roundtypes.ImportApplyScoresInput{
+				GuildID:  gID,
+				RoundID:  rID,
+				ImportID: importID,
+				Scores: []roundtypes.ImportScoreData{
+					{UserID: u2, Score: 33, HoleScores: holeScores9, TeamID: uuid.New()},
+				},
+			},
+			setupFake: func(r *FakeRepo) {
+				r.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{ID: rID, EventMessageID: "msg-1", Teams: []roundtypes.NormalizedTeam{{}}}, nil
+				}
+				r.GetParticipantsFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID) ([]roundtypes.Participant, error) {
+					return []roundtypes.Participant{}, nil
+				}
+				r.RoundHasGroupsFunc = func(ctx context.Context, db bun.IDB, roundID sharedtypes.RoundID) (bool, error) {
+					return true, nil
+				}
+				r.UpdateRoundsAndParticipantsFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, updates []roundtypes.RoundUpdate) error {
+					parts := updates[0].Participants
+					if len(parts[0].HoleScores) != 9 {
+						return errors.New("expected 9 hole scores on new team participant")
+					}
+					return nil
+				}
+			},
+			verify: func(t *testing.T, repo *FakeRepo, res ApplyImportedScoresResult, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if res.IsFailure() {
+					t.Fatalf("unexpected failure: %v", (*res.Failure).Error())
+				}
+				parts := (*res.Success).Participants
+				if len(parts) != 1 {
+					t.Fatalf("expected 1 participant, got %d", len(parts))
+				}
+				if len(parts[0].HoleScores) != 9 {
+					t.Errorf("expected 9 hole scores on new team participant result, got %d", len(parts[0].HoleScores))
+				}
+			},
+		},
+		{
+			name: "Teams - Guest participant gets HoleScores",
+			input: roundtypes.ImportApplyScoresInput{
+				GuildID:  gID,
+				RoundID:  rID,
+				ImportID: importID,
+				Scores: []roundtypes.ImportScoreData{
+					{UserID: "", RawName: "Guest McGuest", Score: 38, HoleScores: holeScores9, TeamID: uuid.New()},
+				},
+			},
+			setupFake: func(r *FakeRepo) {
+				r.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{ID: rID, Teams: []roundtypes.NormalizedTeam{{}}}, nil
+				}
+				r.GetParticipantsFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID) ([]roundtypes.Participant, error) {
+					return []roundtypes.Participant{}, nil
+				}
+				r.RoundHasGroupsFunc = func(ctx context.Context, db bun.IDB, roundID sharedtypes.RoundID) (bool, error) {
+					return true, nil
+				}
+				r.UpdateRoundsAndParticipantsFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, updates []roundtypes.RoundUpdate) error {
+					parts := updates[0].Participants
+					if parts[0].UserID != "" {
+						return errors.New("expected guest (empty UserID)")
+					}
+					if len(parts[0].HoleScores) != 9 {
+						return errors.New("expected 9 hole scores on guest team participant")
+					}
+					return nil
+				}
+			},
+			verify: func(t *testing.T, repo *FakeRepo, res ApplyImportedScoresResult, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if res.IsFailure() {
+					t.Fatalf("unexpected failure: %v", (*res.Failure).Error())
+				}
+				if len((*res.Success).Participants[0].HoleScores) != 9 {
+					t.Errorf("expected 9 hole scores on guest team result participant")
+				}
+			},
+		},
+		{
+			name: "Teams - ParScores saved to round",
+			input: roundtypes.ImportApplyScoresInput{
+				GuildID:   gID,
+				RoundID:   rID,
+				ImportID:  importID,
+				ParScores: parScores9,
+				Scores: []roundtypes.ImportScoreData{
+					{UserID: u1, Score: 33, TeamID: uuid.New()},
+				},
+			},
+			setupFake: func(r *FakeRepo) {
+				r.GetRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID) (*roundtypes.Round, error) {
+					return &roundtypes.Round{ID: rID, EventMessageID: "msg-1", Teams: []roundtypes.NormalizedTeam{{}}}, nil
+				}
+				r.GetParticipantsFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID) ([]roundtypes.Participant, error) {
+					return []roundtypes.Participant{}, nil
+				}
+				r.RoundHasGroupsFunc = func(ctx context.Context, db bun.IDB, roundID sharedtypes.RoundID) (bool, error) {
+					return true, nil
+				}
+				r.UpdateRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rID sharedtypes.RoundID, round *roundtypes.Round) (*roundtypes.Round, error) {
+					if len(round.ParScores) != 9 {
+						return nil, errors.New("expected 9 par scores in UpdateRound call")
+					}
+					for i, v := range parScores9 {
+						if round.ParScores[i] != v {
+							return nil, errors.New("par score value mismatch in UpdateRound")
+						}
+					}
+					return &roundtypes.Round{}, nil
+				}
+			},
+			verify: func(t *testing.T, repo *FakeRepo, res ApplyImportedScoresResult, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if res.IsFailure() {
+					t.Fatalf("UpdateRound validation failed: %v", (*res.Failure).Error())
+				}
+				if !slices.Contains(repo.Trace(), "UpdateRound") {
+					t.Errorf("expected UpdateRound called when ParScores non-empty, trace=%v", repo.Trace())
+				}
+			},
+		},
+		{
 			// Guest players enabled: guests should also carry hole scores through.
 			name: "Singles - Guest participant gets HoleScores",
 			input: roundtypes.ImportApplyScoresInput{
