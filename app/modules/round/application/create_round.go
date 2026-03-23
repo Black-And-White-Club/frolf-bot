@@ -115,7 +115,7 @@ func (s *RoundService) ValidateRoundCreationWithClock(ctx context.Context, req *
 func (s *RoundService) StoreRound(ctx context.Context, round *roundtypes.Round, guildID sharedtypes.GuildID) (CreateRoundResult, error) {
 	storeOp := func(ctx context.Context, db bun.IDB) (CreateRoundResult, error) {
 		// Validate round data
-		if round.Title == "" || round.Description == "" || round.Location == "" || round.StartTime == nil {
+		if round.Title == "" || round.Location == "" || round.StartTime == nil {
 			s.metrics.RecordValidationError(ctx)
 			return results.FailureResult[*roundtypes.CreateRoundResult](errors.New("invalid round data")), nil
 		}

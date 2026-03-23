@@ -293,6 +293,37 @@ func TestRoundService_StoreRound(t *testing.T) {
 			},
 		},
 		{
+			name: "success - creates round with empty description (no description Discord event)",
+			setupFake: func(r *FakeRepo) {
+				r.CreateRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rObj *roundtypes.Round) error { return nil }
+				r.RoundHasGroupsFunc = func(ctx context.Context, db bun.IDB, roundID sharedtypes.RoundID) (bool, error) { return false, nil }
+				r.CreateRoundGroupsFunc = func(ctx context.Context, db bun.IDB, roundID sharedtypes.RoundID, participants []roundtypes.Participant) error {
+					return nil
+				}
+			},
+			round: &roundtypes.Round{
+				ID:           sharedtypes.RoundID(uuid.New()),
+				Title:        roundtypes.Title("TCR Tag Round"),
+				Description:  roundtypes.Description(""), // empty — user created Discord event without description
+				Location:     roundtypes.Location("Acorn Park"),
+				StartTime:    startTimePtr(time.Now().Add(1 * time.Hour)),
+				CreatedBy:    sharedtypes.DiscordID("user-1"),
+				State:        roundtypes.RoundStateUpcoming,
+				Participants: []roundtypes.Participant{},
+			},
+			verify: func(t *testing.T, res CreateRoundResult, infraErr error, fake *FakeRepo) {
+				if infraErr != nil {
+					t.Fatalf("unexpected infrastructure error: %v", infraErr)
+				}
+				if res.Failure != nil {
+					t.Fatalf("expected domain success for empty description, got failure: %v", *res.Failure)
+				}
+				if res.Success == nil {
+					t.Fatal("expected success payload")
+				}
+			},
+		},
+		{
 			name: "failure - CreateRound error short-circuits",
 			setupFake: func(r *FakeRepo) {
 				r.CreateRoundFunc = func(ctx context.Context, db bun.IDB, g sharedtypes.GuildID, rObj *roundtypes.Round) error {
