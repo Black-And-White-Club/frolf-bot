@@ -22,7 +22,7 @@ func TestNewRoundHandlers(t *testing.T) {
 				logger := loggerfrolfbot.NoOpLogger
 
 				// Call the function being tested
-				handlers := NewRoundHandlers(fakeRoundService, fakeUserService, logger, fakeHelpers)
+				handlers := NewRoundHandlers(fakeRoundService, fakeUserService, logger, fakeHelpers, nil)
 
 				// Ensure handlers are correctly created
 				if handlers == nil {
@@ -48,7 +48,7 @@ func TestNewRoundHandlers(t *testing.T) {
 			name: "Handles nil dependencies",
 			test: func(t *testing.T) {
 				// Call with nil dependencies
-				handlers := NewRoundHandlers(nil, nil, nil, nil)
+				handlers := NewRoundHandlers(nil, nil, nil, nil, nil)
 
 				// Ensure handlers are correctly created
 				if handlers == nil {

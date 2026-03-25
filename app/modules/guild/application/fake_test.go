@@ -6,6 +6,7 @@ import (
 	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	guilddb "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories"
+	"github.com/google/uuid"
 	"github.com/uptrace/bun"
 )
 
@@ -26,9 +27,10 @@ type FakeGuildRepository struct {
 	UpsertFeatureOverrideFunc    func(ctx context.Context, db bun.IDB, override *guilddb.ClubFeatureOverride, audit *guilddb.ClubFeatureAccessAudit) error
 	DeleteFeatureOverrideFunc    func(ctx context.Context, db bun.IDB, clubUUID string, featureKey string, audit *guilddb.ClubFeatureAccessAudit) error
 	ListFeatureAccessAuditFunc   func(ctx context.Context, db bun.IDB, clubUUID string, featureKey string) ([]guilddb.ClubFeatureAccessAudit, error)
-	InsertOutboxEventFunc        func(ctx context.Context, db bun.IDB, topic string, payload []byte) error
-	PollAndLockOutboxEventsFunc  func(ctx context.Context, db bun.IDB, limit int) ([]guilddb.GuildOutboxEvent, error)
-	MarkOutboxEventPublishedFunc func(ctx context.Context, db bun.IDB, id string) error
+	InsertOutboxEventFunc              func(ctx context.Context, db bun.IDB, topic string, payload []byte) error
+	PollAndLockOutboxEventsFunc        func(ctx context.Context, db bun.IDB, limit int) ([]guilddb.GuildOutboxEvent, error)
+	MarkOutboxEventPublishedFunc       func(ctx context.Context, db bun.IDB, id string) error
+	GetClubIDByDiscordGuildIDFunc      func(ctx context.Context, guildID string) (uuid.UUID, error)
 }
 
 // Trace returns the sequence of method calls made to the fake.
@@ -146,6 +148,14 @@ func (f *FakeGuildRepository) MarkOutboxEventPublished(ctx context.Context, db b
 		return f.MarkOutboxEventPublishedFunc(ctx, db, id)
 	}
 	return nil
+}
+
+func (f *FakeGuildRepository) GetClubIDByDiscordGuildID(ctx context.Context, guildID string) (uuid.UUID, error) {
+	f.record("GetClubIDByDiscordGuildID")
+	if f.GetClubIDByDiscordGuildIDFunc != nil {
+		return f.GetClubIDByDiscordGuildIDFunc(ctx, guildID)
+	}
+	return uuid.Nil, nil
 }
 
 // Ensure the fake actually satisfies the interface

@@ -24,7 +24,7 @@ func TestNewScoreHandlers(t *testing.T) {
 			metrics := &scoremetrics.NoOpMetrics{}
 
 			t.Run("Initialize with all dependencies", func(t *testing.T) {
-				handlers := NewScoreHandlers(fakeService, logger, tracer, nil, metrics)
+				handlers := NewScoreHandlers(fakeService, logger, tracer, nil, metrics, nil)
 				if handlers == nil {
 					t.Fatal("Expected non-nil handlers")
 				}
@@ -42,7 +42,7 @@ func TestNewScoreHandlers(t *testing.T) {
 
 			t.Run("Initialize with nil dependencies", func(t *testing.T) {
 				// The factory should still return a struct instance even if fields are nil
-				handlersNil := NewScoreHandlers(nil, nil, nil, nil, nil)
+				handlersNil := NewScoreHandlers(nil, nil, nil, nil, nil, nil)
 				if handlersNil == nil {
 					t.Fatal("Expected non-nil handlers even with nil dependencies")
 				}
