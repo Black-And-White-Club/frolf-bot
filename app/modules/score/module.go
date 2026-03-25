@@ -5,9 +5,13 @@ import (
 	"fmt"
 	"sync"
 
+	"time"
+
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/clubresolver"
+	guilddb "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories"
 	scoreservice "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application"
 	scoredb "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories"
 	scorerouter "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/router"
@@ -34,6 +38,7 @@ func NewScoreModule(
 	cfg *config.Config,
 	obs observability.Observability,
 	scoreDB scoredb.Repository,
+	guildDB guilddb.Repository,
 	eventBus eventbus.EventBus,
 	router *message.Router,
 	helpers utils.Helpers,
@@ -44,6 +49,8 @@ func NewScoreModule(
 	metrics := obs.Registry.ScoreMetrics
 	tracer := obs.Registry.Tracer
 
+	clubResolver := clubresolver.New(ctx, guildDB, clubresolver.Config{MaxSize: 2000, TTL: 24 * time.Hour})
+
 	scoreService := scoreservice.NewScoreService(scoreDB, eventBus, logger, metrics, tracer, db)
 
 	// Prometheus registry can be created here or passed in if it's a shared registry
@@ -53,7 +60,7 @@ func NewScoreModule(
 	scoreRouter := scorerouter.NewScoreRouter(logger, router, eventBus, eventBus, cfg, helpers, tracer, prometheusRegistry)
 
 	// Configure the ScoreRouter
-	if err := scoreRouter.Configure(routerCtx, scoreService, eventBus, metrics); err != nil {
+	if err := scoreRouter.Configure(routerCtx, scoreService, eventBus, metrics, clubResolver); err != nil {
 		return nil, fmt.Errorf("failed to configure score router: %w", err)
 	}
 

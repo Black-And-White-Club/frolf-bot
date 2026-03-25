@@ -21,6 +21,13 @@ func (h *ScoreHandlers) HandleProcessRoundScoresRequest(
 		return nil, errors.New("payload is nil")
 	}
 
+	// 0. Resolve ClubID securely from GuildID (Backend Edge Enrichment)
+	if h.clubResolver != nil {
+		if clubUUID, err := h.clubResolver.GetClubIDForGuild(ctx, string(payload.GuildID)); err == nil && clubUUID != uuid.Nil {
+			payload.ClubID = &clubUUID
+		}
+	}
+
 	result, err := h.service.ProcessRoundScores(
 		ctx,
 		payload.GuildID,

@@ -16,6 +16,7 @@ import (
 	roundmetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/round"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/round"
+	guilddb "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories"
 	rounddb "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/repositories"
 	userservice "github.com/Black-And-White-Club/frolf-bot/app/modules/user/application"
 	userdb "github.com/Black-And-White-Club/frolf-bot/app/modules/user/infrastructure/repositories"
@@ -155,6 +156,7 @@ func SetupTestRoundHandler(t *testing.T) RoundHandlerTestDeps {
 
 		// 6. Dependencies & Module
 		realDB := rounddb.NewRepository(env.DB)
+		guildRepo := guilddb.NewRepository(env.DB)
 		userRepo := userdb.NewRepository(env.DB)
 		realHelpers := utils.NewHelper(slog.New(slog.NewTextHandler(io.Discard, nil)))
 
@@ -170,6 +172,7 @@ func SetupTestRoundHandler(t *testing.T) RoundHandlerTestDeps {
 			},
 			realDB,
 			env.DB,
+			guildRepo,
 			userRepo,
 			userService,
 			eventBusImpl,

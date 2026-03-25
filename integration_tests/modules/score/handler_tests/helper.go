@@ -16,6 +16,7 @@ import (
 	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
 	"github.com/Black-And-White-Club/frolf-bot/app/modules/score"
+	guilddb "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories"
 	scoredb "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/repositories"
 	"github.com/Black-And-White-Club/frolf-bot/integration_tests/testutils"
 	"github.com/ThreeDotsLabs/watermill"
@@ -91,6 +92,7 @@ func SetupTestScoreHandler(t *testing.T) ScoreHandlerTestDeps {
 	log.Println("Truncated relevant tables before test")
 
 	realDB := scoredb.NewRepository(env.DB)
+	guildRepo := guilddb.NewRepository(env.DB)
 	// Use NopLogger for quieter test logs
 	watermillLogger := watermill.NopLogger{}
 
@@ -152,6 +154,7 @@ func SetupTestScoreHandler(t *testing.T) ScoreHandlerTestDeps {
 		env.Config,
 		testObservability,
 		realDB,
+		guildRepo,
 		eventBusImpl,
 		watermillRouter,
 		realHelpers,
