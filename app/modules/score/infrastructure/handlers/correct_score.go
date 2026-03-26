@@ -5,13 +5,23 @@ import (
 	"errors"
 
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/metricattrs"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
+	"github.com/google/uuid"
 )
 
 // HandleCorrectScoreRequest processes a ScoreUpdateRequest.
 func (h *ScoreHandlers) HandleCorrectScoreRequest(ctx context.Context, payload *sharedevents.ScoreUpdateRequestedPayloadV1) ([]handlerwrapper.Result, error) {
 	if payload == nil {
 		return nil, errors.New("payload is nil")
+	}
+
+	// 0. Resolve ClubID securely from GuildID (Backend Edge Enrichment)
+	if h.clubResolver != nil && string(payload.GuildID) != "" {
+		if clubUUID, err := h.clubResolver.GetClubIDForGuild(ctx, string(payload.GuildID)); err == nil && clubUUID != uuid.Nil {
+			payload.ClubID = &clubUUID
+			ctx = metricattrs.WithClubID(ctx, clubUUID)
+		}
 	}
 
 	// 1. Execute the service logic
@@ -56,6 +66,7 @@ func (h *ScoreHandlers) HandleCorrectScoreRequest(ctx context.Context, payload *
 			RoundID: payload.RoundID,
 			UserID:  result.Success.UserID,
 			Score:   result.Success.Score,
+			ClubID:  payload.ClubID,
 		}
 
 		return []handlerwrapper.Result{

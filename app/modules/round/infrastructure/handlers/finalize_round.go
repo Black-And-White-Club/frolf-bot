@@ -6,9 +6,11 @@ import (
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/metricattrs"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
+	"github.com/google/uuid"
 )
 
 // HandleAllScoresSubmitted handles the transition from all scores being in to finalizing the round.
@@ -96,6 +98,20 @@ func (h *RoundHandlers) finalizeRound(
 		GuildID:   guildID,
 		RoundID:   roundID,
 		RoundData: *fetchedRound,
+	}
+
+	// 0. Resolve ClubID securely from GuildID (Backend Edge Enrichment)
+	if h.clubResolver != nil && string(guildID) != "" {
+		clubUUID, err := h.clubResolver.GetClubIDForGuild(ctx, string(guildID))
+		if err == nil && clubUUID != uuid.Nil {
+			backendFinalizationPayload.ClubID = &clubUUID
+			ctx = metricattrs.WithClubID(ctx, clubUUID)
+		} else {
+			h.logger.WarnContext(ctx, "failed to resolve club id for round finalization",
+				attr.String("guild_id", string(guildID)),
+				attr.Error(err),
+			)
+		}
 	}
 
 	results := []handlerwrapper.Result{

@@ -7,7 +7,9 @@ import (
 
 	roundevents "github.com/Black-And-White-Club/frolf-bot-shared/events/round"
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/metricattrs"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
+	"github.com/google/uuid"
 )
 
 // HandleBulkCorrectScoreRequest processes a ScoreBulkUpdateRequest by iterating each update
@@ -22,6 +24,14 @@ func (h *ScoreHandlers) HandleBulkCorrectScoreRequest(ctx context.Context, paylo
 	if messageID == "" {
 		if discordMessageID, ok := ctx.Value("discord_message_id").(string); ok {
 			messageID = discordMessageID
+		}
+	}
+
+	// 0. Resolve ClubID securely from GuildID (Backend Edge Enrichment)
+	if h.clubResolver != nil && string(payload.GuildID) != "" {
+		if clubUUID, err := h.clubResolver.GetClubIDForGuild(ctx, string(payload.GuildID)); err == nil && clubUUID != uuid.Nil {
+			payload.ClubID = &clubUUID
+			ctx = metricattrs.WithClubID(ctx, clubUUID)
 		}
 	}
 
@@ -51,6 +61,7 @@ func (h *ScoreHandlers) HandleBulkCorrectScoreRequest(ctx context.Context, paylo
 			Score:     &score,
 			ChannelID: channelID,
 			MessageID: messageID,
+			ClubID:    payload.ClubID,
 		})
 	}
 
@@ -60,6 +71,7 @@ func (h *ScoreHandlers) HandleBulkCorrectScoreRequest(ctx context.Context, paylo
 		ChannelID: channelID,
 		MessageID: messageID,
 		Updates:   updates,
+		ClubID:    payload.ClubID,
 	}
 
 	// 3. Wrap result for the handler wrapper

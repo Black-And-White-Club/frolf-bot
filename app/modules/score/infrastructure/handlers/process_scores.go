@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	sharedevents "github.com/Black-And-White-Club/frolf-bot-shared/events/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/metricattrs"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	"github.com/google/uuid"
@@ -25,6 +26,7 @@ func (h *ScoreHandlers) HandleProcessRoundScoresRequest(
 	if h.clubResolver != nil {
 		if clubUUID, err := h.clubResolver.GetClubIDForGuild(ctx, string(payload.GuildID)); err == nil && clubUUID != uuid.Nil {
 			payload.ClubID = &clubUUID
+			ctx = metricattrs.WithClubID(ctx, clubUUID)
 		}
 	}
 

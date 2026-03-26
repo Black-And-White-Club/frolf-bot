@@ -13,6 +13,7 @@ import (
 	clubtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/club"
 	roundtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/round"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/Black-And-White-Club/frolf-bot-shared/observability/metricattrs"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	clubdb "github.com/Black-And-White-Club/frolf-bot/app/modules/club/infrastructure/repositories"
 	roundtime "github.com/Black-And-White-Club/frolf-bot/app/modules/round/time_utils"
@@ -55,6 +56,22 @@ func (h *RoundHandlers) HandleCreateRoundRequest(
 			attr.String("start_time", payload.StartTime),
 			attr.String("timezone", string(payload.Timezone)),
 		)
+	}
+
+	// 0. Resolve ClubID securely from GuildID (Backend Edge Enrichment)
+	if h.clubResolver != nil && string(canonicalGuildID) != "" {
+		clubUUID, err := h.clubResolver.GetClubIDForGuild(ctx, string(canonicalGuildID))
+		if err == nil && clubUUID != uuid.Nil {
+			payload.ClubID = &clubUUID
+			ctx = metricattrs.WithClubID(ctx, clubUUID)
+		} else {
+			if h.logger != nil {
+				h.logger.WarnContext(ctx, "failed to resolve club id for create round request",
+					attr.String("guild_id", string(canonicalGuildID)),
+					attr.Error(err),
+				)
+			}
+		}
 	}
 
 	clock := h.extractAnchorClock(ctx)
@@ -106,6 +123,7 @@ func (h *RoundHandlers) HandleCreateRoundRequest(
 				Config:           sharedevents.NewGuildConfigFragment(res.GuildConfig),
 				RequestSource:    payload.RequestSource,
 				ChallengeID:      payload.ChallengeID,
+				ClubID:           payload.ClubID,
 			}
 		},
 		func(err error) any {
@@ -192,6 +210,7 @@ func (h *RoundHandlers) HandleRoundEntityCreated(
 				ChannelID:   channelID,
 				Config:      sharedevents.NewGuildConfigFragment(res.GuildConfig),
 				ChallengeID: payload.ChallengeID,
+				ClubID:      payload.ClubID,
 			}
 
 			return createdPayload
@@ -368,6 +387,8 @@ func (h *RoundHandlers) HandleRoundEventMessageIDUpdate(
 		EventMessageID:     discordMessageID,
 		NativeEventPlanned: payload.NativeEventPlanned,
 		ChallengeID:        payload.ChallengeID,
+		// ClubID passes through from original creation payload via Round message id update payload if we add it,
+		// but since RoundScheduledPayloadV1 takes it, let's omit it here for now (as it wasn't requested in schema updates for message ID update).
 	}
 
 	if h.logger != nil {
