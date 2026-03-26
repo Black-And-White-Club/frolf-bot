@@ -9,7 +9,9 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/eventbus"
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/clubresolver"
 	clubdb "github.com/Black-And-White-Club/frolf-bot/app/modules/club/infrastructure/repositories"
+	guilddb "github.com/Black-And-White-Club/frolf-bot/app/modules/guild/infrastructure/repositories"
 	roundservice "github.com/Black-And-White-Club/frolf-bot/app/modules/round/application"
 	roundadapters "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/adapters"
 	roundhandlers "github.com/Black-And-White-Club/frolf-bot/app/modules/round/infrastructure/handlers"
@@ -43,6 +45,7 @@ func NewRoundModule(
 	obs observability.Observability,
 	roundDB rounddb.Repository,
 	db *bun.DB,
+	guildDB guilddb.Repository,
 	userDB userdb.Repository,
 	userService userservice.Service,
 	eventBus eventbus.EventBus,
@@ -120,12 +123,13 @@ func NewRoundModule(
 	roundRouter := roundrouter.NewRoundRouter(logger, router, eventBus, eventBus, helpers, tracer, prometheusRegistry)
 
 	// 2. Initialize Handlers
+	clubResolver := clubresolver.New(ctx, guildDB, clubresolver.DefaultConfig())
 	paginationSnapshotRepo := rounddb.NewPaginationSnapshotRepository(db)
 	paginationSnapshotStore, err := roundhandlers.NewDBPaginationSnapshotStore(paginationSnapshotRepo)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize pagination snapshot store: %w", err)
 	}
-	handlers := roundhandlers.NewRoundHandlers(service, userService, logger, helpers, paginationSnapshotStore)
+	handlers := roundhandlers.NewRoundHandlers(service, userService, logger, helpers, clubResolver, paginationSnapshotStore)
 	if concreteHandlers, ok := handlers.(*roundhandlers.RoundHandlers); ok {
 		concreteHandlers.SetChallengeLookup(clubdb.NewRepository(db))
 	}

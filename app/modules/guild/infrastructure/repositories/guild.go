@@ -147,6 +147,18 @@ func (r *Impl) ResolveEntitlements(ctx context.Context, db bun.IDB, guildID shar
 	return entitlements, nil
 }
 
+// GetClubIDByDiscordGuildID performs a lightweight lookup to get the Club UUID for a Discord guild ID.
+func (r *Impl) GetClubIDByDiscordGuildID(ctx context.Context, guildID string) (uuid.UUID, error) {
+	_, clubUUID, err := r.resolveLookupIdentifiers(ctx, r.db, sharedtypes.GuildID(guildID))
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("guilddb.GetClubIDByDiscordGuildID: %w", err)
+	}
+	if clubUUID == uuid.Nil {
+		return uuid.Nil, ErrNotFound
+	}
+	return clubUUID, nil
+}
+
 // --- WRITE METHODS ---
 
 // SaveConfig creates or re-activates a guild configuration.
@@ -474,6 +486,7 @@ func toSharedModel(cfg *GuildConfig) *guildtypes.GuildConfig {
 	if cfg == nil {
 		return nil
 	}
+	clubID := cfg.UUID
 	return &guildtypes.GuildConfig{
 		GuildID:              cfg.GuildID,
 		SignupChannelID:      cfg.SignupChannelID,
@@ -487,6 +500,7 @@ func toSharedModel(cfg *GuildConfig) *guildtypes.GuildConfig {
 		AutoSetupCompleted:   cfg.AutoSetupCompleted,
 		SetupCompletedAt:     cfg.SetupCompletedAt,
 		ResourceState:        toSharedResourceState(cfg.ResourceState),
+		ClubID:               &clubID,
 	}
 }
 
@@ -495,7 +509,7 @@ func toDBModel(cfg *guildtypes.GuildConfig) *GuildConfig {
 	if cfg == nil {
 		return nil
 	}
-	return &GuildConfig{
+	dbModel := &GuildConfig{
 		GuildID:              cfg.GuildID,
 		SignupChannelID:      cfg.SignupChannelID,
 		SignupMessageID:      cfg.SignupMessageID,
@@ -509,6 +523,10 @@ func toDBModel(cfg *guildtypes.GuildConfig) *GuildConfig {
 		SetupCompletedAt:     cfg.SetupCompletedAt,
 		ResourceState:        toDBResourceState(&cfg.ResourceState),
 	}
+	if cfg.ClubID != nil {
+		dbModel.UUID = *cfg.ClubID
+	}
+	return dbModel
 }
 
 // toSharedResourceState converts DB ResourceState to shared type.

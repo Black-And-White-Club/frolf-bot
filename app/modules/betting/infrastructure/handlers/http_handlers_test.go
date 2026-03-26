@@ -27,7 +27,7 @@ func newHTTPHandlers(svc bettingservice.Service, userRepo userdb.Repository) *HT
 	return NewHTTPHandlers(svc, userRepo, slog.New(slog.NewTextHandler(io.Discard, nil)), noop.NewTracerProvider().Tracer("test"), bettingmetrics.NewNoop())
 }
 
-// validSession wires a fake userRepo to return a valid non-revoked token for cookie value "tok".
+// validSession wires a fake userRepo to return a valid non-revoked token for cookie value "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".
 func validSession(userUUID uuid.UUID) *userdb.FakeRepository {
 	repo := &userdb.FakeRepository{}
 	repo.GetRefreshTokenFn = func(_ context.Context, _ bun.IDB, _ string) (*userdb.RefreshToken, error) {
@@ -79,7 +79,7 @@ func TestHandleGetOverview(t *testing.T) {
 			name: "missing club_uuid → 400",
 			setup: func() (*HTTPHandlers, *http.Request) {
 				h := newHTTPHandlers(&FakeBettingService{}, validSession(userUUID))
-				r := withRefreshCookie(httptest.NewRequest(http.MethodGet, "/betting/overview", nil), "tok")
+				r := withRefreshCookie(httptest.NewRequest(http.MethodGet, "/betting/overview", nil), "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 				return h, r
 			},
 			verify: func(t *testing.T, rr *httptest.ResponseRecorder) {
@@ -96,7 +96,7 @@ func TestHandleGetOverview(t *testing.T) {
 					return nil, bettingservice.ErrFeatureDisabled
 				}
 				h := newHTTPHandlers(svc, validSession(userUUID))
-				r := withRefreshCookie(httptest.NewRequest(http.MethodGet, "/betting/overview?club_uuid="+clubUUID.String(), nil), "tok")
+				r := withRefreshCookie(httptest.NewRequest(http.MethodGet, "/betting/overview?club_uuid="+clubUUID.String(), nil), "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 				return h, r
 			},
 			verify: func(t *testing.T, rr *httptest.ResponseRecorder) {
@@ -113,7 +113,7 @@ func TestHandleGetOverview(t *testing.T) {
 					return &bettingservice.Overview{ClubUUID: clubUUID.String(), GuildID: "guild-1"}, nil
 				}
 				h := newHTTPHandlers(svc, validSession(userUUID))
-				r := withRefreshCookie(httptest.NewRequest(http.MethodGet, "/betting/overview?club_uuid="+clubUUID.String(), nil), "tok")
+				r := withRefreshCookie(httptest.NewRequest(http.MethodGet, "/betting/overview?club_uuid="+clubUUID.String(), nil), "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 				return h, r
 			},
 			verify: func(t *testing.T, rr *httptest.ResponseRecorder) {
@@ -176,7 +176,7 @@ func TestHandlePlaceBet(t *testing.T) {
 			name: "malformed JSON body → 400",
 			setup: func() (*HTTPHandlers, *http.Request) {
 				h := newHTTPHandlers(&FakeBettingService{}, validSession(userUUID))
-				r := withRefreshCookie(httptest.NewRequest(http.MethodPost, "/betting/bet", bytes.NewBufferString("not-json")), "tok")
+				r := withRefreshCookie(httptest.NewRequest(http.MethodPost, "/betting/bet", bytes.NewBufferString("not-json")), "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 				return h, r
 			},
 			verify: func(t *testing.T, rr *httptest.ResponseRecorder) {
@@ -193,7 +193,7 @@ func TestHandlePlaceBet(t *testing.T) {
 					return nil, bettingservice.ErrMarketLocked
 				}
 				h := newHTTPHandlers(svc, validSession(userUUID))
-				r := withRefreshCookie(httptest.NewRequest(http.MethodPost, "/betting/bet", validBody(bettingservice.PlaceBetRequest{Stake: 100})), "tok")
+				r := withRefreshCookie(httptest.NewRequest(http.MethodPost, "/betting/bet", validBody(bettingservice.PlaceBetRequest{Stake: 100})), "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 				return h, r
 			},
 			verify: func(t *testing.T, rr *httptest.ResponseRecorder) {
@@ -210,7 +210,7 @@ func TestHandlePlaceBet(t *testing.T) {
 					return nil, bettingservice.ErrInsufficientBalance
 				}
 				h := newHTTPHandlers(svc, validSession(userUUID))
-				r := withRefreshCookie(httptest.NewRequest(http.MethodPost, "/betting/bet", validBody(bettingservice.PlaceBetRequest{Stake: 100})), "tok")
+				r := withRefreshCookie(httptest.NewRequest(http.MethodPost, "/betting/bet", validBody(bettingservice.PlaceBetRequest{Stake: 100})), "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 				return h, r
 			},
 			verify: func(t *testing.T, rr *httptest.ResponseRecorder) {
@@ -227,7 +227,7 @@ func TestHandlePlaceBet(t *testing.T) {
 					return &bettingservice.BetTicket{SelectionKey: "player-a", Stake: req.Stake, Status: "accepted"}, nil
 				}
 				h := newHTTPHandlers(svc, validSession(userUUID))
-				r := withRefreshCookie(httptest.NewRequest(http.MethodPost, "/betting/bet", validBody(bettingservice.PlaceBetRequest{Stake: 50})), "tok")
+				r := withRefreshCookie(httptest.NewRequest(http.MethodPost, "/betting/bet", validBody(bettingservice.PlaceBetRequest{Stake: 50})), "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 				return h, r
 			},
 			verify: func(t *testing.T, rr *httptest.ResponseRecorder) {
@@ -257,7 +257,7 @@ func TestHandlePlaceBet(t *testing.T) {
 				r := withRefreshCookie(httptest.NewRequest(http.MethodPost, "/betting/bet", func() *bytes.Buffer {
 					b, _ := json.Marshal(body)
 					return bytes.NewBuffer(b)
-				}()), "tok")
+				}()), "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 				return h, r
 			},
 			verify: func(t *testing.T, rr *httptest.ResponseRecorder) {
@@ -319,7 +319,7 @@ func TestHandleAdjustWallet(t *testing.T) {
 					return nil, bettingservice.ErrAdminRequired
 				}
 				h := newHTTPHandlers(svc, validSession(adminUUID))
-				r := withRefreshCookie(httptest.NewRequest(http.MethodPost, "/betting/admin/wallet", jsonBody(bettingservice.AdjustWalletRequest{Amount: 100, Reason: "test"})), "tok")
+				r := withRefreshCookie(httptest.NewRequest(http.MethodPost, "/betting/admin/wallet", jsonBody(bettingservice.AdjustWalletRequest{Amount: 100, Reason: "test"})), "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 				return h, r
 			},
 			verify: func(t *testing.T, rr *httptest.ResponseRecorder) {
@@ -336,7 +336,7 @@ func TestHandleAdjustWallet(t *testing.T) {
 					return nil, bettingservice.ErrAdjustmentAmountInvalid
 				}
 				h := newHTTPHandlers(svc, validSession(adminUUID))
-				r := withRefreshCookie(httptest.NewRequest(http.MethodPost, "/betting/admin/wallet", jsonBody(bettingservice.AdjustWalletRequest{Amount: 0})), "tok")
+				r := withRefreshCookie(httptest.NewRequest(http.MethodPost, "/betting/admin/wallet", jsonBody(bettingservice.AdjustWalletRequest{Amount: 0})), "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 				return h, r
 			},
 			verify: func(t *testing.T, rr *httptest.ResponseRecorder) {
@@ -353,7 +353,7 @@ func TestHandleAdjustWallet(t *testing.T) {
 					return &bettingservice.WalletJournal{EntryType: "manual_adjustment", Amount: 50}, nil
 				}
 				h := newHTTPHandlers(svc, validSession(adminUUID))
-				r := withRefreshCookie(httptest.NewRequest(http.MethodPost, "/betting/admin/wallet", jsonBody(bettingservice.AdjustWalletRequest{Amount: 50, Reason: "bonus"})), "tok")
+				r := withRefreshCookie(httptest.NewRequest(http.MethodPost, "/betting/admin/wallet", jsonBody(bettingservice.AdjustWalletRequest{Amount: 50, Reason: "bonus"})), "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 				return h, r
 			},
 			verify: func(t *testing.T, rr *httptest.ResponseRecorder) {
@@ -420,7 +420,7 @@ func TestHandleAdminMarketAction(t *testing.T) {
 					return nil, bettingservice.ErrInvalidMarketAction
 				}
 				h := newHTTPHandlers(svc, validSession(adminUUID))
-				r := withRefreshCookie(httptest.NewRequest(http.MethodPost, "/betting/admin/market", jsonBody(bettingservice.AdminMarketActionRequest{Action: "bad"})), "tok")
+				r := withRefreshCookie(httptest.NewRequest(http.MethodPost, "/betting/admin/market", jsonBody(bettingservice.AdminMarketActionRequest{Action: "bad"})), "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 				return h, r
 			},
 			verify: func(t *testing.T, rr *httptest.ResponseRecorder) {
@@ -437,7 +437,7 @@ func TestHandleAdminMarketAction(t *testing.T) {
 					return nil, bettingservice.ErrRoundNotFinalized
 				}
 				h := newHTTPHandlers(svc, validSession(adminUUID))
-				r := withRefreshCookie(httptest.NewRequest(http.MethodPost, "/betting/admin/market", jsonBody(bettingservice.AdminMarketActionRequest{Action: "resettle"})), "tok")
+				r := withRefreshCookie(httptest.NewRequest(http.MethodPost, "/betting/admin/market", jsonBody(bettingservice.AdminMarketActionRequest{Action: "resettle"})), "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 				return h, r
 			},
 			verify: func(t *testing.T, rr *httptest.ResponseRecorder) {
@@ -454,7 +454,7 @@ func TestHandleAdminMarketAction(t *testing.T) {
 					return &bettingservice.AdminMarketActionResult{Action: req.Action, MarketID: 42}, nil
 				}
 				h := newHTTPHandlers(svc, validSession(adminUUID))
-				r := withRefreshCookie(httptest.NewRequest(http.MethodPost, "/betting/admin/market", jsonBody(bettingservice.AdminMarketActionRequest{Action: "void", MarketID: 42})), "tok")
+				r := withRefreshCookie(httptest.NewRequest(http.MethodPost, "/betting/admin/market", jsonBody(bettingservice.AdminMarketActionRequest{Action: "void", MarketID: 42})), "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 				return h, r
 			},
 			verify: func(t *testing.T, rr *httptest.ResponseRecorder) {
@@ -564,7 +564,7 @@ func TestHandlePlaceBet_RateLimitExceeded(t *testing.T) {
 	rr := httptest.NewRecorder()
 	r := withRefreshCookie(
 		httptest.NewRequest(http.MethodPost, "/betting/bet", bytes.NewBuffer(reqBody)),
-		"tok",
+		"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 	)
 	h.HandlePlaceBet(rr, r)
 

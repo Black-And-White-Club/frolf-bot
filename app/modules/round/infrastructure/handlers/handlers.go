@@ -10,6 +10,7 @@ import (
 	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/clubresolver"
 	handlerwrapper "github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	clubdb "github.com/Black-And-White-Club/frolf-bot/app/modules/club/infrastructure/repositories"
@@ -34,6 +35,7 @@ type RoundHandlers struct {
 	challengeLookup         ChallengeLookup
 	logger                  *slog.Logger
 	helpers                 utils.Helpers
+	clubResolver            clubresolver.Resolver
 	paginationSnapshotStore PaginationSnapshotStore
 }
 
@@ -43,6 +45,7 @@ func NewRoundHandlers(
 	userService userservice.Service,
 	logger *slog.Logger,
 	helpers utils.Helpers,
+	clubResolver clubresolver.Resolver,
 	paginationSnapshotStores ...PaginationSnapshotStore,
 ) Handlers {
 	var paginationSnapshotStore PaginationSnapshotStore
@@ -55,6 +58,7 @@ func NewRoundHandlers(
 		userService:             userService,
 		logger:                  logger,
 		helpers:                 helpers,
+		clubResolver:            clubResolver,
 		paginationSnapshotStore: paginationSnapshotStore,
 	}
 }

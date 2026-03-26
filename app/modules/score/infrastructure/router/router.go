@@ -11,6 +11,7 @@ import (
 	"github.com/Black-And-White-Club/frolf-bot-shared/observability/attr"
 	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/clubresolver"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	scoreservice "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application"
 	scorehandlers "github.com/Black-And-White-Club/frolf-bot/app/modules/score/infrastructure/handlers"
@@ -74,7 +75,13 @@ func NewScoreRouter(
 
 // Configure sets up the router using the provided context and score service.
 // It registers handlers and adds middleware to the router held by the ScoreRouter.
-func (r *ScoreRouter) Configure(routerCtx context.Context, scoreService scoreservice.Service, eventbus eventbus.EventBus, scoreMetrics scoremetrics.ScoreMetrics) error {
+func (r *ScoreRouter) Configure(
+	routerCtx context.Context,
+	scoreService scoreservice.Service,
+	eventbus eventbus.EventBus,
+	scoreMetrics scoremetrics.ScoreMetrics,
+	clubResolver clubresolver.Resolver,
+) error {
 	if r.metricsEnabled && r.metricsBuilder != nil {
 		r.logger.Info("Adding Prometheus router metrics middleware")
 		r.metricsBuilder.AddPrometheusRouterMetrics(r.Router)
@@ -82,7 +89,7 @@ func (r *ScoreRouter) Configure(routerCtx context.Context, scoreService scoreser
 		r.logger.Info("Skipping Prometheus router metrics middleware - either in test environment or metrics not configured")
 	}
 
-	scoreHandlers := scorehandlers.NewScoreHandlers(scoreService, r.logger, r.tracer, r.helper, scoreMetrics)
+	scoreHandlers := scorehandlers.NewScoreHandlers(scoreService, r.logger, r.tracer, r.helper, scoreMetrics, clubResolver)
 
 	// Pass the routerCtx to RegisterHandlers
 	if err := r.RegisterHandlers(routerCtx, scoreHandlers); err != nil {

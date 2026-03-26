@@ -5,6 +5,7 @@ import (
 
 	guildtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/guild"
 	sharedtypes "github.com/Black-And-White-Club/frolf-bot-shared/types/shared"
+	"github.com/google/uuid"
 	"github.com/uptrace/bun"
 )
 
@@ -40,6 +41,9 @@ type Repository interface {
 
 	// ResolveEntitlements resolves current feature access for a guild or club UUID.
 	ResolveEntitlements(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (guildtypes.ResolvedClubEntitlements, error)
+
+	// GetClubIDByDiscordGuildID performs a lightweight lookup to get the Club UUID for a Discord guild ID.
+	GetClubIDByDiscordGuildID(ctx context.Context, guildID string) (uuid.UUID, error)
 
 	// UpsertFeatureOverride inserts or updates a feature override and creates an audit record.
 	UpsertFeatureOverride(ctx context.Context, db bun.IDB, override *ClubFeatureOverride, audit *ClubFeatureAccessAudit) error

@@ -198,7 +198,7 @@ func (app *App) initializeModules(ctx context.Context, routerRunCtx context.Cont
 		app.Observability.Provider.Logger.Error("Failed to initialize user module", attr.Error(err))
 		return fmt.Errorf("failed to initialize user module: %w", err)
 	}
-	if app.RoundModule, err = round.NewRoundModule(ctx, app.Config, app.Observability, app.DB.RoundDB, app.DB.GetDB(), app.DB.UserDB, app.UserModule.UserService, app.EventBus, app.Router, app.Helpers, routerRunCtx); err != nil {
+	if app.RoundModule, err = round.NewRoundModule(ctx, app.Config, app.Observability, app.DB.RoundDB, app.DB.GetDB(), app.DB.GuildDB, app.DB.UserDB, app.UserModule.UserService, app.EventBus, app.Router, app.Helpers, routerRunCtx); err != nil {
 		app.Observability.Provider.Logger.Error("Failed to initialize round module", attr.Error(err))
 		return fmt.Errorf("failed to initialize round module: %w", err)
 	}
@@ -210,7 +210,7 @@ func (app *App) initializeModules(ctx context.Context, routerRunCtx context.Cont
 		app.Observability.Provider.Logger.Error("Failed to initialize guild module", attr.Error(err))
 		return fmt.Errorf("failed to initialize guild module: %w", err)
 	}
-	if app.ScoreModule, err = score.NewScoreModule(ctx, app.Config, app.Observability, app.DB.ScoreDB, app.EventBus, app.Router, app.Helpers, routerRunCtx, app.DB.GetDB()); err != nil {
+	if app.ScoreModule, err = score.NewScoreModule(ctx, app.Config, app.Observability, app.DB.ScoreDB, app.DB.GuildDB, app.EventBus, app.Router, app.Helpers, routerRunCtx, app.DB.GetDB()); err != nil {
 		app.Observability.Provider.Logger.Error("Failed to initialize score module", attr.Error(err))
 		return fmt.Errorf("failed to initialize score module: %w", err)
 	}

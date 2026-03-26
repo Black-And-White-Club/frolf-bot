@@ -18,19 +18,19 @@ import (
 type FakeGuildRepository struct {
 	trace []string
 
-	GetConfigFunc                func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (*guildtypes.GuildConfig, error)
-	GetConfigIncludeDeletedFunc  func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (*guildtypes.GuildConfig, error)
-	SaveConfigFunc               func(ctx context.Context, db bun.IDB, config *guildtypes.GuildConfig) error
-	UpdateConfigFunc             func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, updates *guilddb.UpdateFields) error
-	DeleteConfigFunc             func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) error
-	ResolveEntitlementsFunc      func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (guildtypes.ResolvedClubEntitlements, error)
-	UpsertFeatureOverrideFunc    func(ctx context.Context, db bun.IDB, override *guilddb.ClubFeatureOverride, audit *guilddb.ClubFeatureAccessAudit) error
-	DeleteFeatureOverrideFunc    func(ctx context.Context, db bun.IDB, clubUUID string, featureKey string, audit *guilddb.ClubFeatureAccessAudit) error
-	ListFeatureAccessAuditFunc   func(ctx context.Context, db bun.IDB, clubUUID string, featureKey string) ([]guilddb.ClubFeatureAccessAudit, error)
-	InsertOutboxEventFunc              func(ctx context.Context, db bun.IDB, topic string, payload []byte) error
-	PollAndLockOutboxEventsFunc        func(ctx context.Context, db bun.IDB, limit int) ([]guilddb.GuildOutboxEvent, error)
-	MarkOutboxEventPublishedFunc       func(ctx context.Context, db bun.IDB, id string) error
-	GetClubIDByDiscordGuildIDFunc      func(ctx context.Context, guildID string) (uuid.UUID, error)
+	GetConfigFunc                 func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (*guildtypes.GuildConfig, error)
+	GetConfigIncludeDeletedFunc   func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (*guildtypes.GuildConfig, error)
+	SaveConfigFunc                func(ctx context.Context, db bun.IDB, config *guildtypes.GuildConfig) error
+	UpdateConfigFunc              func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID, updates *guilddb.UpdateFields) error
+	DeleteConfigFunc              func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) error
+	ResolveEntitlementsFunc       func(ctx context.Context, db bun.IDB, guildID sharedtypes.GuildID) (guildtypes.ResolvedClubEntitlements, error)
+	UpsertFeatureOverrideFunc     func(ctx context.Context, db bun.IDB, override *guilddb.ClubFeatureOverride, audit *guilddb.ClubFeatureAccessAudit) error
+	DeleteFeatureOverrideFunc     func(ctx context.Context, db bun.IDB, clubUUID string, featureKey string, audit *guilddb.ClubFeatureAccessAudit) error
+	ListFeatureAccessAuditFunc    func(ctx context.Context, db bun.IDB, clubUUID string, featureKey string) ([]guilddb.ClubFeatureAccessAudit, error)
+	InsertOutboxEventFunc         func(ctx context.Context, db bun.IDB, topic string, payload []byte) error
+	PollAndLockOutboxEventsFunc   func(ctx context.Context, db bun.IDB, limit int) ([]guilddb.GuildOutboxEvent, error)
+	MarkOutboxEventPublishedFunc  func(ctx context.Context, db bun.IDB, id string) error
+	GetClubIDByDiscordGuildIDFunc func(ctx context.Context, guildID string) (uuid.UUID, error)
 }
 
 // Trace returns the sequence of method calls made to the fake.

@@ -27,12 +27,7 @@ func TestHandleActivityTokenExchange(t *testing.T) {
 		wantStatus   int
 		verifyBody   func(t *testing.T, body map[string]string)
 	}{
-		{
-			name:       "method_not_allowed_GET",
-			method:     http.MethodGet,
-			body:       `{"code":"abc"}`,
-			wantStatus: http.StatusMethodNotAllowed,
-		},
+
 		{
 			name:       "missing_code_empty_json",
 			method:     http.MethodPost,

@@ -5,6 +5,7 @@ import (
 
 	scoremetrics "github.com/Black-And-White-Club/frolf-bot-shared/observability/otel/metrics/score"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils"
+	"github.com/Black-And-White-Club/frolf-bot-shared/utils/clubresolver"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/handlerwrapper"
 	"github.com/Black-And-White-Club/frolf-bot-shared/utils/results"
 	scoreservice "github.com/Black-And-White-Club/frolf-bot/app/modules/score/application"
@@ -13,8 +14,9 @@ import (
 
 // ScoreHandlers implements the Handlers interface for score events.
 type ScoreHandlers struct {
-	service scoreservice.Service
-	helpers utils.Helpers
+	service      scoreservice.Service
+	helpers      utils.Helpers
+	clubResolver clubresolver.Resolver
 }
 
 // NewScoreHandlers creates a new ScoreHandlers instance.
@@ -25,10 +27,12 @@ func NewScoreHandlers(
 	tracer trace.Tracer,
 	helpers utils.Helpers,
 	metrics scoremetrics.ScoreMetrics,
+	clubResolver clubresolver.Resolver,
 ) Handlers {
 	return &ScoreHandlers{
-		service: service,
-		helpers: helpers,
+		service:      service,
+		helpers:      helpers,
+		clubResolver: clubResolver,
 	}
 }
 
